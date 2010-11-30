@@ -108,11 +108,12 @@
 
 /* USB
  * Enable CONFIG_MUSB_HCD for Host functionalities MSC, keyboard
- * Enable CONFIG_MUSB_UDD for Device functionalities.
+ * Enable CONFIG_MUSB_UDC for Device functionalities.
  */
 #define CONFIG_USB_OMAP3		1
-#define CONFIG_MUSB_HCD			1
-/* #define CONFIG_MUSB_UDC		1 */
+/* #define CONFIG_MUSB_HCD			1
+ */
+#define CONFIG_MUSB_UDC		1
 
 #ifdef CONFIG_USB_OMAP3
 
@@ -131,6 +132,13 @@
 #endif /* CONFIG_MUSB_HCD */
 
 #ifdef CONFIG_MUSB_UDC
+#ifdef	CONFIG_FASTBOOT
+/* Fastboot settings
+ */
+#define	CONFIG_CMD_FASTBOOT
+#define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(PHYS_SDRAM_1 + SZ_16M)
+#define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_128M - SZ_16M)
+#else
 /* USB device configuration */
 #define CONFIG_USB_DEVICE		1
 #define CONFIG_USB_TTY			1
@@ -140,6 +148,7 @@
 #define CONFIG_USBD_PRODUCTID		0x5678
 #define CONFIG_USBD_MANUFACTURER	"Texas Instruments"
 #define CONFIG_USBD_PRODUCT_NAME	"EVM"
+#endif /* CONFIG_FASTBOOT */
 #endif /* CONFIG_MUSB_UDC */
 
 #endif /* CONFIG_USB_OMAP3 */
@@ -361,14 +370,5 @@
 #define CONFIG_BOOTP_GATEWAY		0x00000002
 #define CONFIG_BOOTP_HOSTNAME		0x00000004
 #define CONFIG_BOOTP_BOOTPATH		0x00000010
-
-/* Fastboot
- */
-#ifdef	CONFIG_FASTBOOT
-#define CONFIG_CMD_FASTBOOT
-#endif /* CONFIG_FASTBOOT */
-
-#define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(PHYS_SDRAM_1 + SZ_16M)
-#define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_128M - SZ_16M)
 
 #endif /* __CONFIG_H */
