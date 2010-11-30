@@ -411,7 +411,10 @@ int ep0_recv_setup (struct urb *urb)
 			/*	Attempt to handle a CDC specific request if we are
 			 *	in the configured state.
 			 */
-			return device->cdc_recv_setup(request,urb);
+			if (device->cdc_recv_setup)
+				return device->cdc_recv_setup(request,urb);
+			else
+				return 0;
 		}
 		dbg_ep0 (1, "non standard request: %x",
 			 request->bmRequestType & USB_REQ_TYPE_MASK);

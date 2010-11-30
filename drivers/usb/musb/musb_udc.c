@@ -897,11 +897,6 @@ void udc_setup_ep(struct usb_device_instance *device, unsigned int id,
 	}
 }
 
-void udc_connect(void)
-{
-	/* noop */
-}
-
 void udc_disconnect(void)
 {
 	/* noop */
@@ -956,10 +951,14 @@ int udc_init(void)
 		epinfo[ep_loop].epsize = 0;
 	}
 
-	musb_peri_softconnect();
-
 	ret = 0;
 end:
 
 	return ret;
 }
+
+void udc_connect(void)
+{
+	musb_peri_softconnect();
+}
+
