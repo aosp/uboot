@@ -44,6 +44,8 @@
 
 #define CONFIG_SDRC	/* The chip has SDRC controller */
 
+#define	CONFIG_FASTBOOT /* Android fast boot */
+
 #include <asm/arch/cpu.h>	/* get chip and board defs */
 #include <asm/arch/omap3.h>
 
@@ -359,5 +361,14 @@
 #define CONFIG_BOOTP_GATEWAY		0x00000002
 #define CONFIG_BOOTP_HOSTNAME		0x00000004
 #define CONFIG_BOOTP_BOOTPATH		0x00000010
+
+/* Fastboot
+ */
+#ifdef	CONFIG_FASTBOOT
+#define CONFIG_CMD_FASTBOOT
+#endif /* CONFIG_FASTBOOT */
+
+#define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(PHYS_SDRAM_1 + SZ_16M)
+#define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_128M - SZ_16M)
 
 #endif /* __CONFIG_H */
