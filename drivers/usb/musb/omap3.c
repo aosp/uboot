@@ -75,6 +75,7 @@ static struct omap3_otg_regs *otg;
 
 #define OMAP3_OTG_FORCESTDBY_STANDBY			0x0001
 
+#define	DEBUG_MUSB_OMAP3
 
 #ifdef DEBUG_MUSB_OMAP3
 static void musb_db_otg_regs(void)

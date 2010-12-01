@@ -31,6 +31,14 @@
 #include <usb/spr_udc.h>
 #endif
 
+#define DEBUG
+#ifdef DEBUG
+#define FBTDBG(fmt,args...)\
+        printf("[%s]: %d: \n"fmt, __FUNCTION__, __LINE__,##args)
+#else
+#define FBTDBG(fmt,args...) do{}while(0)
+#endif
+
 #define STR_LANG		0x00
 #define STR_MANUFACTURER	0x01
 #define STR_PRODUCT		0x02
@@ -57,6 +65,9 @@ struct _fbt_config_desc {
 	struct usb_endpoint_descriptor endpoint_desc[NUM_ENDPOINTS];
 };
 
+/* defined and used by gadget/ep0.c */
+extern struct usb_string_descriptor **usb_strings;
+
 /* USB Descriptor Strings */
 static char serial_number[16] = "TEMP";
 
@@ -72,6 +83,7 @@ static struct usb_device_descriptor device_descriptor = {
 	.bLength = sizeof(struct usb_device_descriptor),
 	.bDescriptorType =	USB_DT_DEVICE,
 	.bcdUSB =		cpu_to_le16(USB_BCD_VERSION),
+	.bDeviceClass =		0xFF,
 	.bDeviceSubClass =	0x00,
 	.bDeviceProtocol =	0x00,
 	.bMaxPacketSize0 =	EP0_MAX_PACKET_SIZE,
@@ -142,6 +154,7 @@ static struct usb_endpoint_instance endpoint_instance[NUM_ENDPOINTS + 1];
 static void str2wide (char *str, u16 * wide)
 {
 	int i;
+	FBTDBG();
 	for (i = 0; i < strlen (str) && str[i]; i++){
 		#if defined(__LITTLE_ENDIAN)
 			wide[i] = (u16) str[i];
@@ -151,12 +164,14 @@ static void str2wide (char *str, u16 * wide)
 			#error "__LITTLE_ENDIAN or __BIG_ENDIAN undefined"
 		#endif
 	}
+	FBTDBG();
 }
 
 static int fbt_init_strings(void)
 {
 	struct usb_string_descriptor *string;
 
+	FBTDBG();
 	fbt_string_table[STR_LANG] =
 		(struct usb_string_descriptor*)wstr_lang;
 
@@ -189,6 +204,10 @@ static int fbt_init_strings(void)
 	string->bDescriptorType = USB_DT_STRING;
 	str2wide (CONFIG_USBD_INTERFACE_STR, string->wData);
 	fbt_string_table[STR_INTERFACE] = string;
+	FBTDBG();
+
+	/* Now, initialize the string table for ep0 handling */
+	usb_strings = fbt_string_table;
 
 	return 0;
 }
@@ -197,6 +216,7 @@ static int fbt_init_instances(void)
 {
 	int i;
 
+	FBTDBG();
 	/* initialize device instance */
 	memset (device_instance, 0, sizeof (struct usb_device_instance));
 	device_instance->device_state = STATE_INIT;
@@ -207,6 +227,7 @@ static int fbt_init_instances(void)
 	device_instance->configurations = NUM_CONFIGS;
 	device_instance->configuration_instance_array = config_instance;
 
+	FBTDBG();
 	/* XXX: what is this bus instance for ?, can't it be removed by moving
 	    endpoint_array and serial_number_str is moved to device instance */
 	/* initialize bus instance */
@@ -218,6 +239,7 @@ static int fbt_init_instances(void)
 	bus_instance->maxpacketsize = 64;
 	bus_instance->serial_number_str = serial_number;
 
+	FBTDBG();
 	/* configuration instance */
 	memset (config_instance, 0,
 		sizeof (struct usb_configuration_instance));
@@ -226,6 +248,7 @@ static int fbt_init_instances(void)
 		(struct usb_configuration_descriptor *)&fbt_config_desc;
 	config_instance->interface_instance_array = interface_instance;
 
+	FBTDBG();
 	/* XXX: is alternate instance required in case of no alternate ? */
 	/* interface instance */
 	memset (interface_instance, 0,
@@ -233,6 +256,7 @@ static int fbt_init_instances(void)
 	interface_instance->alternates = 1;
 	interface_instance->alternates_instance_array = alternate_instance;
 
+	FBTDBG();
 	/* alternates instance */
 	memset (alternate_instance, 0,
 		sizeof (struct usb_alternate_instance));
@@ -240,6 +264,7 @@ static int fbt_init_instances(void)
 	alternate_instance->endpoints = NUM_ENDPOINTS;
 	alternate_instance->endpoints_descriptor_array = ep_descriptor_ptrs;
 
+	FBTDBG();
 	/* endpoint instances */
 	memset (&endpoint_instance[0], 0,
 		sizeof (struct usb_endpoint_instance));
@@ -252,6 +277,7 @@ static int fbt_init_instances(void)
 		at another place ? */
 	udc_setup_ep (device_instance, 0, &endpoint_instance[0]);
 
+	FBTDBG();
 	for (i = 1; i <= NUM_ENDPOINTS; i++) {
 		memset (&endpoint_instance[i], 0,
 			sizeof (struct usb_endpoint_instance));
@@ -288,6 +314,7 @@ static int fbt_init_instances(void)
 				usbd_alloc_urb (device_instance,
 						&endpoint_instance[i]);
 	}
+	FBTDBG();
 
 	return 0;
 }
@@ -296,6 +323,7 @@ static int fbt_init_instances(void)
 	fbt_config_desc.endpoint_desc */
 static int fbt_init_endpoint_ptrs(void)
 {
+	FBTDBG();
 	ep_descriptor_ptrs[0] = &fbt_config_desc.endpoint_desc[0];
 	ep_descriptor_ptrs[1] = &fbt_config_desc.endpoint_desc[1];
 
@@ -306,6 +334,7 @@ static int fbt_init_endpoints (void)
 {
 	int i;
 
+	FBTDBG();
 	bus_instance->max_endpoints = NUM_ENDPOINTS + 1;
 	for (i = 1; i <= NUM_ENDPOINTS; i++) {
 		udc_setup_ep (device_instance, i, &endpoint_instance[i]);
@@ -317,19 +346,37 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
 	int ret = -1;
 
+	FBTDBG();
+	ret = fbt_init_endpoint_ptrs();
+
 	if ((ret = udc_init()) < 0) {
 		printf("error: %s: MUSB UDC init failure\n", __func__);
 		return ret;
 	}
 
+	FBTDBG();
 	ret = fbt_init_strings();
-	ret = fbt_init_endpoint_ptrs();
+	FBTDBG();
 	ret = fbt_init_instances();
+	FBTDBG();
 
 	udc_startup_events (device_instance);
-	ret = fbt_init_endpoints();
+	FBTDBG();
 	udc_connect();
+	FBTDBG();
+	ret = fbt_init_endpoints();
+	FBTDBG();
 
+	while(1) {
+		udc_irq();
+		if (ctrlc()) {
+			FBTDBG();
+			printf("fastboot ended by user\n");
+			break;
+		}
+	}
+
+	FBTDBG();
 	return ret;
 }
 
