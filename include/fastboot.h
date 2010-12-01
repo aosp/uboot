@@ -92,24 +92,6 @@
 
 struct cmd_fastboot_interface{
 
-	/* This function is called when a buffer has been
-	   recieved from the client app.
-	   The buffer is a supplied by the board layer and must be unmodified.
-	   The buffer_size is how much data is passed in.
-	   Returns 0 on success
-	   Returns 1 on failure
-
-	   Set by cmd_fastboot	*/
-	int (*rx_handler)(const unsigned char *buffer,
-			  unsigned int buffer_size);
-
-	/* This function is called when an exception has
-	   occurred in the device code and the state
-	   off fastboot needs to be reset
-
-	   Set by cmd_fastboot */
-	void (*reset_handler)(void);
-
 	/* A getvar string for the product name
 	   It can have a maximum of 60 characters
 
@@ -135,18 +117,24 @@ struct cmd_fastboot_interface{
 	/* Transfer buffer, for handling flash updates
 	   Should be multiple of the nand_block_size
 	   Care should be take so it does not overrun bootloader memory
-	   Controlled by the configure variable CFG_FASTBOOT_TRANSFER_BUFFER
+	   Controlled by the configure variable CONFIG_FASTBOOT_TRANSFER_BUFFER
 
 	   Set by board */
 	unsigned char *transfer_buffer;
 
 	/* How big is the transfer buffer
 	   Controlled by the configure variable
-	   CFG_FASTBOOT_TRANSFER_BUFFER_SIZE
+	   CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE
 
 	   Set by board	*/
 	unsigned int transfer_buffer_size;
 
+	/* Download size, if download has to be done. This can be checked to find
+		whether next packet is a command or a data */
+	unsigned int download_size;
+
+	/* XXX: what should be the size ? */
+	char response_buffer[65];
 };
 
 /* Android-style flash naming */

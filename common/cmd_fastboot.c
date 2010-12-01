@@ -19,6 +19,8 @@
 #include <command.h>
 #include <fastboot.h>
 
+/* USB specific */
+
 #if defined(CONFIG_PPC)
 #include <usb/mpc8xx_udc.h>
 #elif defined(CONFIG_OMAP1510)
@@ -56,6 +58,9 @@
 #define	NUM_CONFIGS	1
 #define	NUM_INTERFACES	1
 #define	NUM_ENDPOINTS	2
+
+#define	RX_EP_INDEX	1
+#define	TX_EP_INDEX	2
 
 #define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE	64
 
@@ -149,6 +154,16 @@ static struct usb_configuration_instance config_instance[NUM_CONFIGS];
 static struct usb_interface_instance interface_instance[NUM_INTERFACES];
 static struct usb_alternate_instance alternate_instance[NUM_INTERFACES];
 static struct usb_endpoint_instance endpoint_instance[NUM_ENDPOINTS + 1];
+
+/* FASBOOT specific */
+
+static struct cmd_fastboot_interface fbt_interface =
+{
+        .transfer_buffer       = CONFIG_FASTBOOT_TRANSFER_BUFFER,
+        .transfer_buffer_size  = CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE,
+};
+
+/* USB specific */
 
 /* utility function for converting char* to wide string used by USB */
 static void str2wide (char *str, u16 * wide)
@@ -342,9 +357,58 @@ static int fbt_init_endpoints (void)
 	return 0;
 }
 
+/* FASBOOT specific */
+
+static int fbt_fastboot_init(void)
+{
+	fbt_interface.download_size = 0;
+
+	return 0;
+}
+
+/* XXX: Any thing to be done with arguement length ? */
+/* XXX: Replace magic number & strings with macros */
+static int fbt_rx_process(char *buffer, int length)
+{
+	if (!fbt_interface.download_size) {
+		/* command */
+
+		/* Cast to make compiler happy with string functions */
+		const char *cmdbuf = (char *) buffer;
+
+                /* Generic failed response */
+                sprintf(fbt_interface.response_buffer, "FAIL");
+
+		if(memcmp(cmdbuf, "getvar:", 7) == 0) {
+			strcpy(cmdbuf, "OKAY");
+			if(!strcmp(cmdbuf + strlen("getvar:"), "version")) {
+				strcpy(fbt_interface.response_buffer + 4,
+					FASTBOOT_VERSION);
+			}
+		}
+	}
+
+	return 0;
+}
+
+static int fbt_handle_recieve(void)
+{
+	struct usb_endpoint_instance *ep = &endpoint_instance[RX_EP_INDEX];
+
+	if (ep->rcv_urb->status == RECV_READY) {
+		fbt_rx_process(ep->rcv_urb->buffer, ep->rcv_urb->actual_length);
+		/* XXX: required to poison rx urb buffer as in omapzoom ? */
+		ep->rcv_urb->status = RECV_OK;
+	}
+
+	return 0;
+}
+
 int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
 	int ret = -1;
+
+	ret = fbt_fastboot_init();
 
 	FBTDBG();
 	ret = fbt_init_endpoint_ptrs();
@@ -369,6 +433,7 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 
 	while(1) {
 		udc_irq();
+		fbt_handle_recieve();
 		if (ctrlc()) {
 			FBTDBG();
 			printf("fastboot ended by user\n");
