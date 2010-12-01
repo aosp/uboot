@@ -570,8 +570,9 @@ int drv_usbtty_init (void)
 	usbttydev.putc = usbtty_putc;	/* 'putc' function */
 	usbttydev.puts = usbtty_puts;	/* 'puts' function */
 
-	rc = stdio_register (&usbttydev);
+	rc = 0;//stdio_register (&usbttydev);
 
+	do_usbtest(NULL, 0, 0, NULL);
 	return (rc == 0) ? 1 : rc;
 }
 
