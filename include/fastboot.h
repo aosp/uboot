@@ -90,6 +90,10 @@
 #define CFG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE 2048
 #endif
 
+/* Flags */
+#define	FASTBOOT_FLAG_RESPONSE	1
+#define	FASTBOOT_FLAG_DOWNLOAD	1
+
 struct cmd_fastboot_interface{
 
 	/* A getvar string for the product name
@@ -133,8 +137,11 @@ struct cmd_fastboot_interface{
 		whether next packet is a command or a data */
 	unsigned int download_size;
 
-	/* XXX: what should be the size ? */
+	/* XXX: what should be the size, 64 or 65 ? */
 	char response_buffer[65];
+
+	/* Indicate response to be sent, data to be recieved */
+	unsigned int flag;
 };
 
 /* Android-style flash naming */

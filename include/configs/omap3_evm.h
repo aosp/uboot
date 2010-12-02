@@ -49,6 +49,7 @@
 
 #include <asm/arch/cpu.h>	/* get chip and board defs */
 #include <asm/arch/omap3.h>
+#include <asm/sizes.h>
 
 /*
  * Display CPU and Board information

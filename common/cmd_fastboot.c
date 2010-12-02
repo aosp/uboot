@@ -126,6 +126,8 @@ static struct _fbt_config_desc fbt_config_desc = {
 		{
 			.bLength = sizeof(struct usb_endpoint_descriptor),
 			.bDescriptorType = USB_DT_ENDPOINT,
+			/* XXX: can't the address start from 0x1, currently
+				seeing problem with "epinfo" */
 			.bEndpointAddress = 0x1 | USB_DIR_OUT,
 			.bmAttributes =	USB_ENDPOINT_XFER_BULK,
 			.wMaxPacketSize	=
@@ -135,7 +137,9 @@ static struct _fbt_config_desc fbt_config_desc = {
 		{
 			.bLength = sizeof(struct usb_endpoint_descriptor),
 			.bDescriptorType = USB_DT_ENDPOINT,
-			.bEndpointAddress = 0x1 | USB_DIR_IN,
+			/* XXX: can't the address start from 0x1, currently
+				seeing problem with "epinfo" */
+			.bEndpointAddress = 0x2 | USB_DIR_IN,
 			.bmAttributes = USB_ENDPOINT_XFER_BULK,
 			.wMaxPacketSize	=
 				cpu_to_le16(CONFIG_USBD_FASTBOOT_BULK_PKTSIZE),
@@ -351,10 +355,43 @@ static int fbt_init_endpoints (void)
 
 	FBTDBG();
 	bus_instance->max_endpoints = NUM_ENDPOINTS + 1;
+	/* XXX: is this for loop required ? */
 	for (i = 1; i <= NUM_ENDPOINTS; i++) {
 		udc_setup_ep (device_instance, i, &endpoint_instance[i]);
 	}
 	return 0;
+}
+
+static struct urb *next_urb (struct usb_device_instance *device,
+			     struct usb_endpoint_instance *endpoint)
+{
+	struct urb *current_urb = NULL;
+	int space;
+
+	/* If there's a queue, then we should add to the last urb */
+	if (!endpoint->tx_queue) {
+		current_urb = endpoint->tx_urb;
+	} else {
+		/* Last urb from tx chain */
+		current_urb =
+			p2surround (struct urb, link, endpoint->tx.prev);
+	}
+
+	/* Make sure this one has enough room */
+	space = current_urb->buffer_length - current_urb->actual_length;
+	if (space > 0) {
+		return current_urb;
+	} else {		/* No space here */
+		/* First look at done list */
+		current_urb = first_urb_detached (&endpoint->done);
+		if (!current_urb) {
+			current_urb = usbd_alloc_urb (device, endpoint);
+		}
+
+		urb_append (&endpoint->tx, current_urb);
+		endpoint->tx_queue++;
+	}
+	return current_urb;
 }
 
 /* FASBOOT specific */
@@ -362,31 +399,45 @@ static int fbt_init_endpoints (void)
 static int fbt_fastboot_init(void)
 {
 	fbt_interface.download_size = 0;
+	fbt_interface.flag = 0;
 
 	return 0;
 }
 
-/* XXX: Any thing to be done with arguement length ? */
+/* XXX: Any thing to be done with arguement length ?, would be reqd for data */
 /* XXX: Replace magic number & strings with macros */
-static int fbt_rx_process(char *buffer, int length)
+static int fbt_rx_process(unsigned char *buffer, int length)
 {
+	FBTDBG();
 	if (!fbt_interface.download_size) {
 		/* command */
+		char *cmdbuf = (char *) buffer;
 
-		/* Cast to make compiler happy with string functions */
-		const char *cmdbuf = (char *) buffer;
+		FBTDBG("%c%c%c%c%c%c%c\n", cmdbuf[0], cmdbuf[1], cmdbuf[2],
+			cmdbuf[3], cmdbuf[4], cmdbuf[5], cmdbuf[6]);
 
+		FBTDBG();
                 /* Generic failed response */
-                sprintf(fbt_interface.response_buffer, "FAIL");
+                strcpy(fbt_interface.response_buffer, "FAIL");
 
+		FBTDBG();
 		if(memcmp(cmdbuf, "getvar:", 7) == 0) {
-			strcpy(cmdbuf, "OKAY");
+			FBTDBG();
+			strcpy(fbt_interface.response_buffer, "OKAY");
+			fbt_interface.flag |= FASTBOOT_FLAG_RESPONSE;
 			if(!strcmp(cmdbuf + strlen("getvar:"), "version")) {
+				FBTDBG();
 				strcpy(fbt_interface.response_buffer + 4,
 					FASTBOOT_VERSION);
 			}
 		}
+		if(memcmp(cmdbuf, "erase:", 6) == 0) {
+			FBTDBG();
+			strcpy(fbt_interface.response_buffer, "OKAY");
+			fbt_interface.flag |= FASTBOOT_FLAG_RESPONSE;
+		}
 	}
+	FBTDBG();
 
 	return 0;
 }
@@ -395,14 +446,65 @@ static int fbt_handle_recieve(void)
 {
 	struct usb_endpoint_instance *ep = &endpoint_instance[RX_EP_INDEX];
 
+	/* XXX: Or check rcv_urb->actual_length ? */
 	if (ep->rcv_urb->status == RECV_READY) {
+		FBTDBG();
 		fbt_rx_process(ep->rcv_urb->buffer, ep->rcv_urb->actual_length);
+		FBTDBG();
 		/* XXX: required to poison rx urb buffer as in omapzoom ? */
 		ep->rcv_urb->status = RECV_OK;
+		ep->rcv_urb->actual_length = 0;
 	}
 
 	return 0;
 }
+
+static int fbt_process_response(void)
+{
+	struct usb_endpoint_instance *ep = &endpoint_instance[TX_EP_INDEX];
+	struct urb *current_urb = NULL;
+	unsigned char *dest = NULL;
+	int n, ret = 0;
+
+	FBTDBG();
+	current_urb = next_urb (device_instance, ep);
+	FBTDBG();
+	if (!current_urb) {
+		printf("error: %s: current_urb NULL", __func__);
+		return -1;
+	}
+	FBTDBG();
+
+	dest = current_urb->buffer + current_urb->actual_length;
+	n = MIN (64, strlen(fbt_interface.response_buffer));
+	FBTDBG();
+	memcpy(dest, fbt_interface.response_buffer, n);
+	FBTDBG();
+	current_urb->actual_length += n;
+	FBTDBG();
+	if (ep->last == 0) {
+		FBTDBG();
+		ret = udc_endpoint_write (ep);
+		return ret;
+	}
+
+	FBTDBG();
+	return ret;
+}
+
+static int fbt_handle_response(void)
+{
+	if (fbt_interface.flag & FASTBOOT_FLAG_RESPONSE) {
+		FBTDBG();
+		fbt_process_response();
+		FBTDBG();
+		fbt_interface.flag &= ~FASTBOOT_FLAG_RESPONSE;
+	}
+
+	return 0;
+}
+
+/* command */
 
 int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
@@ -434,6 +536,7 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	while(1) {
 		udc_irq();
 		fbt_handle_recieve();
+		fbt_handle_response();
 		if (ctrlc()) {
 			FBTDBG();
 			printf("fastboot ended by user\n");
