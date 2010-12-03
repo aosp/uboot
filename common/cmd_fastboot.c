@@ -33,21 +33,29 @@
 #include <usb/spr_udc.h>
 #endif
 
+#define	WARN
 #define	INFO
 #define DEBUG
 
 #ifdef DEBUG
 #define FBTDBG(fmt,args...)\
-        printf("[%s]: %d: \n"fmt, __FUNCTION__, __LINE__,##args)
+        printf("DEBUG: [%s]: %d: \n"fmt, __FUNCTION__, __LINE__,##args)
 #else
 #define FBTDBG(fmt,args...) do{}while(0)
 #endif
 
 #ifdef INFO
 #define FBTINFO(fmt,args...)\
-        printf("[%s]: "fmt, __FUNCTION__, ##args)
+        printf("INFO: [%s]: "fmt, __FUNCTION__, ##args)
 #else
-#define FBTDBG(fmt,args...) do{}while(0)
+#define FBTINFO(fmt,args...) do{}while(0)
+#endif
+
+#ifdef WARN
+#define FBTWARN(fmt,args...)\
+        printf("WARNING: [%s]: "fmt, __FUNCTION__, ##args)
+#else
+#define FBTWARN(fmt,args...) do{}while(0)
 #endif
 
 #define STR_LANG		0x00
@@ -170,7 +178,7 @@ static struct usb_endpoint_instance endpoint_instance[NUM_ENDPOINTS + 1];
 
 /* FASBOOT specific */
 
-static struct cmd_fastboot_interface fbt_interface =
+static struct cmd_fastboot_interface priv =
 {
         .transfer_buffer       = CONFIG_FASTBOOT_TRANSFER_BUFFER,
         .transfer_buffer_size  = CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE,
@@ -407,18 +415,22 @@ static struct urb *next_urb (struct usb_device_instance *device,
 
 static int fbt_fastboot_init(void)
 {
-	fbt_interface.download_size = 0;
-	fbt_interface.flag = 0;
+	priv.d_size = 0;
+	priv.flag = 0;
+	priv.d_size = 0;
+	priv.d_bytes = 0;
 
 	return 0;
 }
 
-/* XXX: Any thing to be done with arguement length ?, would be reqd for data */
 /* XXX: Replace magic number & strings with macros */
 static int fbt_rx_process(unsigned char *buffer, int length)
 {
 	FBTDBG();
-	if (!fbt_interface.download_size) {
+	/* Generic failed response */
+	strcpy(priv.response, "FAIL");
+
+	if (!priv.d_size) {
 		/* command */
 		char *cmdbuf = (char *) buffer;
 
@@ -426,26 +438,82 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			cmdbuf[3], cmdbuf[4], cmdbuf[5], cmdbuf[6]);
 
 		FBTDBG();
-                /* Generic failed response */
-                strcpy(fbt_interface.response_buffer, "FAIL");
-
-		FBTDBG();
 		if(memcmp(cmdbuf, "getvar:", 7) == 0) {
-			FBTDBG();
-			strcpy(fbt_interface.response_buffer, "OKAY");
-			fbt_interface.flag |= FASTBOOT_FLAG_RESPONSE;
+			FBTINFO("getvar\n");
+			strcpy(priv.response, "OKAY");
+			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 			if(!strcmp(cmdbuf + strlen("getvar:"), "version")) {
 				FBTDBG("getvar version\n");
-				strcpy(fbt_interface.response_buffer + 4,
+				strcpy(priv.response + 4,
 					FASTBOOT_VERSION);
 			}
 		}
+
 		if(memcmp(cmdbuf, "erase:", 6) == 0) {
-			FBTDBG();
-			strcpy(fbt_interface.response_buffer, "OKAY");
-			fbt_interface.flag |= FASTBOOT_FLAG_RESPONSE;
+			FBTINFO("erase\n");
+			strcpy(priv.response, "OKAY");
+			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		}
+
+		if(memcmp(cmdbuf, "flash:", 6) == 0) {
+			FBTINFO("flash\n");
+			strcpy(priv.response, "OKAY");
+			priv.flag |= FASTBOOT_FLAG_RESPONSE;
+		}
+
+		if(memcmp(cmdbuf, "download:", 9) == 0) {
+			FBTINFO("download\n");
+
+			/* XXX: need any check for size & bytes ? */
+			priv.d_size =
+				simple_strtoul (cmdbuf + 9, NULL, 16);
+			priv.d_bytes = 0;
+
+			FBTINFO ("starting download of %d bytes\n",
+				priv.d_size);
+
+			if (priv.d_size == 0) {
+				strcpy(priv.response, "FAILdata invalid size");
+			} else if (priv.d_size >
+					priv.transfer_buffer_size) {
+				priv.d_size = 0;
+				strcpy(priv.response, "FAILdata too large");
+			} else {
+				sprintf(priv.response, "DATA%08x", priv.d_size);
+			}
+			priv.flag |= FASTBOOT_FLAG_RESPONSE;
+		}
+	} else {
+		if (length) {
+			unsigned int xfr_size;
+
+			xfr_size = priv.d_size - priv.d_bytes;
+			if (xfr_size > length)
+				xfr_size = length;
+			memcpy(priv.transfer_buffer + priv.d_bytes,
+				buffer, xfr_size);
+			priv.d_bytes += xfr_size;
+
+#ifdef	INFO
+			/* Inform via prompt that download is happening */
+			if (! (priv.d_bytes % (16 * 2048)))
+				printf(".");
+			if (! (priv.d_bytes % (80 * 16 * 2048)))
+				printf("\n");
+#endif
+			if (priv.d_bytes >= priv.d_size) {
+				priv.d_size = 0;
+				strcpy(priv.response, "OKAY");
+				priv.flag |= FASTBOOT_FLAG_RESPONSE;
+#ifdef	INFO
+				printf(".\n");
+#endif
+				FBTINFO("downloaded %d bytes\n", priv.d_bytes);
+			}
+		} else
+			FBTWARN("empty buffer download\n");
 	}
+
 	FBTDBG();
 
 	return 0;
@@ -458,7 +526,7 @@ static int fbt_handle_recieve(void)
 	/* XXX: Or update status field, if so,
 		"usbd_rcv_complete" [gadget/core.c] also need to be modified */
 	if (ep->rcv_urb->actual_length) {
-		FBTINFO("rx length: %u\n", ep->rcv_urb->actual_length);
+		FBTDBG("rx length: %u\n", ep->rcv_urb->actual_length);
 		fbt_rx_process(ep->rcv_urb->buffer, ep->rcv_urb->actual_length);
 		FBTDBG();
 		/* XXX: required to poison rx urb buffer as in omapzoom ?,
@@ -490,9 +558,9 @@ static int fbt_response_process(void)
 	FBTDBG();
 
 	dest = current_urb->buffer + current_urb->actual_length;
-	n = MIN (64, strlen(fbt_interface.response_buffer));
+	n = MIN (64, strlen(priv.response));
 	FBTDBG();
-	memcpy(dest, fbt_interface.response_buffer, n);
+	memcpy(dest, priv.response, n);
 	FBTDBG();
 	current_urb->actual_length += n;
 	FBTDBG();
@@ -508,11 +576,11 @@ static int fbt_response_process(void)
 
 static int fbt_handle_response(void)
 {
-	if (fbt_interface.flag & FASTBOOT_FLAG_RESPONSE) {
+	if (priv.flag & FASTBOOT_FLAG_RESPONSE) {
 		FBTDBG();
 		fbt_response_process();
 		FBTDBG();
-		fbt_interface.flag &= ~FASTBOOT_FLAG_RESPONSE;
+		priv.flag &= ~FASTBOOT_FLAG_RESPONSE;
 	}
 
 	return 0;

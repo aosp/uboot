@@ -135,10 +135,13 @@ struct cmd_fastboot_interface{
 
 	/* Download size, if download has to be done. This can be checked to find
 		whether next packet is a command or a data */
-	unsigned int download_size;
+	unsigned int d_size;
+
+	/* Data downloaded so far */
+	unsigned int d_bytes;
 
 	/* XXX: what should be the size, 64 or 65 ? */
-	char response_buffer[65];
+	char response[65];
 
 	/* Indicate response to be sent, data to be recieved */
 	unsigned int flag;
