@@ -529,7 +529,7 @@ static int fbt_handle_recieve(void)
 		FBTDBG("rx length: %u\n", ep->rcv_urb->actual_length);
 		fbt_rx_process(ep->rcv_urb->buffer, ep->rcv_urb->actual_length);
 		FBTDBG();
-		/* XXX: required to poison rx urb buffer as in omapzoom ?,
+		/* Required to poison rx urb buffer as in omapzoom ?,
 		    yes, as fastboot command are sent w/o NULL termination.
 		    Attempt is made here to reduce poison length, may be safer
 		    to posion the whole buffer, also it is assumed that at
@@ -587,7 +587,6 @@ static int fbt_handle_response(void)
 }
 
 /* command */
-
 int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
 	int ret = -1;
@@ -638,3 +637,59 @@ U_BOOT_CMD(
 	"    - The optional inactive timeout is the decimal seconds before\n"
 	"    - the normal console resumes\n"
 );
+
+/* Initialize the name of fastboot flash name mappings */
+static fastboot_ptentry ptn[6] = {
+	{
+		.name   = "xloader",
+		.start  = 0x0000000,
+		.length = 0x0020000,
+		/* Written into the first 4 0x20000 blocks
+		   Use HW ECC */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_I |
+		          FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC |
+			  FASTBOOT_PTENTRY_FLAGS_REPEAT_4,
+	},
+		{
+		.name   = "bootloader",
+		.start  = 0x0080000,
+		.length = 0x0180000, /* 1.5 M */
+		/* Skip bad blocks on write
+		   Use HW ECC */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_I |
+		          FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC,
+	},
+	{
+		.name   = "environment",
+		.start  = SMNAND_ENV_OFFSET,  /* set in config file */
+		.length = 0x0040000,
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
+		FASTBOOT_PTENTRY_FLAGS_WRITE_ENV,
+	},
+	{
+		.name   = "kernel",
+		/* Test with start close to bad block
+		   The is dependent on the individual board.
+		   Change to what is required */
+		/* .start  = 0x0a00000, */
+			/* The real start */
+		.start  = 0x02a0000,
+		.length = 0x1D00000, /* 30M */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
+		FASTBOOT_PTENTRY_FLAGS_WRITE_I,
+	},
+	{
+		.name   = "system",
+		.start  = 0x2100000,
+		.length = 0xB400000, /* 180M */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
+		FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2,
+	},
+	{
+		.name   = "userdata",
+		.start  = 0xD500000,
+		.length = 0x4000000, /* 64M */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
+		FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2,
+	},
+};
