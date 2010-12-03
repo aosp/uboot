@@ -33,10 +33,19 @@
 #include <usb/spr_udc.h>
 #endif
 
+#define	INFO
 #define DEBUG
+
 #ifdef DEBUG
 #define FBTDBG(fmt,args...)\
         printf("[%s]: %d: \n"fmt, __FUNCTION__, __LINE__,##args)
+#else
+#define FBTDBG(fmt,args...) do{}while(0)
+#endif
+
+#ifdef INFO
+#define FBTINFO(fmt,args...)\
+        printf("[%s]: "fmt, __FUNCTION__, ##args)
 #else
 #define FBTDBG(fmt,args...) do{}while(0)
 #endif
@@ -426,7 +435,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			strcpy(fbt_interface.response_buffer, "OKAY");
 			fbt_interface.flag |= FASTBOOT_FLAG_RESPONSE;
 			if(!strcmp(cmdbuf + strlen("getvar:"), "version")) {
-				FBTDBG();
+				FBTDBG("getvar version\n");
 				strcpy(fbt_interface.response_buffer + 4,
 					FASTBOOT_VERSION);
 			}
@@ -446,20 +455,25 @@ static int fbt_handle_recieve(void)
 {
 	struct usb_endpoint_instance *ep = &endpoint_instance[RX_EP_INDEX];
 
-	/* XXX: Or check rcv_urb->actual_length ? */
-	if (ep->rcv_urb->status == RECV_READY) {
-		FBTDBG();
+	/* XXX: Or update status field, if so,
+		"usbd_rcv_complete" [gadget/core.c] also need to be modified */
+	if (ep->rcv_urb->actual_length) {
+		FBTINFO("rx length: %u\n", ep->rcv_urb->actual_length);
 		fbt_rx_process(ep->rcv_urb->buffer, ep->rcv_urb->actual_length);
 		FBTDBG();
-		/* XXX: required to poison rx urb buffer as in omapzoom ? */
-		ep->rcv_urb->status = RECV_OK;
+		/* XXX: required to poison rx urb buffer as in omapzoom ?,
+		    yes, as fastboot command are sent w/o NULL termination.
+		    Attempt is made here to reduce poison length, may be safer
+		    to posion the whole buffer, also it is assumed that at
+		    the time of creation of urb it is poisoned 	*/
+		memset(ep->rcv_urb->buffer, 0, ep->rcv_urb->actual_length);
 		ep->rcv_urb->actual_length = 0;
 	}
 
 	return 0;
 }
 
-static int fbt_process_response(void)
+static int fbt_response_process(void)
 {
 	struct usb_endpoint_instance *ep = &endpoint_instance[TX_EP_INDEX];
 	struct urb *current_urb = NULL;
@@ -496,7 +510,7 @@ static int fbt_handle_response(void)
 {
 	if (fbt_interface.flag & FASTBOOT_FLAG_RESPONSE) {
 		FBTDBG();
-		fbt_process_response();
+		fbt_response_process();
 		FBTDBG();
 		fbt_interface.flag &= ~FASTBOOT_FLAG_RESPONSE;
 	}

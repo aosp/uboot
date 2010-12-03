@@ -370,7 +370,6 @@ void usbd_rcv_complete(struct usb_endpoint_instance *endpoint, int len, int urb_
 
 				/* increment the received data size */
 				rcv_urb->actual_length += len;
-				rcv_urb->status = RECV_READY;
 
 			} else {
 				usberr(" RECV_ERROR actual: %d buffer: %d urb_bad: %d\n",
