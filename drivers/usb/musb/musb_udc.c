@@ -64,7 +64,7 @@
 #endif
 
 /* Define MUSB_DEBUG for debugging */
-#define MUSB_DEBUG
+//#define MUSB_DEBUG
 #include "musb_debug.h"
 
 #define MAX_ENDPOINT 15
@@ -95,8 +95,8 @@ do {									\
 } while (0)
 
 /* static implies these initialized to 0 or NULL */
-static int debug_setup = 1;
-static int debug_level = 4;
+static int debug_setup;
+static int debug_level;
 static struct musb_epinfo epinfo[MAX_ENDPOINT * 2];
 static enum ep0_state_enum {
 	IDLE = 0,
