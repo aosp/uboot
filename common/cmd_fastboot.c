@@ -233,7 +233,7 @@ static fastboot_ptentry ptn[6] = {
 		.start  = SMNAND_ENV_OFFSET,  /* set in config file */
 		.length = 0x0040000,
 		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
-		FASTBOOT_PTENTRY_FLAGS_WRITE_ENV,
+			  FASTBOOT_PTENTRY_FLAGS_WRITE_ENV,
 	},
 	{
 		.name   = "kernel",
@@ -1089,6 +1089,8 @@ static int fbt_fastboot_init(void)
 	priv.d_bytes = 0;
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+	priv.nand_block_size               = 2048;
+	priv.nand_oob_size                 = 64;
 	for (i = 0; i < 6; i++)
 		fastboot_flash_add_ptn (&ptn[i]);
 #endif
@@ -1136,6 +1138,52 @@ static int fbt_handle_erase(char *cmdbuf)
 	}
 	return status;
 }
+
+static int fbt_handle_flash(char *cmdbuf)
+{
+	int status = 0;
+
+	if (priv.d_bytes) {
+		struct fastboot_ptentry *ptn;
+
+		ptn = fastboot_flash_find_ptn(cmdbuf + 6);
+		if (ptn == 0) {
+			sprintf(priv.response, "FAILpartition does not exist");
+		} else if ((priv.d_bytes > ptn->length) &&
+			!(ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV)) {
+			sprintf(priv.response, "FAILimage too large for partition");
+		} else {
+			/* Check if this is not really a flash write
+			   but rather a saveenv */
+			if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
+				/* Since the response can only be 64 bytes,
+				   there is no point in having a large error message. */
+				char err_string[32];
+
+				if (saveenv_to_ptn(ptn, &err_string[0])) {
+					FBTINFO("savenv '%s' failed : %s\n", ptn->name, err_string);
+					sprintf(priv.response, "FAIL%s", err_string);
+				} else {
+					FBTINFO("partition '%s' saveenv-ed\n", ptn->name);
+					sprintf(priv.response, "OKAY");
+				}
+			} else {
+				/* Normal case */
+				if (write_to_ptn(ptn)) {
+					FBTINFO("flashing '%s' failed\n", ptn->name);
+					sprintf(priv.response, "FAILfailed to flash partition");
+				} else {
+					FBTINFO("partition '%s' flashed\n", ptn->name);
+					sprintf(priv.response, "OKAY");
+				}
+			}
+		}
+	} else {
+		sprintf(priv.response, "FAILno image downloaded");
+	}
+
+	return status;
+}
 #endif
 
 /* XXX: Replace magic number & strings with macros */
@@ -1168,6 +1216,14 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			FBTINFO("erase\n");
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_erase(cmdbuf);
+#endif
+			priv.flag |= FASTBOOT_FLAG_RESPONSE;
+		}
+
+		if(memcmp(cmdbuf, "flash:", 6) == 0) {
+			FBTINFO("flash\n");
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+			fbt_handle_flash(cmdbuf);
 #endif
 			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		}
@@ -1213,9 +1269,9 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 
 #ifdef	INFO
 			/* Inform via prompt that download is happening */
-			if (! (priv.d_bytes % (16 * 2048)))
+			if (! (priv.d_bytes % (16 * priv.nand_block_size)))
 				printf(".");
-			if (! (priv.d_bytes % (80 * 16 * 2048)))
+			if (! (priv.d_bytes % (80 * 16 * priv.nand_block_size)))
 				printf("\n");
 #endif
 			if (priv.d_bytes >= priv.d_size) {
@@ -1226,7 +1282,23 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 				printf(".\n");
 #endif
 				priv.download_bytes_unpadded = priv.d_size;
-				/* XXX: Handle padding if required here */
+				/* XXX: Revisit padding handling */
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+				if (priv.nand_block_size) {
+					if (priv.d_bytes % priv.nand_block_size) {
+						unsigned int pad = priv.nand_block_size - (priv.d_bytes % priv.nand_block_size);
+						unsigned int i;
+
+						for (i = 0; i < pad; i++) {
+							if (priv.d_bytes >= priv.transfer_buffer_size)
+								break;
+
+							priv.transfer_buffer[priv.d_bytes] = 0;
+							priv.d_bytes++;
+						}
+					}
+				}
+#endif
 				FBTINFO("downloaded %d bytes\n", priv.d_bytes);
 			}
 		} else
