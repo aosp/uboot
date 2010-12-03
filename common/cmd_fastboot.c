@@ -35,7 +35,7 @@
 
 #define	WARN
 #define	INFO
-#define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
 #define FBTDBG(fmt,args...)\
