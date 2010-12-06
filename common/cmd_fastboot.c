@@ -100,6 +100,8 @@ struct _fbt_config_desc {
 	struct usb_endpoint_descriptor endpoint_desc[NUM_ENDPOINTS];
 };
 
+static int fbt_handle_response(void);
+
 /* defined and used by gadget/ep0.c */
 extern struct usb_string_descriptor **usb_strings;
 
@@ -208,6 +210,7 @@ extern int do_saveenv (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern int do_setenv ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern int do_switch_ecc(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
 extern int do_nand(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
+extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern fastboot_ptentry ptn[];
 
 /* To support the Android-style naming of flash */
@@ -1267,6 +1270,7 @@ static int fbt_fastboot_init(void)
 	priv.flag = 0;
 	priv.d_size = 0;
 	priv.d_bytes = 0;
+	priv.exit = 0;
 
 	priv.product_name = FASTBOOT_PRODUCT_NAME;
 	set_serial_number();
@@ -1389,6 +1393,18 @@ static int fbt_handle_getvar(char *cmdbuf)
 	return 0;
 }
 
+static int fbt_handle_reboot(char *cmdbuf)
+{
+	strcpy(priv.response,"OKAY");
+	priv.flag |= FASTBOOT_FLAG_RESPONSE;
+	fbt_handle_response();
+	udelay (1000000); /* 1 sec */
+
+	do_reset (NULL, 0, 0, NULL);
+
+	return 0;
+}
+
 /* XXX: Replace magic number & strings with macros */
 static int fbt_rx_process(unsigned char *buffer, int length)
 {
@@ -1403,7 +1419,6 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		FBTDBG("%c%c%c%c%c%c%c\n", cmdbuf[0], cmdbuf[1], cmdbuf[2],
 			cmdbuf[3], cmdbuf[4], cmdbuf[5], cmdbuf[6]);
 
-		FBTDBG();
 		if(memcmp(cmdbuf, "getvar:", 7) == 0) {
 			FBTINFO("getvar\n");
 			fbt_handle_getvar(cmdbuf);
@@ -1423,6 +1438,19 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			fbt_handle_flash(cmdbuf);
 #endif
 			priv.flag |= FASTBOOT_FLAG_RESPONSE;
+		}
+
+		if((memcmp(cmdbuf, "reboot", 6) == 0) ||
+			(memcmp(cmdbuf, "reboot-bootloader", 17) == 0)) {
+			FBTINFO("reboot/reboot-bootloader\n");
+			fbt_handle_reboot(cmdbuf);
+		}
+
+		if(memcmp(cmdbuf, "continue", 8) == 0) {
+			FBTINFO("continue\n");
+			strcpy(priv.response,"OKAY");
+			priv.flag |= FASTBOOT_FLAG_RESPONSE;
+			priv.exit = 1;
 		}
 
 		if(memcmp(cmdbuf, "download:", 9) == 0) {
@@ -1472,9 +1500,10 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 #ifdef	INFO
 				printf(".\n");
 #endif
+
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 				priv.download_bytes_unpadded = priv.d_size;
 				/* XXX: Revisit padding handling */
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 				if (priv.nand_block_size) {
 					if (priv.d_bytes % priv.nand_block_size) {
 						unsigned int pad = priv.nand_block_size - (priv.d_bytes % priv.nand_block_size);
@@ -1601,9 +1630,10 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 		udc_irq();
 		fbt_handle_recieve();
 		fbt_handle_response();
-		if (ctrlc()) {
+		priv.exit |= ctrlc();
+		if (priv.exit) {
 			FBTDBG();
-			printf("fastboot ended by user\n");
+			FBTINFO("fastboot end\n");
 			break;
 		}
 	}

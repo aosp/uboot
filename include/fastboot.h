@@ -94,6 +94,9 @@
 #define	FASTBOOT_FLAG_RESPONSE	1
 #define	FASTBOOT_FLAG_DOWNLOAD	1
 
+/* To change design of memory handling (SD/MMC, NAND) faster, if required */
+#define FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+
 struct cmd_fastboot_interface{
 
 	/* A getvar string for the product name
@@ -146,7 +149,11 @@ struct cmd_fastboot_interface{
 	/* Indicate response to be sent, data to be recieved */
 	unsigned int flag;
 
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 	unsigned int download_bytes_unpadded;
+#endif
+
+	unsigned int exit;
 };
 
 /* Android-style flash naming */
@@ -213,9 +220,6 @@ struct fastboot_ptentry{
 #define FASTBOOT_BOOT_MAGIC_SIZE 8
 #define FASTBOOT_BOOT_NAME_SIZE 16
 #define FASTBOOT_BOOT_ARGS_SIZE 512
-
-/* To change design of memory handling (SD/MMC, NAND) faster, if required */
-#define FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 
 struct fastboot_boot_img_hdr {
 	unsigned char magic[FASTBOOT_BOOT_MAGIC_SIZE];
