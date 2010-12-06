@@ -86,8 +86,8 @@
 /* The fastboot client uses a value of 2048 for the
    page size of it boot.img file format.
    Reset this in your board config file as needed. */
-#ifndef CFG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE
-#define CFG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE 2048
+#ifndef CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE
+#define CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE 2048
 #endif
 
 /* Flags */

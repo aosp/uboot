@@ -211,6 +211,9 @@ extern int do_setenv ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern int do_switch_ecc(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
 extern int do_nand(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
 extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
+/* Use do_bootm and do_go for fastboot's 'boot' command */
+int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
+int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern fastboot_ptentry ptn[];
 
 /* To support the Android-style naming of flash */
@@ -1405,6 +1408,62 @@ static int fbt_handle_reboot(char *cmdbuf)
 	return 0;
 }
 
+static int fbt_handle_boot(char *cmdbuf)
+{
+	if ((priv.d_bytes) &&
+		(CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE < priv.d_bytes)) {
+		char start[32];
+		char *bootm[3] = { "bootm", NULL, NULL, };
+		char *go[3]    = { "go",    NULL, NULL, };
+
+		/*
+		 * Use this later to determine if a command line was passed
+		 * for the kernel.
+		 */
+		struct fastboot_boot_img_hdr *fb_hdr =
+			(struct fastboot_boot_img_hdr *) priv.transfer_buffer;
+
+		/* Skip the mkbootimage header */
+		image_header_t *hdr = (image_header_t *)
+		  &priv.transfer_buffer[CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE];
+
+		bootm[1] = go[1] = start;
+		sprintf (start, "0x%x", hdr);
+
+		/* Execution should jump to kernel so send the response
+		   now and wait a bit.  */
+		sprintf(priv.response, "OKAY");
+		priv.flag |= FASTBOOT_FLAG_RESPONSE;
+		fbt_handle_response();
+		udelay (1000000); /* 1 sec */
+
+		if (ntohl(hdr->ih_magic) == IH_MAGIC) {
+			/* Looks like a kernel.. */
+			FBTINFO("Booting kernel..\n");
+
+			/*
+			 * Check if the user sent a bootargs down.
+			 * If not, do not override what is already there
+			 */
+			if (strlen ((char *) &fb_hdr->cmdline[0]))
+				set_env ("bootargs", (char *) &fb_hdr->cmdline[0]);
+
+			do_bootm (NULL, 0, 2, bootm);
+		} else {
+			/* Raw image, maybe another uboot */
+			printf ("Booting raw image..\n");
+
+			do_go (NULL, 0, 2, go);
+		}
+
+		FBTERR("booting failed, reset the board\n");
+	}
+	sprintf(priv.response, "FAILinvalid boot image");
+	priv.flag |= FASTBOOT_FLAG_RESPONSE;
+
+	return 0;
+}
+
 /* XXX: Replace magic number & strings with macros */
 static int fbt_rx_process(unsigned char *buffer, int length)
 {
@@ -1451,6 +1510,11 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			strcpy(priv.response,"OKAY");
 			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 			priv.exit = 1;
+		}
+
+		if(memcmp(cmdbuf, "boot", 4) == 0) {
+			FBTINFO("boot\n");
+			fbt_handle_boot(cmdbuf);
 		}
 
 		if(memcmp(cmdbuf, "download:", 9) == 0) {
