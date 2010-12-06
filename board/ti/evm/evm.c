@@ -35,9 +35,70 @@
 #include <asm/arch/sys_proto.h>
 #include <i2c.h>
 #include <asm/mach-types.h>
+#include <fastboot.h>
 #include "evm.h"
 
 DECLARE_GLOBAL_DATA_PTR;
+
+#ifdef	CONFIG_FASTBOOT
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+/* Initialize the name of fastboot flash name mappings */
+fastboot_ptentry ptn[6] = {
+	{
+		.name   = "xloader",
+		.start  = 0x0000000,
+		.length = 0x0020000,
+		/* Written into the first 4 0x20000 blocks
+		   Use HW ECC */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_I |
+		          FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC |
+			  FASTBOOT_PTENTRY_FLAGS_REPEAT_4,
+	},
+		{
+		.name   = "bootloader",
+		.start  = 0x0080000,
+		.length = 0x0180000, /* 1.5 M */
+		/* Skip bad blocks on write
+		   Use HW ECC */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_I |
+		          FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC,
+	},
+	{
+		.name   = "environment",
+		.start  = SMNAND_ENV_OFFSET,  /* set in config file */
+		.length = 0x0040000,
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
+			  FASTBOOT_PTENTRY_FLAGS_WRITE_ENV,
+	},
+	{
+		.name   = "kernel",
+		/* Test with start close to bad block
+		   The is dependent on the individual board.
+		   Change to what is required */
+		/* .start  = 0x0a00000, */
+			/* The real start */
+		.start  = 0x02a0000,
+		.length = 0x1D00000, /* 30M */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
+		FASTBOOT_PTENTRY_FLAGS_WRITE_I,
+	},
+	{
+		.name   = "system",
+		.start  = 0x2100000,
+		.length = 0xB400000, /* 180M */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
+		FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2,
+	},
+	{
+		.name   = "userdata",
+		.start  = 0xD500000,
+		.length = 0x4000000, /* 64M */
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
+		FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2,
+	},
+};
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
+#endif /* CONFIG_FASTBOOT */
 
 static u32 omap3_evm_version;
 
@@ -110,6 +171,15 @@ int board_init(void)
 	gd->bd->bi_arch_number = MACH_TYPE_OMAP3EVM;
 	/* boot param addr */
 	gd->bd->bi_boot_params = (OMAP34XX_SDRC_CS0 + 0x100);
+
+#ifdef	CONFIG_FASTBOOT
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+	int i;
+
+	for (i = 0; i < 6; i++)
+		fastboot_flash_add_ptn (&ptn[i]);
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
+#endif /* CONFIG_FASTBOOT */
 
 	return 0;
 }

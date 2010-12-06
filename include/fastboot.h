@@ -214,6 +214,9 @@ struct fastboot_ptentry{
 #define FASTBOOT_BOOT_NAME_SIZE 16
 #define FASTBOOT_BOOT_ARGS_SIZE 512
 
+/* To change design of memory handling (SD/MMC, NAND) faster, if required */
+#define FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+
 struct fastboot_boot_img_hdr {
 	unsigned char magic[FASTBOOT_BOOT_MAGIC_SIZE];
 

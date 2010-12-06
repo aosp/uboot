@@ -141,6 +141,9 @@
 #define	CONFIG_CMD_FASTBOOT
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(PHYS_SDRAM_1 + SZ_16M)
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_128M - SZ_16M)
+/* if already present, use already existing NAND macros for block & oob size */
+#define	FASTBOOT_NAND_BLOCK_SIZE		2048
+#define	FASTBOOT_NAND_OOB_SIZE			64
 #else
 /* USB device configuration */
 #define CONFIG_USB_TTY			1

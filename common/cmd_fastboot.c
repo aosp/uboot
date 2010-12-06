@@ -19,27 +19,6 @@
 #include <command.h>
 #include <fastboot.h>
 
-#define FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-#include <nand.h>
-#include <environment.h>
-#endif
-
-/* USB specific */
-
-#if defined(CONFIG_PPC)
-#include <usb/mpc8xx_udc.h>
-#elif defined(CONFIG_OMAP1510)
-#include <usb/omap1510_udc.h>
-#elif defined(CONFIG_MUSB_UDC)
-#include <usb/musb_udc.h>
-#elif defined(CONFIG_PXA27X)
-#include <usb/pxa27x_udc.h>
-#elif defined(CONFIG_SPEAR3XX) || defined(CONFIG_SPEAR600)
-#include <usb/spr_udc.h>
-#endif
-
 #define	ERR
 #define	WARN
 #define	INFO
@@ -71,6 +50,25 @@
         printf("ERROR: [%s]: "fmt, __FUNCTION__, ##args)
 #else
 #define FBTERR(fmt,args...) do{}while(0)
+#endif
+
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+#include <nand.h>
+#include <environment.h>
+#endif
+
+/* USB specific */
+
+#if defined(CONFIG_PPC)
+#include <usb/mpc8xx_udc.h>
+#elif defined(CONFIG_OMAP1510)
+#include <usb/omap1510_udc.h>
+#elif defined(CONFIG_MUSB_UDC)
+#include <usb/musb_udc.h>
+#elif defined(CONFIG_PXA27X)
+#include <usb/pxa27x_udc.h>
+#elif defined(CONFIG_SPEAR3XX) || defined(CONFIG_SPEAR600)
+#include <usb/spr_udc.h>
 #endif
 
 #define STR_LANG		0x00
@@ -206,62 +204,7 @@ extern int do_saveenv (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern int do_setenv ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern int do_switch_ecc(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
 extern int do_nand(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
-
-/* Initialize the name of fastboot flash name mappings */
-static fastboot_ptentry ptn[6] = {
-	{
-		.name   = "xloader",
-		.start  = 0x0000000,
-		.length = 0x0020000,
-		/* Written into the first 4 0x20000 blocks
-		   Use HW ECC */
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_I |
-		          FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC |
-			  FASTBOOT_PTENTRY_FLAGS_REPEAT_4,
-	},
-		{
-		.name   = "bootloader",
-		.start  = 0x0080000,
-		.length = 0x0180000, /* 1.5 M */
-		/* Skip bad blocks on write
-		   Use HW ECC */
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_I |
-		          FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC,
-	},
-	{
-		.name   = "environment",
-		.start  = SMNAND_ENV_OFFSET,  /* set in config file */
-		.length = 0x0040000,
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
-			  FASTBOOT_PTENTRY_FLAGS_WRITE_ENV,
-	},
-	{
-		.name   = "kernel",
-		/* Test with start close to bad block
-		   The is dependent on the individual board.
-		   Change to what is required */
-		/* .start  = 0x0a00000, */
-			/* The real start */
-		.start  = 0x02a0000,
-		.length = 0x1D00000, /* 30M */
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
-		FASTBOOT_PTENTRY_FLAGS_WRITE_I,
-	},
-	{
-		.name   = "system",
-		.start  = 0x2100000,
-		.length = 0xB400000, /* 180M */
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
-		FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2,
-	},
-	{
-		.name   = "userdata",
-		.start  = 0xD500000,
-		.length = 0x4000000, /* 64M */
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
-		FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2,
-	},
-};
+extern fastboot_ptentry ptn[];
 
 /* To support the Android-style naming of flash */
 #define MAX_PTN 16
@@ -1079,20 +1022,14 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 
 static int fbt_fastboot_init(void)
 {
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-	int i;
-#endif
-
 	priv.d_size = 0;
 	priv.flag = 0;
 	priv.d_size = 0;
 	priv.d_bytes = 0;
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-	priv.nand_block_size               = 2048;
-	priv.nand_oob_size                 = 64;
-	for (i = 0; i < 6; i++)
-		fastboot_flash_add_ptn (&ptn[i]);
+	priv.nand_block_size               = FASTBOOT_NAND_BLOCK_SIZE;
+	priv.nand_oob_size                 = FASTBOOT_NAND_OOB_SIZE;
 #endif
 
 	return 0;
@@ -1420,11 +1357,5 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	return ret;
 }
 
-U_BOOT_CMD(
-	fastboot,	2,	1,	do_fastboot,
-	"fastboot- use USB Fastboot protocol\n",
-	"[inactive timeout]\n"
-	"    - Run as a fastboot usb device.\n"
-	"    - The optional inactive timeout is the decimal seconds before\n"
-	"    - the normal console resumes\n"
-);
+U_BOOT_CMD(fastboot, 2,	1, do_fastboot,
+	"fastboot- use USB Fastboot protocol\n", NULL);
