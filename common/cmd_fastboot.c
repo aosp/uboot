@@ -204,16 +204,16 @@ static struct cmd_fastboot_interface priv =
         .transfer_buffer_size  = CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE,
 };
 
+extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+/* Use do_bootm and do_go for fastboot's 'boot' command */
+extern int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
+extern int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 /* Use do_setenv and do_saveenv to permenantly save data */
 extern int do_saveenv (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern int do_setenv ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern int do_switch_ecc(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
 extern int do_nand(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
-extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
-/* Use do_bootm and do_go for fastboot's 'boot' command */
-int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
-int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern fastboot_ptentry ptn[];
 
 /* To support the Android-style naming of flash */
@@ -1269,10 +1269,11 @@ static int fbt_fastboot_init(void)
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 	fbt_add_partitions_from_environment();
 #endif
-	priv.d_size = 0;
 	priv.flag = 0;
 	priv.d_size = 0;
 	priv.d_bytes = 0;
+	priv.u_size = 0;
+	priv.u_bytes = 0;
 	priv.exit = 0;
 
 	priv.product_name = FASTBOOT_PRODUCT_NAME;
@@ -1408,6 +1409,7 @@ static int fbt_handle_reboot(char *cmdbuf)
 	return 0;
 }
 
+#ifdef	FASTBOOT_UPLOAD
 static int fbt_handle_boot(char *cmdbuf)
 {
 	if ((priv.d_bytes) &&
@@ -1464,7 +1466,130 @@ static int fbt_handle_boot(char *cmdbuf)
 	return 0;
 }
 
+static int fbt_handle_upload(char *cmdbuf)
+{
+	unsigned int adv, delim_index, len;
+	struct fastboot_ptentry *ptn;
+	unsigned int is_raw = 0;
+
+	/* Is this a raw read ? */
+	if (memcmp(cmdbuf, "uploadraw:", 10) == 0) {
+		is_raw = 1;
+		adv = 10;
+	} else {
+		adv = 7;
+	}
+
+	/* Scan to the next ':' to find when the size starts */
+	len = strlen(cmdbuf);
+	for (delim_index = adv;	delim_index < len; delim_index++) {
+		if (cmdbuf[delim_index] == ':') {
+			/* WARNING, cmdbuf is being modified. */
+			*((char *) &cmdbuf[delim_index]) = 0;
+			break;
+		}
+	}
+
+	ptn = fastboot_flash_find_ptn(cmdbuf + adv);
+	if (ptn == 0) {
+		sprintf(priv.response, "FAILpartition does not exist");
+	} else {
+		/* This is how much the user is expecting */
+		unsigned int user_size;
+		/*
+		 * This is the maximum size needed for
+		 * this partition
+		 */
+		unsigned int size;
+		/* This is the length of the data */
+		unsigned int length;
+		/*
+		 * Used to check previous write of
+		 * the parition
+		 */
+		char env_ptn_length_var[128];
+		char *env_ptn_length_val;
+
+		user_size = 0;
+		if (delim_index < len)
+			user_size = simple_strtoul(cmdbuf + delim_index +
+				1, NULL, 16);
+		/* Make sure output is padded to block size */
+		length = ptn->length;
+		sprintf(env_ptn_length_var, "%s_nand_size", ptn->name);
+		env_ptn_length_val = getenv(env_ptn_length_var);
+		if (env_ptn_length_val) {
+			length = simple_strtoul(env_ptn_length_val, NULL, 16);
+			/* Catch possible problems */
+			if (!length)
+				length = ptn->length;
+		}
+		size = length / priv.nand_block_size;
+		size *= priv.nand_block_size;
+		if (length % priv.nand_block_size)
+			size += priv.nand_block_size;
+		if (is_raw)
+			size += (size / priv.nand_block_size) *
+				priv.nand_oob_size;
+		if (size > priv.transfer_buffer_size) {
+			sprintf(priv.response, "FAILdata too large");
+		} else if (user_size == 0) {
+			/* Send the data response */
+			sprintf(priv.response, "DATA%08x", size);
+		} else if (user_size != size) {
+			/* This is the wrong size */
+			sprintf(priv.response, "FAIL");
+		} else {
+			/*
+			 * This is where the transfer
+			 * buffer is populated
+			 */
+			unsigned char *buf = priv.transfer_buffer;
+			char start[32], length[32], type[32], addr[32];
+			char *read[6] = { "nand", NULL, NULL,
+				NULL, NULL, NULL, };
+			/*
+			 * Setting upload_size causes
+			 * transfer to happen in main loop
+			 */
+			priv.u_size = size;
+			priv.u_bytes = 0;
+
+			/*
+			 * Poison the transfer buffer, 0xff
+			 * is erase value of nand
+			 */
+			memset(buf, 0xff, priv.u_size);
+			/* Which flavor of read to use */
+			if (is_raw)
+				sprintf(type, "read.raw");
+			else
+				sprintf(type, "read.i");
+
+			sprintf(addr, "0x%x", priv.transfer_buffer);
+			sprintf(start, "0x%x", ptn->start);
+			sprintf(length, "0x%x", priv.u_size);
+
+			read[1] = type;
+			read[2] = addr;
+			read[3] = start;
+			read[4] = length;
+
+			set_ptn_ecc(ptn);
+
+			do_nand(NULL, 0, 5, read);
+
+			/* Send the data response */
+			sprintf(priv.response, "DATA%08x", size);
+		}
+	}
+
+	return 0;
+}
+#endif /* FASTBOOT_UPLOAD */
+
 /* XXX: Replace magic number & strings with macros */
+/* XXX: Try to club FASTBOOT_FLAG_RESPONSE to one instead of doing separate */
 static int fbt_rx_process(unsigned char *buffer, int length)
 {
 	FBTDBG();
@@ -1514,7 +1639,9 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 
 		if(memcmp(cmdbuf, "boot", 4) == 0) {
 			FBTINFO("boot\n");
+#ifdef	FASTBOOT_UPLOAD
 			fbt_handle_boot(cmdbuf);
+#endif
 		}
 
 		if(memcmp(cmdbuf, "download:", 9) == 0) {
@@ -1539,6 +1666,16 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			}
 			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		}
+
+		if((memcmp(cmdbuf, "upload:", 7) == 0) ||
+			(memcmp(cmdbuf, "uploadraw", 10) == 0)) {
+			FBTINFO("upload/uploadraw\n");
+#ifdef	FASTBOOT_UPLOAD
+			fbt_handle_upload(cmdbuf);
+#endif
+			priv.flag |= FASTBOOT_FLAG_RESPONSE;
+		}
+
 	} else {
 		if (length) {
 			unsigned int xfr_size;
@@ -1594,7 +1731,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 	return 0;
 }
 
-static int fbt_handle_recieve(void)
+static int fbt_handle_rx(void)
 {
 	struct usb_endpoint_instance *ep = &endpoint_instance[RX_EP_INDEX];
 
@@ -1627,7 +1764,7 @@ static int fbt_response_process(void)
 	current_urb = next_urb (device_instance, ep);
 	FBTDBG();
 	if (!current_urb) {
-		printf("error: %s: current_urb NULL", __func__);
+		FBTERR("%s: current_urb NULL", __func__);
 		return -1;
 	}
 	FBTDBG();
@@ -1661,6 +1798,80 @@ static int fbt_handle_response(void)
 	return 0;
 }
 
+#ifdef	FASTBOOT_UPLOAD
+static int fbt_tx_process(void)
+{
+	struct usb_endpoint_instance *ep = &endpoint_instance[TX_EP_INDEX];
+	struct urb *current_urb = NULL;
+	unsigned char *dest = NULL;
+	int n = 0, ret = 0;
+
+	FBTDBG();
+	current_urb = next_urb (device_instance, ep);
+	FBTDBG();
+	if (!current_urb) {
+		FBTERR("%s: current_urb NULL", __func__);
+		return -1;
+	}
+	FBTDBG();
+
+	dest = current_urb->buffer + current_urb->actual_length;
+	n = MIN (64, priv.u_size - priv.u_bytes);
+	FBTDBG();
+	memcpy(dest, priv.transfer_buffer + priv.u_bytes, n);
+	FBTDBG();
+	current_urb->actual_length += n;
+	FBTDBG();
+	if (ep->last == 0) {
+		FBTDBG();
+		ret = udc_endpoint_write (ep);
+		/* XXX: "ret = n" should be done iff n bytes has been
+		 * transmitted, "udc_endpoint_write" to be changed for it,
+		 * now it always return 0.
+		 */
+		return n;
+	}
+
+	FBTDBG();
+	return ret;
+}
+
+static int fbt_handle_tx(void)
+{
+	if (priv.u_size) {
+		int bytes_written = fbt_tx_process();
+
+		if (bytes_written > 0) {
+			/* XXX: is this the right way to update priv.u_bytes ?,
+			 * may be "udc_endpoint_write()" can be modified to
+			 * return number of bytes transmitted or error and
+			 * update based on hence obtained value
+			 */
+			priv.u_bytes += bytes_written;
+#ifdef	INFO
+			/* Inform via prompt that upload is happening */
+			if (! (priv.d_bytes % (16 * priv.nand_block_size)))
+				printf(".");
+			if (! (priv.d_bytes % (80 * 16 * priv.nand_block_size)))
+				printf("\n");
+#endif
+			if (priv.u_bytes >= priv.u_size)
+#ifdef	INFO
+				printf(".\n");
+#endif
+				priv.u_size = priv.u_bytes = 0;
+				FBTINFO("data upload finished\n");
+		} else {
+			FBTERR("bytes_written: %d\n", bytes_written);
+			return -1;
+		}
+
+	}
+
+	return 0;
+}
+#endif /* FASTBOOT_UPLOAD */
+
 /* command */
 int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 {
@@ -1692,8 +1903,11 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 
 	while(1) {
 		udc_irq();
-		fbt_handle_recieve();
+		fbt_handle_rx();
 		fbt_handle_response();
+#ifdef	FASTBOOT_UPLOAD
+		fbt_handle_tx();
+#endif
 		priv.exit |= ctrlc();
 		if (priv.exit) {
 			FBTDBG();

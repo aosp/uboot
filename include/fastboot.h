@@ -96,6 +96,10 @@
 
 /* To change design of memory handling (SD/MMC, NAND) faster, if required */
 #define FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+/* To change design of memory read handling (SD/MMC, NAND), if required */
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+#define	FASTBOOT_UPLOAD
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 struct cmd_fastboot_interface{
 
@@ -142,6 +146,12 @@ struct cmd_fastboot_interface{
 
 	/* Data downloaded so far */
 	unsigned int d_bytes;
+
+	/* Upload size, if download has to be done */
+	unsigned int u_size;
+
+	/* Data uploaded so far */
+	unsigned int u_bytes;
 
 	/* XXX: what should be the size, 64 or 65 ? */
 	char response[65];
