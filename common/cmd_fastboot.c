@@ -1020,8 +1020,225 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 }
 #endif
 
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+static int check_against_static_partition(struct fastboot_ptentry *ptn)
+{
+	int ret = 0;
+	struct fastboot_ptentry *c;
+	int i;
+
+	for (i = 0; i < static_pcount; i++) {
+		c = fastboot_flash_get_ptn((unsigned int) i);
+
+		if (0 == ptn->length)
+			break;
+
+		if ((ptn->start >= c->start) &&
+		    (ptn->start < c->start + c->length))
+			break;
+
+		if ((ptn->start + ptn->length > c->start) &&
+		    (ptn->start + ptn->length <= c->start + c->length))
+			break;
+
+		if ((0 == strcmp(ptn->name, c->name)) &&
+		    (0 == strcmp(c->name, ptn->name)))
+			break;
+	}
+
+	if (i >= static_pcount)
+		ret = 1;
+	return ret;
+}
+
+static unsigned long long memparse(char *ptr, char **retptr)
+{
+	char *endptr;	/* local pointer to end of parsed string */
+
+	unsigned long ret = simple_strtoul(ptr, &endptr, 0);
+
+	switch (*endptr) {
+	case 'M':
+	case 'm':
+		ret <<= 10;
+	case 'K':
+	case 'k':
+		ret <<= 10;
+		endptr++;
+	default:
+		break;
+	}
+
+	if (retptr)
+		*retptr = endptr;
+
+	return ret;
+}
+
+static int add_partition_from_environment(char *s, char **retptr)
+{
+	unsigned long size;
+	unsigned long offset = 0;
+	char *name;
+	int name_len;
+	int delim;
+	unsigned int flags;
+	struct fastboot_ptentry part;
+
+	size = memparse(s, &s);
+	if (0 == size) {
+		FBTERR("size of parition is 0\n");
+		return 1;
+	}
+
+	/* fetch partition name and flags */
+	flags = 0; /* this is going to be a regular partition */
+	delim = 0;
+	/* check for offset */
+	if (*s == '@') {
+		s++;
+		offset = memparse(s, &s);
+	} else {
+		FBTERR("offset of parition is not given\n");
+		return 1;
+	}
+
+	/* now look for name */
+	if (*s == '(')
+		delim = ')';
+
+	if (delim) {
+		char *p;
+
+		name = ++s;
+		p = strchr((const char *)name, delim);
+		if (!p) {
+			FBTERR("no closing %c found in partition name\n", delim);
+			return 1;
+		}
+		name_len = p - name;
+		s = p + 1;
+	} else {
+		FBTERR("no partition name for \'%s\'\n", s);
+		return 1;
+	}
+
+	/* test for options */
+	while (1) {
+		if (strncmp(s, "i", 1) == 0) {
+			flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_I;
+			s += 1;
+		} else if (strncmp(s, "jffs2", 5) == 0) {
+			/* yaffs */
+			flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2;
+			s += 5;
+		} else if (strncmp(s, "swecc", 5) == 0) {
+			/* swecc */
+			flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC;
+			s += 5;
+		} else if (strncmp(s, "hwecc", 5) == 0) {
+			/* hwecc */
+			flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC;
+			s += 5;
+		} else {
+			break;
+		}
+		if (strncmp(s, "|", 1) == 0)
+			s += 1;
+	}
+
+	/* enter this partition (offset will be calculated later if it is zero at this point) */
+	part.length = size;
+	part.start = offset;
+	part.flags = flags;
+
+	if (name) {
+		if (name_len >= sizeof(part.name)) {
+			FBTERR("partition name is too long\n");
+			return 1;
+		}
+		strncpy(&part.name[0], name, name_len);
+		/* name is not null terminated */
+		part.name[name_len] = '\0';
+	} else {
+		FBTERR("no name\n");
+		return 1;
+	}
+
+
+	/* Check if this overlaps a static partition */
+	if (check_against_static_partition(&part)) {
+		FBTINFO("Adding: %s, offset 0x%8.8x, size 0x%8.8x, flags 0x%8.8x\n",
+		       part.name, part.start, part.length, part.flags);
+		fastboot_flash_add_ptn(&part);
+	}
+
+	/* return (updated) pointer command line string */
+	*retptr = s;
+
+	/* return partition table */
+	return 0;
+}
+
+static int fbt_add_partitions_from_environment(void)
+{
+	char fbparts[4096], *env;
+
+	/*
+	 * Place the runtime partitions at the end of the
+	 * static paritions.  First save the start off so
+	 * it can be saved from run to run.
+	 */
+	if (static_pcount >= 0) {
+		/* Reset */
+		pcount = static_pcount;
+	} else {
+		/* Save */
+		static_pcount = pcount;
+	}
+	env = getenv("fbparts");
+	if (env) {
+		unsigned int len;
+		len = strlen(env);
+		if (len && len < 4096) {
+			char *s, *e;
+
+			memcpy(&fbparts[0], env, len + 1);
+			FBTINFO("Adding partitions from environment\n");
+			s = &fbparts[0];
+			e = s + len;
+			while (s < e) {
+				if (add_partition_from_environment(s, &s)) {
+					FBTERR("Abort adding partitions\n");
+					/* reset back to static */
+					pcount = static_pcount;
+					break;
+				}
+				/* Skip a bunch of delimiters */
+				while (s < e) {
+					if ((' ' == *s) ||
+					    ('\t' == *s) ||
+					    ('\n' == *s) ||
+					    ('\r' == *s) ||
+					    (',' == *s)) {
+						s++;
+					} else {
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+#endif
+
 static int fbt_fastboot_init(void)
 {
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+	fbt_add_partitions_from_environment();
+#endif
 	priv.d_size = 0;
 	priv.flag = 0;
 	priv.d_size = 0;
@@ -1340,7 +1557,8 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 	udc_connect();
 	FBTDBG();
 	ret = fbt_init_endpoints();
-	FBTDBG();
+
+	FBTINFO("fastboot initialized\n");
 
 	while(1) {
 		udc_irq();
