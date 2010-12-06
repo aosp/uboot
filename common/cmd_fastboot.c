@@ -191,6 +191,11 @@ static struct usb_endpoint_instance endpoint_instance[NUM_ENDPOINTS + 1];
 
 /* FASBOOT specific */
 
+#define	GETVARLEN	30
+#define	SECURE		"no"
+/* U-boot version */
+extern char version_string[];
+
 static struct cmd_fastboot_interface priv =
 {
         .transfer_buffer       = CONFIG_FASTBOOT_TRANSFER_BUFFER,
@@ -198,7 +203,6 @@ static struct cmd_fastboot_interface priv =
 };
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-
 /* Use do_setenv and do_saveenv to permenantly save data */
 extern int do_saveenv (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 extern int do_setenv ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
@@ -1234,6 +1238,26 @@ static int fbt_add_partitions_from_environment(void)
 }
 #endif
 
+static void set_serial_number(void)
+{
+	char *dieid = getenv("dieid#");
+	if (dieid == NULL) {
+		priv.serial_no = "00123";
+	} else {
+		static char serial_number[32];
+		int len;
+
+		memset(&serial_number[0], 0, 32);
+		len = strlen(dieid);
+		if (len > 30)
+			len = 30;
+
+		strncpy(&serial_number[0], dieid, len);
+
+		priv.serial_no = &serial_number[0];
+	}
+}
+
 static int fbt_fastboot_init(void)
 {
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -1243,6 +1267,9 @@ static int fbt_fastboot_init(void)
 	priv.flag = 0;
 	priv.d_size = 0;
 	priv.d_bytes = 0;
+
+	priv.product_name = FASTBOOT_PRODUCT_NAME;
+	set_serial_number();
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 	priv.nand_block_size               = FASTBOOT_NAND_BLOCK_SIZE;
@@ -1340,6 +1367,28 @@ static int fbt_handle_flash(char *cmdbuf)
 }
 #endif
 
+static int fbt_handle_getvar(char *cmdbuf)
+{
+	strcpy(priv.response, "OKAY");
+	if(!strcmp(cmdbuf + strlen("getvar:"), "version")) {
+		FBTDBG("getvar version\n");
+		strcpy(priv.response + 4, FASTBOOT_VERSION);
+	} else if(!strcmp(cmdbuf + strlen("getvar:"), "version-bootloader")) {
+		strncpy(priv.response + 4, version_string,
+			min(strlen(version_string), GETVARLEN));
+	} else if(!strcmp(cmdbuf + strlen("getvar:"), "secure")) {
+		strcpy(priv.response + 4, SECURE);
+	} else if(!strcmp(cmdbuf + strlen("getvar:"), "product")) {
+		if (priv.product_name)
+			strcpy(priv.response + 4, priv.product_name);
+	} else if(!strcmp(cmdbuf + strlen("getvar:"), "serialno")) {
+		if (priv.serial_no)
+			strcpy(priv.response + 4, priv.serial_no);
+	}
+	priv.flag |= FASTBOOT_FLAG_RESPONSE;
+	return 0;
+}
+
 /* XXX: Replace magic number & strings with macros */
 static int fbt_rx_process(unsigned char *buffer, int length)
 {
@@ -1357,13 +1406,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		FBTDBG();
 		if(memcmp(cmdbuf, "getvar:", 7) == 0) {
 			FBTINFO("getvar\n");
-			strcpy(priv.response, "OKAY");
-			if(!strcmp(cmdbuf + strlen("getvar:"), "version")) {
-				FBTDBG("getvar version\n");
-				strcpy(priv.response + 4,
-					FASTBOOT_VERSION);
-			}
-			priv.flag |= FASTBOOT_FLAG_RESPONSE;
+			fbt_handle_getvar(cmdbuf);
 		}
 
 		if(memcmp(cmdbuf, "erase:", 6) == 0) {
@@ -1379,12 +1422,6 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_flash(cmdbuf);
 #endif
-			priv.flag |= FASTBOOT_FLAG_RESPONSE;
-		}
-
-		if(memcmp(cmdbuf, "flash:", 6) == 0) {
-			FBTINFO("flash\n");
-			strcpy(priv.response, "OKAY");
 			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		}
 
