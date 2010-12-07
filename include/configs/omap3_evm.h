@@ -45,7 +45,6 @@
 #define CONFIG_SDRC	/* The chip has SDRC controller */
 
 #define	CONFIG_FASTBOOT /* Android fast boot */
-//#define	CONFIG_CMD_USBTEST
 
 #include <asm/arch/cpu.h>	/* get chip and board defs */
 #include <asm/arch/omap3.h>

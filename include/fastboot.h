@@ -96,10 +96,8 @@
 
 /* To change design of memory handling (SD/MMC, NAND) faster, if required */
 #define FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-/* To change design of memory read handling (SD/MMC, NAND), if required */
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-#define	FASTBOOT_UPLOAD
-#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
+/* To activate-deactivate fastboot upload command (not part of OmapZoom) */
+// #define	FASTBOOT_UPLOAD
 
 struct cmd_fastboot_interface{
 

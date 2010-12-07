@@ -105,9 +105,10 @@ static int fbt_handle_response(void);
 /* defined and used by gadget/ep0.c */
 extern struct usb_string_descriptor **usb_strings;
 
-/* USB Descriptor Strings */
-static char serial_number[16] = "TEMP";
+static struct cmd_fastboot_interface priv;
 
+/* USB Descriptor Strings */
+static char serial_number[28]; /* what should be the length ?, 28 ? */
 static u8 wstr_lang[4] = {4,USB_DT_STRING,0x9,0x4};
 static u8 wstr_manufacturer[2 + 2*(sizeof(CONFIG_USBD_MANUFACTURER)-1)];
 static u8 wstr_product[2 + 2*(sizeof(CONFIG_USBD_PRODUCT_NAME)-1)];
@@ -221,7 +222,7 @@ extern fastboot_ptentry ptn[];
 static fastboot_ptentry ptable[MAX_PTN];
 static unsigned int pcount;
 static int static_pcount = -1;
-#endif
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 /* USB specific */
 
@@ -229,7 +230,6 @@ static int static_pcount = -1;
 static void str2wide (char *str, u16 * wide)
 {
 	int i;
-	FBTDBG();
 	for (i = 0; i < strlen (str) && str[i]; i++){
 		#if defined(__LITTLE_ENDIAN)
 			wide[i] = (u16) str[i];
@@ -239,14 +239,13 @@ static void str2wide (char *str, u16 * wide)
 			#error "__LITTLE_ENDIAN or __BIG_ENDIAN undefined"
 		#endif
 	}
-	FBTDBG();
 }
 
+/* fastboot_init has to be called before this fn to get correct serial string */
 static int fbt_init_strings(void)
 {
 	struct usb_string_descriptor *string;
 
-	FBTDBG();
 	fbt_string_table[STR_LANG] =
 		(struct usb_string_descriptor*)wstr_lang;
 
@@ -263,7 +262,7 @@ static int fbt_init_strings(void)
 	fbt_string_table[STR_PRODUCT] = string;
 
 	string = (struct usb_string_descriptor *) wstr_serial;
-	string->bLength = sizeof(serial_number);
+	string->bLength = sizeof(wstr_serial);
 	string->bDescriptorType = USB_DT_STRING;
 	str2wide (serial_number, string->wData);
 	fbt_string_table[STR_SERIAL] = string;
@@ -279,7 +278,6 @@ static int fbt_init_strings(void)
 	string->bDescriptorType = USB_DT_STRING;
 	str2wide (CONFIG_USBD_INTERFACE_STR, string->wData);
 	fbt_string_table[STR_INTERFACE] = string;
-	FBTDBG();
 
 	/* Now, initialize the string table for ep0 handling */
 	usb_strings = fbt_string_table;
@@ -287,11 +285,11 @@ static int fbt_init_strings(void)
 	return 0;
 }
 
+/* fastboot_init has to be called before this fn to get correct serial string */
 static int fbt_init_instances(void)
 {
 	int i;
 
-	FBTDBG();
 	/* initialize device instance */
 	memset (device_instance, 0, sizeof (struct usb_device_instance));
 	device_instance->device_state = STATE_INIT;
@@ -302,7 +300,6 @@ static int fbt_init_instances(void)
 	device_instance->configurations = NUM_CONFIGS;
 	device_instance->configuration_instance_array = config_instance;
 
-	FBTDBG();
 	/* XXX: what is this bus instance for ?, can't it be removed by moving
 	    endpoint_array and serial_number_str is moved to device instance */
 	/* initialize bus instance */
@@ -314,7 +311,6 @@ static int fbt_init_instances(void)
 	bus_instance->maxpacketsize = 64;
 	bus_instance->serial_number_str = serial_number;
 
-	FBTDBG();
 	/* configuration instance */
 	memset (config_instance, 0,
 		sizeof (struct usb_configuration_instance));
@@ -323,7 +319,6 @@ static int fbt_init_instances(void)
 		(struct usb_configuration_descriptor *)&fbt_config_desc;
 	config_instance->interface_instance_array = interface_instance;
 
-	FBTDBG();
 	/* XXX: is alternate instance required in case of no alternate ? */
 	/* interface instance */
 	memset (interface_instance, 0,
@@ -331,7 +326,6 @@ static int fbt_init_instances(void)
 	interface_instance->alternates = 1;
 	interface_instance->alternates_instance_array = alternate_instance;
 
-	FBTDBG();
 	/* alternates instance */
 	memset (alternate_instance, 0,
 		sizeof (struct usb_alternate_instance));
@@ -339,7 +333,6 @@ static int fbt_init_instances(void)
 	alternate_instance->endpoints = NUM_ENDPOINTS;
 	alternate_instance->endpoints_descriptor_array = ep_descriptor_ptrs;
 
-	FBTDBG();
 	/* endpoint instances */
 	memset (&endpoint_instance[0], 0,
 		sizeof (struct usb_endpoint_instance));
@@ -352,7 +345,6 @@ static int fbt_init_instances(void)
 		at another place ? */
 	udc_setup_ep (device_instance, 0, &endpoint_instance[0]);
 
-	FBTDBG();
 	for (i = 1; i <= NUM_ENDPOINTS; i++) {
 		memset (&endpoint_instance[i], 0,
 			sizeof (struct usb_endpoint_instance));
@@ -389,7 +381,6 @@ static int fbt_init_instances(void)
 				usbd_alloc_urb (device_instance,
 						&endpoint_instance[i]);
 	}
-	FBTDBG();
 
 	return 0;
 }
@@ -398,7 +389,6 @@ static int fbt_init_instances(void)
 	fbt_config_desc.endpoint_desc */
 static int fbt_init_endpoint_ptrs(void)
 {
-	FBTDBG();
 	ep_descriptor_ptrs[0] = &fbt_config_desc.endpoint_desc[0];
 	ep_descriptor_ptrs[1] = &fbt_config_desc.endpoint_desc[1];
 
@@ -409,7 +399,6 @@ static int fbt_init_endpoints (void)
 {
 	int i;
 
-	FBTDBG();
 	bus_instance->max_endpoints = NUM_ENDPOINTS + 1;
 	/* XXX: is this for loop required ? */
 	for (i = 1; i <= NUM_ENDPOINTS; i++) {
@@ -815,9 +804,9 @@ static void set_ptn_ecc(struct fastboot_ptentry *ptn)
 	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) &&
 	    (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC)) {
 		/* Both can not be true */
-		printf("Warning can not do hw and sw ecc for partition '%s'\n",
+		FBTERR("can not do hw and sw ecc for partition '%s'\n",
 		       ptn->name);
-		printf("Ignoring these flags\n");
+		FBTERR("Ignoring these flags\n");
 	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) {
 		sprintf(ecc_type, "hw");
 		do_switch_ecc(NULL, 0, 2, ecc);
@@ -846,7 +835,7 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 	write[3] = wstart;
 	write[4] = wlength;
 
-	printf("flashing '%s'\n", ptn->name);
+	FBTINFO("flashing '%s'\n", ptn->name);
 
 	/* Which flavor of write to use */
 	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_I)
@@ -938,7 +927,7 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 
 					nand = &nand_info[nand_curr_device];
 
-					printf("\nDevice %d bad blocks:\n",
+					FBTINFO("\nDevice %d bad blocks:\n",
 					       nand_curr_device);
 
 					/* Initialize the ok_start to the
@@ -1028,7 +1017,7 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 
 	return ret;
 }
-#endif
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 static int check_against_static_partition(struct fastboot_ptentry *ptn)
@@ -1242,7 +1231,7 @@ static int fbt_add_partitions_from_environment(void)
 
 	return 0;
 }
-#endif
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 static void set_serial_number(void)
 {
@@ -1250,13 +1239,12 @@ static void set_serial_number(void)
 	if (dieid == NULL) {
 		priv.serial_no = "00123";
 	} else {
-		static char serial_number[32];
 		int len;
 
-		memset(&serial_number[0], 0, 32);
+		memset(&serial_number[0], 0, 28);
 		len = strlen(dieid);
-		if (len > 30)
-			len = 30;
+		if (len > 28)
+			len = 26;
 
 		strncpy(&serial_number[0], dieid, len);
 
@@ -1301,7 +1289,7 @@ static int fbt_handle_erase(char *cmdbuf)
 		int status, repeat, repeat_max;
 		char *erase[5]  = { "nand", "erase",  NULL, NULL, NULL, };
 
-		printf("erasing '%s'\n", ptn->name);
+		FBTINFO("erasing '%s'\n", ptn->name);
 
 		erase[2] = start;
 		erase[3] = length;
@@ -1373,7 +1361,7 @@ static int fbt_handle_flash(char *cmdbuf)
 
 	return status;
 }
-#endif
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 static int fbt_handle_getvar(char *cmdbuf)
 {
@@ -1409,7 +1397,7 @@ static int fbt_handle_reboot(char *cmdbuf)
 	return 0;
 }
 
-#ifdef	FASTBOOT_UPLOAD
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 static int fbt_handle_boot(char *cmdbuf)
 {
 	if ((priv.d_bytes) &&
@@ -1453,7 +1441,7 @@ static int fbt_handle_boot(char *cmdbuf)
 			do_bootm (NULL, 0, 2, bootm);
 		} else {
 			/* Raw image, maybe another uboot */
-			printf ("Booting raw image..\n");
+			FBTINFO("Booting raw image..\n");
 
 			do_go (NULL, 0, 2, go);
 		}
@@ -1466,6 +1454,7 @@ static int fbt_handle_boot(char *cmdbuf)
 	return 0;
 }
 
+#ifdef	FASTBOOT_UPLOAD
 static int fbt_handle_upload(char *cmdbuf)
 {
 	unsigned int adv, delim_index, len;
@@ -1587,12 +1576,12 @@ static int fbt_handle_upload(char *cmdbuf)
 	return 0;
 }
 #endif /* FASTBOOT_UPLOAD */
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 /* XXX: Replace magic number & strings with macros */
 /* XXX: Try to club FASTBOOT_FLAG_RESPONSE to one instead of doing separate */
 static int fbt_rx_process(unsigned char *buffer, int length)
 {
-	FBTDBG();
 	/* Generic failed response */
 	strcpy(priv.response, "FAIL");
 
@@ -1600,16 +1589,14 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		/* command */
 		char *cmdbuf = (char *) buffer;
 
-		FBTDBG("%c%c%c%c%c%c%c\n", cmdbuf[0], cmdbuf[1], cmdbuf[2],
-			cmdbuf[3], cmdbuf[4], cmdbuf[5], cmdbuf[6]);
 
 		if(memcmp(cmdbuf, "getvar:", 7) == 0) {
-			FBTINFO("getvar\n");
+			FBTDBG("getvar\n");
 			fbt_handle_getvar(cmdbuf);
 		}
 
 		if(memcmp(cmdbuf, "erase:", 6) == 0) {
-			FBTINFO("erase\n");
+			FBTDBG("erase\n");
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_erase(cmdbuf);
 #endif
@@ -1617,7 +1604,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		}
 
 		if(memcmp(cmdbuf, "flash:", 6) == 0) {
-			FBTINFO("flash\n");
+			FBTDBG("flash\n");
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_flash(cmdbuf);
 #endif
@@ -1626,26 +1613,26 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 
 		if((memcmp(cmdbuf, "reboot", 6) == 0) ||
 			(memcmp(cmdbuf, "reboot-bootloader", 17) == 0)) {
-			FBTINFO("reboot/reboot-bootloader\n");
+			FBTDBG("reboot/reboot-bootloader\n");
 			fbt_handle_reboot(cmdbuf);
 		}
 
 		if(memcmp(cmdbuf, "continue", 8) == 0) {
-			FBTINFO("continue\n");
+			FBTDBG("continue\n");
 			strcpy(priv.response,"OKAY");
 			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 			priv.exit = 1;
 		}
 
 		if(memcmp(cmdbuf, "boot", 4) == 0) {
-			FBTINFO("boot\n");
-#ifdef	FASTBOOT_UPLOAD
+			FBTDBG("boot\n");
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_boot(cmdbuf);
 #endif
 		}
 
 		if(memcmp(cmdbuf, "download:", 9) == 0) {
-			FBTINFO("download\n");
+			FBTDBG("download\n");
 
 			/* XXX: need any check for size & bytes ? */
 			priv.d_size =
@@ -1669,9 +1656,11 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 
 		if((memcmp(cmdbuf, "upload:", 7) == 0) ||
 			(memcmp(cmdbuf, "uploadraw", 10) == 0)) {
-			FBTINFO("upload/uploadraw\n");
+			FBTDBG("upload/uploadraw\n");
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 #ifdef	FASTBOOT_UPLOAD
 			fbt_handle_upload(cmdbuf);
+#endif
 #endif
 			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		}
@@ -1719,14 +1708,12 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 						}
 					}
 				}
-#endif
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 				FBTINFO("downloaded %d bytes\n", priv.d_bytes);
 			}
 		} else
 			FBTWARN("empty buffer download\n");
 	}
-
-	FBTDBG();
 
 	return 0;
 }
@@ -1740,7 +1727,6 @@ static int fbt_handle_rx(void)
 	if (ep->rcv_urb->actual_length) {
 		FBTDBG("rx length: %u\n", ep->rcv_urb->actual_length);
 		fbt_rx_process(ep->rcv_urb->buffer, ep->rcv_urb->actual_length);
-		FBTDBG();
 		/* Required to poison rx urb buffer as in omapzoom ?,
 		    yes, as fastboot command are sent w/o NULL termination.
 		    Attempt is made here to reduce poison length, may be safer
@@ -1760,44 +1746,36 @@ static int fbt_response_process(void)
 	unsigned char *dest = NULL;
 	int n, ret = 0;
 
-	FBTDBG();
 	current_urb = next_urb (device_instance, ep);
-	FBTDBG();
 	if (!current_urb) {
 		FBTERR("%s: current_urb NULL", __func__);
 		return -1;
 	}
-	FBTDBG();
 
 	dest = current_urb->buffer + current_urb->actual_length;
 	n = MIN (64, strlen(priv.response));
-	FBTDBG();
 	memcpy(dest, priv.response, n);
-	FBTDBG();
 	current_urb->actual_length += n;
-	FBTDBG();
+	FBTDBG("response urb length: %u\n", current_urb->actual_length);
 	if (ep->last == 0) {
-		FBTDBG();
 		ret = udc_endpoint_write (ep);
 		return ret;
 	}
 
-	FBTDBG();
 	return ret;
 }
 
 static int fbt_handle_response(void)
 {
 	if (priv.flag & FASTBOOT_FLAG_RESPONSE) {
-		FBTDBG();
 		fbt_response_process();
-		FBTDBG();
 		priv.flag &= ~FASTBOOT_FLAG_RESPONSE;
 	}
 
 	return 0;
 }
 
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 #ifdef	FASTBOOT_UPLOAD
 static int fbt_tx_process(void)
 {
@@ -1806,24 +1784,17 @@ static int fbt_tx_process(void)
 	unsigned char *dest = NULL;
 	int n = 0, ret = 0;
 
-	FBTDBG();
 	current_urb = next_urb (device_instance, ep);
-	FBTDBG();
 	if (!current_urb) {
 		FBTERR("%s: current_urb NULL", __func__);
 		return -1;
 	}
-	FBTDBG();
 
 	dest = current_urb->buffer + current_urb->actual_length;
 	n = MIN (64, priv.u_size - priv.u_bytes);
-	FBTDBG();
 	memcpy(dest, priv.transfer_buffer + priv.u_bytes, n);
-	FBTDBG();
 	current_urb->actual_length += n;
-	FBTDBG();
 	if (ep->last == 0) {
-		FBTDBG();
 		ret = udc_endpoint_write (ep);
 		/* XXX: "ret = n" should be done iff n bytes has been
 		 * transmitted, "udc_endpoint_write" to be changed for it,
@@ -1832,7 +1803,6 @@ static int fbt_tx_process(void)
 		return n;
 	}
 
-	FBTDBG();
 	return ret;
 }
 
@@ -1871,6 +1841,7 @@ static int fbt_handle_tx(void)
 	return 0;
 }
 #endif /* FASTBOOT_UPLOAD */
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 /* command */
 int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
@@ -1879,24 +1850,18 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 
 	ret = fbt_fastboot_init();
 
-	FBTDBG();
 	ret = fbt_init_endpoint_ptrs();
 
 	if ((ret = udc_init()) < 0) {
-		printf("error: %s: MUSB UDC init failure\n", __func__);
+		FBTERR("%s: MUSB UDC init failure\n", __func__);
 		return ret;
 	}
 
-	FBTDBG();
 	ret = fbt_init_strings();
-	FBTDBG();
 	ret = fbt_init_instances();
-	FBTDBG();
 
 	udc_startup_events (device_instance);
-	FBTDBG();
 	udc_connect();
-	FBTDBG();
 	ret = fbt_init_endpoints();
 
 	FBTINFO("fastboot initialized\n");
@@ -1905,18 +1870,18 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 		udc_irq();
 		fbt_handle_rx();
 		fbt_handle_response();
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 #ifdef	FASTBOOT_UPLOAD
 		fbt_handle_tx();
 #endif
+#endif
 		priv.exit |= ctrlc();
 		if (priv.exit) {
-			FBTDBG();
 			FBTINFO("fastboot end\n");
 			break;
 		}
 	}
 
-	FBTDBG();
 	return ret;
 }
 

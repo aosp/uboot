@@ -64,7 +64,7 @@
 #endif
 
 /* Define MUSB_DEBUG for debugging */
-//#define MUSB_DEBUG
+/* #define MUSB_DEBUG */
 #include "musb_debug.h"
 
 #define MAX_ENDPOINT 15
