@@ -161,7 +161,7 @@ static struct _fbt_config_desc fbt_config_desc = {
 			.bDescriptorType = USB_DT_ENDPOINT,
 			/* XXX: can't the address start from 0x1, currently
 				seeing problem with "epinfo" */
-			.bEndpointAddress = 0x1 | USB_DIR_OUT,
+			.bEndpointAddress = RX_EP_INDEX | USB_DIR_OUT,
 			.bmAttributes =	USB_ENDPOINT_XFER_BULK,
 			.wMaxPacketSize	=
 				cpu_to_le16(CONFIG_USBD_FASTBOOT_BULK_PKTSIZE),
@@ -172,7 +172,7 @@ static struct _fbt_config_desc fbt_config_desc = {
 			.bDescriptorType = USB_DT_ENDPOINT,
 			/* XXX: can't the address start from 0x1, currently
 				seeing problem with "epinfo" */
-			.bEndpointAddress = 0x2 | USB_DIR_IN,
+			.bEndpointAddress = TX_EP_INDEX | USB_DIR_IN,
 			.bmAttributes = USB_ENDPOINT_XFER_BULK,
 			.wMaxPacketSize	=
 				cpu_to_le16(CONFIG_USBD_FASTBOOT_BULK_PKTSIZE),
