@@ -71,7 +71,7 @@ fastboot_ptentry ptn[6] = {
 			  FASTBOOT_PTENTRY_FLAGS_WRITE_ENV,
 	},
 	{
-		.name   = "kernel",
+		.name   = "boot",
 		/* Test with start close to bad block
 		   The is dependent on the individual board.
 		   Change to what is required */

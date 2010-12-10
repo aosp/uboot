@@ -144,7 +144,7 @@
 #define	FASTBOOT_NAND_BLOCK_SIZE		2048
 #define	FASTBOOT_NAND_OOB_SIZE			64
 /* Fastboot product name */
-#define	FASTBOOT_PRODUCT_NAME	"OMAP3 EVM"
+#define	FASTBOOT_PRODUCT_NAME	"omap3evm"
 #else
 /* USB device configuration */
 #define CONFIG_USB_TTY			1
