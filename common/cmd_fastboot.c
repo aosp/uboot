@@ -92,7 +92,11 @@
 #define	RX_EP_INDEX	1
 #define	TX_EP_INDEX	2
 
+#if USB_BCD_VERSION == 0x0200
+#define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE	512
+#else
 #define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE	64
+#endif
 
 struct _fbt_config_desc {
 	struct usb_configuration_descriptor configuration_desc;

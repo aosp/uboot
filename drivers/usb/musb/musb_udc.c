@@ -180,11 +180,17 @@ static void musb_peri_softconnect(void)
 	/* Power on MUSB */
 	power = readb(&musbr->power);
 	power |= MUSB_POWER_SOFTCONN;
+
+#if USB_BCD_VERSION == 0x0200
+	power |= MUSB_POWER_HSENAB;
+#else
 	/*
 	 * The usb device interface is usb 1.1
 	 * Disable 2.0 high speed by clearring the hsenable bit.
 	 */
 	power &= ~MUSB_POWER_HSENAB;
+#endif
+
 	writeb(power, &musbr->power);
 
 	/* Check if device is in b-peripheral mode */

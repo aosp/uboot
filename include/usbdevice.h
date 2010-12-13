@@ -291,7 +291,9 @@ struct usb_bus_instance;
  * USB Spec Release number
  */
 
+#ifndef	USB_BCD_VERSION
 #define USB_BCD_VERSION			0x0110
+#endif
 
 
 /*
@@ -467,7 +469,11 @@ typedef struct urb_link {
  * function driver to inform it that data has arrived.
  */
 
+#if USB_BCD_VERSION == 0x0200
+#define URB_BUF_SIZE 2048 /* in linux we'd malloc this, but in u-boot we prefer static data */
+#else
 #define URB_BUF_SIZE 128 /* in linux we'd malloc this, but in u-boot we prefer static data */
+#endif
 struct urb {
 
 	struct usb_endpoint_instance *endpoint;
