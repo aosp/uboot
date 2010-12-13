@@ -1381,7 +1381,6 @@ static int fbt_handle_getvar(char *cmdbuf)
 		if (priv.serial_no)
 			strcpy(priv.response + 4, priv.serial_no);
 	}
-	priv.flag |= FASTBOOT_FLAG_RESPONSE;
 	return 0;
 }
 
@@ -1449,7 +1448,6 @@ static int fbt_handle_boot(char *cmdbuf)
 		FBTERR("booting failed, reset the board\n");
 	}
 	sprintf(priv.response, "FAILinvalid boot image");
-	priv.flag |= FASTBOOT_FLAG_RESPONSE;
 
 	return 0;
 }
@@ -1579,7 +1577,6 @@ static int fbt_handle_upload(char *cmdbuf)
 #endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 /* XXX: Replace magic number & strings with macros */
-/* XXX: Try to club FASTBOOT_FLAG_RESPONSE to one instead of doing separate */
 static int fbt_rx_process(unsigned char *buffer, int length)
 {
 	/* Generic failed response */
@@ -1600,7 +1597,6 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_erase(cmdbuf);
 #endif
-			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		}
 
 		if(memcmp(cmdbuf, "flash:", 6) == 0) {
@@ -1608,7 +1604,6 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_flash(cmdbuf);
 #endif
-			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		}
 
 		if((memcmp(cmdbuf, "reboot", 6) == 0) ||
@@ -1620,7 +1615,6 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		if(memcmp(cmdbuf, "continue", 8) == 0) {
 			FBTDBG("continue\n");
 			strcpy(priv.response,"OKAY");
-			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 			priv.exit = 1;
 		}
 
@@ -1651,7 +1645,6 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			} else {
 				sprintf(priv.response, "DATA%08x", priv.d_size);
 			}
-			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		}
 
 		if((memcmp(cmdbuf, "upload:", 7) == 0) ||
@@ -1662,9 +1655,8 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			fbt_handle_upload(cmdbuf);
 #endif
 #endif
-			priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		}
-
+		priv.flag |= FASTBOOT_FLAG_RESPONSE;
 	} else {
 		if (length) {
 			unsigned int xfr_size;
