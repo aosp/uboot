@@ -601,6 +601,7 @@ struct usb_device_instance {
 	unsigned long usbd_rxtx_timestamp;
 	unsigned long usbd_last_rxtx_timestamp;
 
+	unsigned int speed;
 };
 
 /* Bus Interface configuration structure

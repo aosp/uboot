@@ -59,6 +59,8 @@
 
 /* USB specific */
 
+#include <usb_defs.h>
+
 #if defined(CONFIG_PPC)
 #include <usb/mpc8xx_udc.h>
 #elif defined(CONFIG_OMAP1510)
@@ -91,12 +93,6 @@
 
 #define	RX_EP_INDEX	1
 #define	TX_EP_INDEX	2
-
-#if USB_BCD_VERSION == 0x0200
-#define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE	512
-#else
-#define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE	64
-#endif
 
 struct _fbt_config_desc {
 	struct usb_configuration_descriptor configuration_desc;
@@ -167,8 +163,6 @@ static struct _fbt_config_desc fbt_config_desc = {
 				seeing problem with "epinfo" */
 			.bEndpointAddress = RX_EP_INDEX | USB_DIR_OUT,
 			.bmAttributes =	USB_ENDPOINT_XFER_BULK,
-			.wMaxPacketSize	=
-				cpu_to_le16(CONFIG_USBD_FASTBOOT_BULK_PKTSIZE),
 			.bInterval = 0xFF,
 		},
 		{
@@ -178,8 +172,6 @@ static struct _fbt_config_desc fbt_config_desc = {
 				seeing problem with "epinfo" */
 			.bEndpointAddress = TX_EP_INDEX | USB_DIR_IN,
 			.bmAttributes = USB_ENDPOINT_XFER_BULK,
-			.wMaxPacketSize	=
-				cpu_to_le16(CONFIG_USBD_FASTBOOT_BULK_PKTSIZE),
 			.bInterval = 0xFF,
 		},
 	},
@@ -208,6 +200,8 @@ static struct cmd_fastboot_interface priv =
         .transfer_buffer       = CONFIG_FASTBOOT_TRANSFER_BUFFER,
         .transfer_buffer_size  = CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE,
 };
+
+static int fbt_init_endpoints (void);
 
 extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -289,6 +283,26 @@ static int fbt_init_strings(void)
 	return 0;
 }
 
+static void fbt_event_handler (struct usb_device_instance *device,
+				  usb_device_event_t event, int data)
+{
+	switch (event) {
+	case DEVICE_RESET:
+	case DEVICE_BUS_INACTIVE:
+		priv.configured = 0;
+		break;
+	case DEVICE_CONFIGURED:
+		priv.configured = 1;
+		break;
+
+	case DEVICE_ADDRESS_ASSIGNED:
+		fbt_init_endpoints ();
+
+	default:
+		break;
+	}
+}
+
 /* fastboot_init has to be called before this fn to get correct serial string */
 static int fbt_init_instances(void)
 {
@@ -298,7 +312,7 @@ static int fbt_init_instances(void)
 	memset (device_instance, 0, sizeof (struct usb_device_instance));
 	device_instance->device_state = STATE_INIT;
 	device_instance->device_descriptor = &device_descriptor;
-	device_instance->event = NULL;
+	device_instance->event = fbt_event_handler;
 	device_instance->cdc_recv_setup = NULL;
 	device_instance->bus = bus_instance;
 	device_instance->configurations = NUM_CONFIGS;
@@ -399,15 +413,38 @@ static int fbt_init_endpoint_ptrs(void)
 	return 0;
 }
 
-static int fbt_init_endpoints (void)
+static int fbt_init_endpoints(void)
 {
 	int i;
 
+	/* XXX: should it be moved to some other function ? */
 	bus_instance->max_endpoints = NUM_ENDPOINTS + 1;
-	/* XXX: is this for loop required ? */
+
+	/* XXX: is this for loop required ?, yes for MUSB it is */
 	for (i = 1; i <= NUM_ENDPOINTS; i++) {
+
+		/* configure packetsize based on HS negotiation status */
+		if (device_instance->speed == USB_SPEED_FULL) {
+			FBTINFO("setting up FS USB device ep%x\n",
+				endpoint_instance[i].endpoint_address);
+			ep_descriptor_ptrs[i - 1]->wMaxPacketSize =
+				CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_FS;
+		} else if (device_instance->speed == USB_SPEED_HIGH) {
+			FBTINFO("setting up HS USB device ep%x\n",
+				endpoint_instance[i].endpoint_address);
+			ep_descriptor_ptrs[i - 1]->wMaxPacketSize =
+				CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_HS;
+		}
+
+		endpoint_instance[i].tx_packetSize =
+			le16_to_cpu(ep_descriptor_ptrs[i - 1]->wMaxPacketSize);
+		endpoint_instance[i].rcv_packetSize =
+			le16_to_cpu(ep_descriptor_ptrs[i - 1]->wMaxPacketSize);
+
 		udc_setup_ep (device_instance, i, &endpoint_instance[i]);
+
 	}
+
 	return 0;
 }
 
@@ -1858,19 +1895,20 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 
 	udc_startup_events (device_instance);
 	udc_connect();
-	ret = fbt_init_endpoints();
 
 	FBTINFO("fastboot initialized\n");
 
 	while(1) {
 		udc_irq();
-		fbt_handle_rx();
-		fbt_handle_response();
+		if (priv.configured) {
+			fbt_handle_rx();
+			fbt_handle_response();
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 #ifdef	FASTBOOT_UPLOAD
-		fbt_handle_tx();
+			fbt_handle_tx();
 #endif
 #endif
+		}
 		priv.exit |= ctrlc();
 		if (priv.exit) {
 			FBTINFO("fastboot end\n");

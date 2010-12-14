@@ -90,6 +90,10 @@
 #define CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE 2048
 #endif
 
+/* Fastboot bulk packet sizes */
+#define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_HS	512
+#define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_FS	64
+
 /* Flags */
 #define	FASTBOOT_FLAG_RESPONSE	1
 #define	FASTBOOT_FLAG_DOWNLOAD	1
@@ -156,6 +160,9 @@ struct cmd_fastboot_interface{
 
 	/* Indicate response to be sent, data to be recieved */
 	unsigned int flag;
+
+	/* configuration status  */
+	unsigned int configured;
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 	unsigned int download_bytes_unpadded;

@@ -792,6 +792,9 @@ void udc_irq(void)
 			if (intrtx)
 				musb_peri_tx(intrtx);
 		} else {
+			udc_device->speed =
+				(readb(&musbr->power) & MUSB_POWER_HSMODE) ?
+					USB_SPEED_HIGH : USB_SPEED_FULL;
 			if (MUSB_INTR_SOF & intrusb) {
 				u8 faddr;
 				faddr = readb(&musbr->faddr);
