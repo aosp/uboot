@@ -136,6 +136,9 @@
 #ifdef	CONFIG_FASTBOOT
 /* Fastboot settings
  */
+/* Another macro may also be used or instead used to take care of the case
+ * where fastboot is started at boot (to be incorporated) based on key press
+ */
 #define	CONFIG_CMD_FASTBOOT
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(PHYS_SDRAM_1 + SZ_16M)
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_128M - SZ_16M)

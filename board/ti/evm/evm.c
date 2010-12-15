@@ -40,7 +40,7 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-#ifdef	CONFIG_FASTBOOT
+#ifdef	CONFIG_CMD_FASTBOOT
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 /* Initialize the name of fastboot flash name mappings */
 fastboot_ptentry ptn[6] = {
@@ -172,7 +172,7 @@ int board_init(void)
 	/* boot param addr */
 	gd->bd->bi_boot_params = (OMAP34XX_SDRC_CS0 + 0x100);
 
-#ifdef	CONFIG_FASTBOOT
+#ifdef	CONFIG_CMD_FASTBOOT
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 	int i;
 

@@ -50,7 +50,7 @@ int udc_init(void);
 
 #endif /* CONFIG_USB_TTY */
 
-#ifdef CONFIG_FASTBOOT
+#ifdef	CONFIG_CMD_FASTBOOT
 #define	EP0_MAX_PACKET_SIZE	64
 #endif /* CONFIG_FASTBOOT */
 
