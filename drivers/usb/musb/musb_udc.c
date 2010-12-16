@@ -745,8 +745,15 @@ void udc_irq(void)
 	/* This is a high freq called function */
 	if (enabled) {
 		u8 intrusb;
+#ifdef	CONFIG_USB_AM35X
+		u32 core_intsrc;
 
+		core_intsrc = regs->core_intsrc;
+		regs->core_intsrcclr = core_intsrc;
+		intrusb = (unsigned char)((core_intsrc & 0x01FF0000) >> 16);
+#else
 		intrusb = readb(&musbr->intrusb);
+#endif
 
 		/*
 		 * See drivers/usb/gadget/mpc8xx_udc.c for
