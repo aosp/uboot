@@ -35,8 +35,11 @@
 
 #define CONFIG_EMIF4	/* The chip has EMIF4 controller */
 
+#define	CONFIG_FASTBOOT /* Android fast boot */
+
 #include <asm/arch/cpu.h>		/* get chip and board defs */
 #include <asm/arch/omap3.h>
+#include <asm/sizes.h>
 
 /*
  * Display CPU and Board information
@@ -103,7 +106,8 @@
  * Enable CONFIG_MUSB_UDC for Device functionalities.
  */
 #define CONFIG_USB_AM35X		1
-#define CONFIG_MUSB_HCD			1
+// #define CONFIG_MUSB_HCD		1
+#define CONFIG_MUSB_UDC		1
 
 #ifdef CONFIG_USB_AM35X
 
@@ -122,10 +126,25 @@
 #endif /* CONFIG_MUSB_HCD */
 
 #ifdef CONFIG_MUSB_UDC
+#ifdef	CONFIG_FASTBOOT
+/* Fastboot settings
+ */
+#define	CONFIG_CMD_FASTBOOT
+#define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(PHYS_SDRAM_1 + SZ_16M)
+#define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_128M - SZ_16M)
+/* if already present, use already existing NAND macros for block & oob size */
+#define	FASTBOOT_NAND_BLOCK_SIZE		2048
+#define	FASTBOOT_NAND_OOB_SIZE			64
+/* Fastboot product name */
+#define	FASTBOOT_PRODUCT_NAME	"am3517evm"
+/* Use HS */
+#define	USB_BCD_VERSION			0x0200
+#else
 /* USB device configuration */
-#define CONFIG_USB_DEVICE		1
 #define CONFIG_USB_TTY			1
 #define CONFIG_SYS_CONSOLE_IS_IN_ENV	1
+#endif /* CONFIG_FASTBOOT */
+#define CONFIG_USB_DEVICE		1
 /* Change these to suit your needs */
 #define CONFIG_USBD_VENDORID		0x0451
 #define CONFIG_USBD_PRODUCTID		0x5678

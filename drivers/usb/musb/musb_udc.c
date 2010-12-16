@@ -94,6 +94,10 @@ do {									\
 	}								\
 } while (0)
 
+#ifdef	CONFIG_USB_AM35X
+extern struct am35x_usb_regs *regs;
+#endif
+
 /* static implies these initialized to 0 or NULL */
 static int debug_setup;
 static int debug_level;
@@ -782,10 +786,18 @@ void udc_irq(void)
 
 		if (ep0_state != SET_ADDRESS) {
 			u16 intrrx, intrtx;
+#ifdef	CONFIG_USB_AM35X
+			u32 intr_ep;
 
+			/* Read TI registers for AM35X, not MUSB registers */
+			intr_ep = regs->ep_intsrc;
+			regs->ep_intsrcclr = intr_ep;
+			intrrx = (intr_ep & 0xFFFE0000) >> 16;
+			intrtx = intr_ep & 0xFFFF;
+#else
 			intrrx = readw(&musbr->intrrx);
 			intrtx = readw(&musbr->intrtx);
-
+#endif /* CONFIG_USB_AM35X */
 			if (intrrx)
 				musb_peri_rx(intrrx);
 

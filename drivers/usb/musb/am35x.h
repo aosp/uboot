@@ -48,6 +48,7 @@ struct am35x_usb_regs {
 	u32	reserved0[1];
 	u32	autoreq;
 	u32	srpfixtime;
+	u32	teardown;
 	u32	ep_intsrc;
 	u32	ep_intsrcset;
 	u32	ep_intsrcclr;

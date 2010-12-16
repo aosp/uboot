@@ -1669,6 +1669,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		/* command */
 		char *cmdbuf = (char *) buffer;
 
+		FBTDBG("command\n");
 
 		if(memcmp(cmdbuf, "getvar:", 7) == 0) {
 			FBTDBG("getvar\n");
