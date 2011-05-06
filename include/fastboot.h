@@ -145,6 +145,8 @@ struct cmd_fastboot_interface{
 
 	/* Indicate response to be sent, data to be recieved */
 	unsigned int flag;
+
+	unsigned int download_bytes_unpadded;
 };
 
 /* Android-style flash naming */
@@ -170,8 +172,8 @@ struct fastboot_ptentry{
    repeated.  The base address is incremented.
    Either 0 or 1 is ok for a default */
 
-#define FASTBOOT_PTENTRY_FLAGS_REPEAT(n)              (n & 0x0f)
-#define FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK            0x0000000F
+#define	FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(n)	(n & 0x0f)
+#define	FASTBOOT_PTENTRY_FLAGS_REPEAT_4		0x00000004
 
 /* Writes happen a block at a time.
    If the write fails, go to next block
@@ -193,8 +195,8 @@ struct fastboot_ptentry{
 /* Write the file with write.i */
 #define FASTBOOT_PTENTRY_FLAGS_WRITE_I                0x00000100
 
-/* Write the file with write.yaffs */
-#define FASTBOOT_PTENTRY_FLAGS_WRITE_YAFFS            0x00000200
+/* Write the file with write.jffs2 */
+#define FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2	0x00000200
 
 /* Write the file as a series of variable/value pairs
    using the setenv and saveenv commands */
