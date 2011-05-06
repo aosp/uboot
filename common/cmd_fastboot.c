@@ -879,10 +879,12 @@ static int saveenv_to_ptn(struct fastboot_ptentry *ptn, char *err_string)
 static void set_ptn_ecc(struct fastboot_ptentry *ptn)
 {
 	char ecc_type[5];
+	char ecc_layout[5];
 	char *ecc[3] = {"nandecc", "sw", NULL, };
 
 	/* Some flashing requires the nand's ecc to be set */
 	ecc[1] = ecc_type;
+	ecc[2] = ecc_layout;
 	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) &&
 	    (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC)) {
 		/* Both can not be true */
@@ -891,7 +893,12 @@ static void set_ptn_ecc(struct fastboot_ptentry *ptn)
 		FBTERR("Ignoring these flags\n");
 	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) {
 		sprintf(ecc_type, "hw");
-		do_switch_ecc(NULL, 0, 2, ecc);
+		if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_2) {
+		 sprintf(ecc_layout, "2");
+		 do_switch_ecc(NULL, 0, 3, ecc);
+		} else {
+		 do_switch_ecc(NULL, 0, 2, ecc);
+		}
 	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC) {
 		sprintf(ecc_type, "sw");
 		do_switch_ecc(NULL, 0, 2, ecc);

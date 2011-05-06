@@ -224,6 +224,12 @@ struct fastboot_ptentry{
    using the setenv and saveenv commands */
 #define FASTBOOT_PTENTRY_FLAGS_WRITE_ENV              0x00000400
 
+/* Sets the NANDECC to use Kernel/FS layout for writing */
+#define FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_1        0x00000800
+
+/* Sets the NANDECC to use X-loader/U-boot layout for writing */
+#define FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_2        0x00001000
+
 /* Status values */
 #define FASTBOOT_OK			0
 #define FASTBOOT_ERROR			-1

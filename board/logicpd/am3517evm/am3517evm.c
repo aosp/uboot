@@ -47,22 +47,25 @@ fastboot_ptentry ptn[6] = {
 		   Use HW ECC */
 		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_I |
 		          FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC |
+			  FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_2 |
 			  FASTBOOT_PTENTRY_FLAGS_REPEAT_4,
 	},
 		{
 		.name   = "bootloader",
 		.start  = 0x0080000,
-		.length = 0x0180000, /* 1.5 M */
+		.length = 0x01C0000,
 		/* Skip bad blocks on write
 		   Use HW ECC */
 		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_I |
-		          FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC,
+		          FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC |
+			  FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_2,
 	},
 	{
 		.name   = "environment",
 		.start  = SMNAND_ENV_OFFSET,  /* set in config file */
 		.length = 0x0040000,
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC |
+			  FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_1 |
 			  FASTBOOT_PTENTRY_FLAGS_WRITE_ENV,
 	},
 	{
@@ -72,24 +75,19 @@ fastboot_ptentry ptn[6] = {
 		   Change to what is required */
 		/* .start  = 0x0a00000, */
 			/* The real start */
-		.start  = 0x02a0000,
-		.length = 0x1D00000, /* 30M */
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
-		FASTBOOT_PTENTRY_FLAGS_WRITE_I,
+		.start  = 0x0280000,
+		.length = 0x0500000,
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC |
+			  FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_1 |
+			  FASTBOOT_PTENTRY_FLAGS_WRITE_I,
 	},
 	{
 		.name   = "system",
-		.start  = 0x2100000,
-		.length = 0xB400000, /* 180M */
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
-		FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2,
-	},
-	{
-		.name   = "userdata",
-		.start  = 0xD500000,
-		.length = 0x4000000, /* 64M */
-		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC |
-		FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2,
+		.start  = 0x00780000,
+		.length = 0x1F880000,
+		.flags  = FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC |
+			  FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_1 |
+			  FASTBOOT_PTENTRY_FLAGS_WRITE_I,
 	},
 };
 #endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
