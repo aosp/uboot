@@ -198,7 +198,6 @@
 #define CONFIG_BOOTDELAY		10
 
 #define CONFIG_EXTRA_ENV_SETTINGS \
-	"loadaddr=0x82000000\0" \
 	"usbtty=cdc_acm\0" \
 	"console=ttyS2,115200n8\0" \
 	"mpurate=auto\0" \
@@ -277,6 +276,9 @@
 
 #define CONFIG_SYS_LOAD_ADDR		(OMAP34XX_SDRC_CS0)	/* default */
 							/* load address */
+
+#define CONFIG_BOARD_EARLY_INIT_F 1     /* Call board_early_init_f	*/
+
 
 /*
  * OMAP3 has 12 GP timers, they can be driven by the system clock
