@@ -28,9 +28,10 @@ LIB	= $(obj)libomap-common.o
 SOBJS	:= reset.o
 
 COBJS	:= timer.o
+COBJS-$(CONFIG_FASTBOOT) += fastboot.o
 
 SRCS	:= $(SOBJS:.o=.S) $(COBJS:.o=.c)
-OBJS	:= $(addprefix $(obj),$(SOBJS) $(COBJS))
+OBJS	:= $(addprefix $(obj),$(SOBJS) $(COBJS) $(COBJS-y))
 
 all:	$(obj).depend $(LIB)
 

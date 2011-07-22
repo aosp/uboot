@@ -58,11 +58,13 @@
 
 #include <common.h>
 #include <command.h>
+#include <malloc.h>
 #include <fastboot.h>
+#include <mmc.h>
 
 #define	ERR
 #define	WARN
-#define	INFO
+//#define INFO
 //#define DEBUG
 
 #ifdef DEBUG
@@ -95,8 +97,9 @@
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 #include <nand.h>
-#include <environment.h>
 #endif
+#include <exports.h>
+#include <environment.h>
 
 /* USB specific */
 
@@ -149,7 +152,7 @@ extern struct usb_string_descriptor **usb_strings;
 static struct cmd_fastboot_interface priv;
 
 /* USB Descriptor Strings */
-static char serial_number[28]; /* what should be the length ?, 28 ? */
+static char serial_number[33]; /* what should be the length ?, 33 ? */
 static u8 wstr_lang[4] = {4,USB_DT_STRING,0x9,0x4};
 static u8 wstr_manufacturer[2 + 2*(sizeof(CONFIG_USBD_MANUFACTURER)-1)];
 static u8 wstr_product[2 + 2*(sizeof(CONFIG_USBD_PRODUCT_NAME)-1)];
@@ -167,6 +170,7 @@ static struct usb_device_descriptor device_descriptor = {
 	.bDeviceProtocol =	0x00,
 	.bMaxPacketSize0 =	EP0_MAX_PACKET_SIZE,
 	.idVendor =		cpu_to_le16(CONFIG_USBD_VENDORID),
+	.idProduct = 		cpu_to_le16(CONFIG_USBD_PRODUCTID),
 	.bcdDevice =		cpu_to_le16(USBFBT_BCD_DEVICE),
 	.iManufacturer =	STR_MANUFACTURER,
 	.iProduct =		STR_PRODUCT,
@@ -238,30 +242,40 @@ extern char version_string[];
 
 static struct cmd_fastboot_interface priv =
 {
-        .transfer_buffer       = CONFIG_FASTBOOT_TRANSFER_BUFFER,
+        .transfer_buffer       = (unsigned char *)CONFIG_FASTBOOT_TRANSFER_BUFFER,
         .transfer_buffer_size  = CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE,
 };
 
 static int fbt_init_endpoints (void);
 
-extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
 /* Use do_bootm and do_go for fastboot's 'boot' command */
-extern int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
-extern int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
-/* Use do_setenv and do_saveenv to permenantly save data */
-extern int do_saveenv (cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
-extern int do_setenv ( cmd_tbl_t *cmdtp, int flag, int argc, char *argv[]);
-extern int do_switch_ecc(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
-extern int do_nand(cmd_tbl_t * cmdtp, int flag, int argc, char *argv[]);
-extern fastboot_ptentry ptn[];
+extern int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
+extern int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
+extern int do_bootm_linux(int flag, int argc, char *argv[], bootm_headers_t *images);
+
+extern int do_env_save (cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
+
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+/* Use do_env_set and do_env_save to permenantly save data */
+extern int do_env_set ( cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
+extern int do_switch_ecc(cmd_tbl_t * cmdtp, int flag, int argc, char *const argv[]);
+extern int do_nand(cmd_tbl_t * cmdtp, int flag, int argc, char *const argv[]);
+
+#else
+
+extern int do_mmcops(cmd_tbl_t * cmdtp, int flag, int argc, char * const argv[]);
+extern env_t *env_ptr;
+
+#endif
 
 /* To support the Android-style naming of flash */
 #define MAX_PTN 16
 static fastboot_ptentry ptable[MAX_PTN];
 static unsigned int pcount;
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 static int static_pcount = -1;
-#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
+#endif
 
 /* USB specific */
 
@@ -521,66 +535,50 @@ static struct urb *next_urb (struct usb_device_instance *device,
 	return current_urb;
 }
 
-/* FASBOOT specific */
+/* FASTBOOT specific */
+
+/*
+ * Android style flash utilties
+ */
+void fbt_reset_ptn(void)
+{
+	pcount = 0;
+}
+
+void fbt_add_ptn(fastboot_ptentry *ptn)
+{
+	if (pcount < MAX_PTN) {
+	        memcpy(ptable + pcount, ptn, sizeof(*ptn));
+	        pcount++;
+	}
+}
+
+static fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
+{
+	unsigned int n;
+
+	if (pcount == 0) {
+		board_fbt_load_ptbl();
+	}
+
+	for (n = 0; n < pcount; n++) {
+		/* Make sure a substring is not accepted */
+		if (strlen(name) == strlen(ptable[n].name)) {
+			if(0 == strcmp(ptable[n].name, name))
+				return ptable + n;
+		}
+	}
+	return 0;
+}
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-/*
- * Android style flash utilties */
-void fastboot_flash_add_ptn(fastboot_ptentry *ptn)
+static fastboot_ptentry *fastboot_get_ptn(unsigned int n)
 {
-    if(pcount < MAX_PTN){
-        memcpy(ptable + pcount, ptn, sizeof(*ptn));
-        pcount++;
-    }
-}
-
-void fastboot_flash_dump_ptn(void)
-{
-    unsigned int n;
-    for(n = 0; n < pcount; n++) {
-        fastboot_ptentry *ptn = ptable + n;
-        FBTINFO("ptn %d name='%s' start=%d len=%d\n",
-                n, ptn->name, ptn->start, ptn->length);
-    }
-}
-
-
-fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
-{
-    unsigned int n;
-
-    for(n = 0; n < pcount; n++) {
-	    /* Make sure a substring is not accepted */
-	    if (strlen(name) == strlen(ptable[n].name))
-	    {
-		    if(0 == strcmp(ptable[n].name, name))
-			    return ptable + n;
-	    }
-    }
-    return 0;
-}
-
-fastboot_ptentry *fastboot_flash_get_ptn(unsigned int n)
-{
-    if(n < pcount) {
-        return ptable + n;
-    } else {
-        return 0;
-    }
-}
-
-unsigned int fastboot_flash_get_ptn_count(void)
-{
-    return pcount;
-}
-static void set_env(char *var, char *val)
-{
-	char *setenv[4]  = { "setenv", NULL, NULL, NULL, };
-
-	setenv[1] = var;
-	setenv[2] = val;
-
-	do_setenv(NULL, 0, 3, setenv);
+	if (n < pcount) {
+		return ptable + n;
+	} else {
+	        return 0;
+	}
 }
 
 static void save_env(struct fastboot_ptentry *ptn,
@@ -590,7 +588,7 @@ static void save_env(struct fastboot_ptentry *ptn,
 	char *saveenv[2] = { "setenv", NULL, };
 	char *ecc[3]     = { "nandecc", "sw", NULL, };
 
-	set_env (var, val);
+	setenv (var, val);
 
 	/* Some flashing requires the nand's ecc to be set */
 	ecc[1] = ecc_type;
@@ -606,7 +604,7 @@ static void save_env(struct fastboot_ptentry *ptn,
 		sprintf(ecc_type, "sw");
 		do_switch_ecc(NULL, 0, 2, ecc);
 	}
-	do_saveenv(NULL, 0, 1, saveenv);
+	do_env_save(NULL, 0, 1, saveenv);
 }
 
 static void save_block_values(struct fastboot_ptentry *ptn,
@@ -631,12 +629,12 @@ static void save_block_values(struct fastboot_ptentry *ptn,
 		/* The error case, where the variables are being unset */
 
 		sprintf (var, "%s_nand_offset", ptn->name);
-		sprintf (val, "");
-		do_setenv (NULL, 0, 3, setenv);
+		//		sprintf (val, "");
+		do_env_set (NULL, 0, 3, setenv);
 
 		sprintf (var, "%s_nand_size", ptn->name);
-		sprintf (val, "");
-		do_setenv (NULL, 0, 3, setenv);
+		//		sprintf (val, "");
+		do_env_set (NULL, 0, 3, setenv);
 	} else {
 		/* Normal case */
 
@@ -645,7 +643,7 @@ static void save_block_values(struct fastboot_ptentry *ptn,
 
 		FBTINFO("%s %s %s\n", setenv[0], setenv[1], setenv[2]);
 
-		do_setenv (NULL, 0, 3, setenv);
+		do_env_set (NULL, 0, 3, setenv);
 
 		sprintf(var, "%s_nand_size", ptn->name);
 
@@ -653,7 +651,7 @@ static void save_block_values(struct fastboot_ptentry *ptn,
 
 		FBTINFO("%s %s %s\n", setenv[0], setenv[1], setenv[2]);
 
-		do_setenv (NULL, 0, 3, setenv);
+		do_env_set (NULL, 0, 3, setenv);
 	}
 
 
@@ -690,7 +688,7 @@ static void save_block_values(struct fastboot_ptentry *ptn,
 
 	}
 
-	do_saveenv (NULL, 0, 1, saveenv);
+	do_env_save (NULL, 0, 1, saveenv);
 }
 
 /* When save = 0, just parse.  The input is unchanged
@@ -894,10 +892,10 @@ static void set_ptn_ecc(struct fastboot_ptentry *ptn)
 	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) {
 		sprintf(ecc_type, "hw");
 		if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_2) {
-		 sprintf(ecc_layout, "2");
-		 do_switch_ecc(NULL, 0, 3, ecc);
+			sprintf(ecc_layout, "2");
+			do_switch_ecc(NULL, 0, 3, ecc);
 		} else {
-		 do_switch_ecc(NULL, 0, 2, ecc);
+			do_switch_ecc(NULL, 0, 2, ecc);
 		}
 	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC) {
 		sprintf(ecc_type, "sw");
@@ -983,7 +981,7 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 
 					/* download's address only advance
 					   if last write was successful */
-					sprintf(addr, "0x%x",
+					sprintf(addr, "%p",
 						priv.transfer_buffer +
 						(i * priv.nand_block_size));
 
@@ -1047,7 +1045,7 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 					/* Check if there is enough space */
 					if (ok_start + priv.d_bytes <=
 					    ptn->start + ptn->length) {
-						sprintf(addr,    "0x%x", priv.transfer_buffer);
+						sprintf(addr,    "%p", priv.transfer_buffer);
 						sprintf(wstart,  "0x%x", ok_start);
 						sprintf(wlength, "0x%x", priv.d_bytes);
 
@@ -1080,7 +1078,7 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 			}
 		} else {
 			/* Normal case */
-			sprintf(addr,    "0x%x", priv.transfer_buffer);
+			sprintf(addr,    "%p", priv.transfer_buffer);
 			sprintf(wstart,  "0x%x", ptn->start +
 				(repeat * ptn->length));
 			sprintf(wlength, "0x%x", priv.d_bytes);
@@ -1106,9 +1104,7 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 
 	return ret;
 }
-#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 static int check_against_static_partition(struct fastboot_ptentry *ptn)
 {
 	int ret = 0;
@@ -1116,7 +1112,7 @@ static int check_against_static_partition(struct fastboot_ptentry *ptn)
 	int i;
 
 	for (i = 0; i < static_pcount; i++) {
-		c = fastboot_flash_get_ptn((unsigned int) i);
+		c = fastboot_get_ptn((unsigned int) i);
 
 		if (0 == ptn->length)
 			break;
@@ -1330,14 +1326,14 @@ static void set_serial_number(void)
 	} else {
 		int len;
 
-		memset(&serial_number[0], 0, 28);
+		memset(&serial_number[0], 0, sizeof(serial_number));
 		len = strlen(dieid);
-		if (len > 28)
-			len = 26;
+		if (len > sizeof(serial_number))
+			len = sizeof(serial_number);
 
 		strncpy(&serial_number[0], dieid, len);
-
 		priv.serial_no = &serial_number[0];
+		printf("fastboot serial_number = %s\n", serial_number);
 	}
 }
 
@@ -1361,10 +1357,15 @@ static int fbt_fastboot_init(void)
 	priv.nand_oob_size                 = FASTBOOT_NAND_OOB_SIZE;
 #endif
 
+	priv.dev_desc = get_dev("mmc", FASTBOOT_MMC_DEVICE_ID);
+	if (priv.dev_desc == NULL) {
+		printf ("** mmc device %d not supported\n", FASTBOOT_MMC_DEVICE_ID);
+		return 1;
+	}
+	priv.transfer_buffer_blocks = priv.transfer_buffer_size / priv.dev_desc->blksz;
 	return 0;
 }
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 static int fbt_handle_erase(char *cmdbuf)
 {
 	struct fastboot_ptentry *ptn;
@@ -1374,6 +1375,7 @@ static int fbt_handle_erase(char *cmdbuf)
 	if (ptn == 0) {
 		sprintf(priv.response, "FAILpartition does not exist");
 	} else {
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 		char start[32], length[32];
 		int status, repeat, repeat_max;
 		char *erase[5]  = { "nand", "erase",  NULL, NULL, NULL, };
@@ -1401,8 +1403,203 @@ static int fbt_handle_erase(char *cmdbuf)
 			FBTINFO("partition '%s' erased\n", ptn->name);
 			sprintf(priv.response, "OKAY");
 		}
+#else
+		/* MMC doesn't have a real erase function.
+		 * Just simulate by writing all 0xffffffff to the partition.
+		 */
+		char *mmc_write[5]  = {"mmc", "write", NULL, NULL, NULL};
+		char source[32], dest[32], blk_cnt[32];
+		unsigned int blocks_left_to_write = DIV_ROUND_UP(ptn->length, priv.dev_desc->blksz);
+		unsigned int write_start_lba = ptn->start;
+
+		printf("blocks_to_write = %d\n", blocks_left_to_write);
+		mmc_write[2] = source;
+		mmc_write[3] = dest;
+		mmc_write[4] = blk_cnt;
+
+		sprintf(source, "%p", priv.transfer_buffer);
+		memset(priv.transfer_buffer, 0xff, priv.transfer_buffer_size);
+
+		printf("Erasing '%s'\n", ptn->name);
+		status = 0;
+		while(blocks_left_to_write) {
+			unsigned int blocks_to_write;
+			sprintf(dest, "0x%x", write_start_lba);
+			if (blocks_left_to_write > priv.transfer_buffer_blocks) {
+				blocks_to_write = priv.transfer_buffer_blocks;
+			} else {
+				blocks_to_write = blocks_left_to_write;
+			}
+			sprintf(blk_cnt, "0x%x", blocks_to_write);
+
+			if (do_mmcops(NULL, 0, 5, mmc_write)) {
+				printf("Writing '%s' FAILED!\n", ptn->name);
+				sprintf(priv.response, "FAIL: Write partition");
+				status = -1;
+				break;
+			}
+			blocks_left_to_write -= blocks_to_write;
+			write_start_lba += blocks_to_write;
+		}
+
+		if (status < 0) {
+			sprintf(priv.response,"FAILfailed to erase partition");
+			printf("Erasing '%s' FAILED!\n", ptn->name);
+		} else {
+			FBTINFO("partition '%s' erased\n", ptn->name);
+			sprintf(priv.response, "OKAY");
+		}
+#endif
 	}
 	return status;
+}
+
+#define SPARSE_HEADER_MAJOR_VER 1
+
+static int mmc_write(unsigned char *src, unsigned sector, unsigned len)
+{
+	lbaint_t blkcnt = len/priv.dev_desc->blksz;
+	if (priv.dev_desc->block_write(priv.dev_desc->dev, sector, blkcnt, src) != blkcnt) {
+		printf("mmc write to sector %d of %d bytes (%lu blkcnt) failed\n", sector, len, blkcnt);
+		return -1;
+	}
+	return 0;
+}
+
+#ifdef DEBUG
+static int mmc_compare(unsigned char *src, unsigned sector, unsigned len)
+{
+	u8 *data = malloc(priv.dev_desc->blksz);
+	int result = -1;
+	if (data == NULL) {
+		printf("malloc failed for blksz %lu buffer\n",
+		       priv.dev_desc->blksz);
+		return -1;
+	}
+
+	while (len > 0) {
+		if (priv.dev_desc->block_read(priv.dev_desc->dev, sector, 1, data) != 1) {
+			printf("mmc read error sector %d\n", sector);
+			goto out;
+		}
+		if (memcmp(data, src, priv.dev_desc->blksz)) {
+			printf("mmc data mismatch sector %d\n", sector);
+			goto out;
+		}
+		len -= priv.dev_desc->blksz;
+		sector++;
+		src += priv.dev_desc->blksz;
+	}
+	result = 0;
+out:
+	free(data);
+	return result;
+}
+#endif
+
+static int _unsparse(unsigned char *source, u32 sector, u32 section_size,
+		     int (*func)(unsigned char *src, unsigned sector, unsigned len))
+{
+	sparse_header_t *header = (void*) source;
+	u32 i, outlen = 0;
+
+	if ((header->total_blks * header->blk_sz) > section_size) {
+		printf("sparse: section size %d MB limit: exceeded\n",
+				section_size/(1024*1024));
+		return 1;
+	}
+
+	if (header->magic != SPARSE_HEADER_MAGIC) {
+		printf("sparse: bad magic\n");
+		return 1;
+	}
+
+	if ((header->major_version != SPARSE_HEADER_MAJOR_VER) ||
+	    (header->file_hdr_sz != sizeof(sparse_header_t)) ||
+	    (header->chunk_hdr_sz != sizeof(chunk_header_t))) {
+		printf("sparse: incompatible format\n");
+		return 1;
+	}
+
+	/* Skip the header now */
+	source += header->file_hdr_sz;
+
+	for (i = 0; i < header->total_chunks; i++) {
+		unsigned int len = 0;
+		int r;
+		chunk_header_t *chunk = (void*) source;
+
+		/* move to next chunk */
+		source += sizeof(chunk_header_t);
+
+		switch (chunk->chunk_type) {
+		case CHUNK_TYPE_RAW:
+			len = chunk->chunk_sz * header->blk_sz;
+
+			if (chunk->total_sz != (len + sizeof(chunk_header_t))) {
+				printf("sparse: bad chunk size for chunk %d, type Raw\n", i);
+				return 1;
+			}
+
+			outlen += len;
+			if (outlen > section_size) {
+				printf("sparse: section size %d MB limit: exceeded\n", section_size/(1024*1024));
+				return 1;
+			}
+#ifdef DEBUG
+			printf("sparse: RAW blk=%d bsz=%d: write(sector=%d,len=%d)\n",
+			       chunk->chunk_sz, header->blk_sz, sector, len);
+#endif
+			r = func(source, sector, len);
+			if (r < 0) {
+				printf("sparse: mmc func failed\n");
+				return 1;
+			}
+
+			sector += (len / 512);
+			source += len;
+			break;
+
+		case CHUNK_TYPE_DONT_CARE:
+			if (chunk->total_sz != sizeof(chunk_header_t)) {
+				printf("sparse: bogus DONT CARE chunk\n");
+				return 1;
+			}
+			len = chunk->chunk_sz * header->blk_sz;
+#ifdef DEBUG
+			printf("sparse: DONT_CARE blk=%d bsz=%d: skip(sector=%d,len=%d)\n",
+			       chunk->chunk_sz, header->blk_sz, sector, len);
+#endif
+
+			outlen += len;
+			if (outlen > section_size) {
+				printf("sparse: section size %d MB limit: exceeded\n", section_size/(1024*1024));
+				return 1;
+			}
+			sector += (len / 512);
+			break;
+
+		default:
+			printf("sparse: unknown chunk ID %04x\n", chunk->chunk_type);
+			return 1;
+		}
+	}
+
+	printf("\nsparse: out-length-0x%d MB\n", outlen/(1024*1024));
+	return 0;
+}
+
+static u8 do_unsparse(unsigned char *source, u32 sector, u32 section_size)
+{
+	if (_unsparse(source, sector, section_size, mmc_write))
+		return 1;
+#ifdef DEBUG
+	printf("sparse: compare mmc slot[%d] @ sector %d\n",
+	       FASTBOOT_MMC_DEVICE_ID, sector);
+	if (_unsparse(source, sector, section_size, mmc_compare))
+		return 1;
+#endif
+	return 0;
 }
 
 static int fbt_handle_flash(char *cmdbuf)
@@ -1419,6 +1616,7 @@ static int fbt_handle_flash(char *cmdbuf)
 			!(ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV)) {
 			sprintf(priv.response, "FAILimage too large for partition");
 		} else {
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			/* Check if this is not really a flash write
 			   but rather a saveenv */
 			if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
@@ -1443,6 +1641,72 @@ static int fbt_handle_flash(char *cmdbuf)
 					sprintf(priv.response, "OKAY");
 				}
 			}
+#else
+			if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
+
+				/* Check if this is not really a flash write,
+				 * but instead a saveenv
+				 */
+				unsigned int i = 0;
+#if defined(CONFIG_CMD_SAVEENV)
+				char *argv[2] = {NULL, "-f"};
+#endif
+				/* Env file is expected with a NULL delimeter between
+				 * env variables So replace New line Feeds (0x0a) with
+				 * NULL (0x00)
+				 */
+				for (i = 0; i < priv.d_bytes; i++) {
+					if (priv.transfer_buffer[i] == 0x0a)
+						priv.transfer_buffer[i] = 0x00;
+				}
+				memset(env_ptr->data, 0, CONFIG_ENV_SIZE);
+				memcpy(env_ptr->data, priv.transfer_buffer, priv.d_bytes);
+#if defined(CONFIG_CMD_SAVEENV)
+				do_env_save(NULL, 0, 2, argv);
+#endif
+				printf("saveenv to '%s' DONE!\n", ptn->name);
+				sprintf(priv.response, "OKAY");
+			} else {
+				/* Normal case */
+				printf("writing to partition '%s'\n", ptn->name);
+
+				/* Check if we have sparse compressed image */
+				if ( ((sparse_header_t *)priv.transfer_buffer)->magic
+				     == SPARSE_HEADER_MAGIC) {
+					printf("fastboot: %s is in sparse format\n", ptn->name);
+					if (!do_unsparse(priv.transfer_buffer,
+							 ptn->start,
+							 ptn->length)) {
+						printf("Writing sparsed: '%s' DONE!\n", ptn->name);
+						sprintf(priv.response, "OKAY");
+					} else {
+						printf("Writing sparsed '%s' FAILED!\n", ptn->name);
+						sprintf(priv.response, "FAIL: Sparsed Write");
+					}
+				} else {
+					/* Normal image: no sparse */
+					char *mmc_write[5]  = {"mmc", "write", NULL, NULL, NULL};
+					char source[32], dest[32], blk_cnt[32];
+
+					mmc_write[2] = source;
+					mmc_write[3] = dest;
+					mmc_write[4] = blk_cnt;
+
+					sprintf(source, "%p", priv.transfer_buffer);
+					sprintf(dest, "0x%x", ptn->start);
+					sprintf(blk_cnt, "0x%lx", DIV_ROUND_UP(priv.d_bytes, priv.dev_desc->blksz));
+
+					printf("Writing '%s', %s blks (%d bytes) at sector %s\n", ptn->name, blk_cnt, priv.d_bytes, dest);
+					if (do_mmcops(NULL, 0, 5, mmc_write)) {
+						printf("Writing '%s' FAILED!\n", ptn->name);
+						sprintf(priv.response, "FAIL: Write partition");
+					} else {
+						printf("Writing '%s' DONE!\n", ptn->name);
+						sprintf(priv.response, "OKAY");
+					}
+				}
+			} /* Normal Case */
+#endif
 		}
 	} else {
 		sprintf(priv.response, "FAILno image downloaded");
@@ -1450,7 +1714,6 @@ static int fbt_handle_flash(char *cmdbuf)
 
 	return status;
 }
-#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 static int fbt_handle_getvar(char *cmdbuf)
 {
@@ -1473,8 +1736,18 @@ static int fbt_handle_getvar(char *cmdbuf)
 	return 0;
 }
 
-static int fbt_handle_reboot(char *cmdbuf)
+
+static int fbt_handle_reboot(const char *cmdbuf)
 {
+	if (!strcmp(&cmdbuf[6], "-bootloader")) {
+		FBTDBG("%s\n", cmdbuf);
+		board_fbt_set_reboot_type(FASTBOOT_REBOOT_BOOTLOADER);
+	}
+	if (!strcmp(&cmdbuf[6], "-recovery")) {
+		FBTDBG("%s\n", cmdbuf);
+		board_fbt_set_reboot_type(FASTBOOT_REBOOT_RECOVERY);
+	}
+
 	strcpy(priv.response,"OKAY");
 	priv.flag |= FASTBOOT_FLAG_RESPONSE;
 	fbt_handle_response();
@@ -1485,8 +1758,39 @@ static int fbt_handle_reboot(char *cmdbuf)
 	return 0;
 }
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-static int fbt_handle_boot(char *cmdbuf)
+static int fbt_handle_oem(const char *cmdbuf)
+{
+	cmdbuf += 4;
+
+	/* %fastboot oem format */
+	if (strcmp(cmdbuf, "format") == 0){
+		FBTDBG("oem format\n");
+		if (board_fbt_oem(cmdbuf) >= 0) {
+			strcpy(priv.response,"OKAY");
+		}
+		return 0;
+	}
+
+	/* %fastboot oem recovery */
+	if (strcmp(cmdbuf, "recovery") == 0){
+		FBTDBG("oem recovery\n");
+		return fbt_handle_reboot("reboot-recovery");
+	}
+
+	/* %fastboot oem unlock */
+	if (strcmp(cmdbuf, "unlock") == 0){
+		FBTDBG("oem unlock\n");
+		printf("\nfastboot: oem unlock not implemented yet!!\n");
+		return 0;
+	}
+
+	/* %fastboot oem [xxx] */
+	FBTDBG("oem %s\n", cmdbuf);
+	printf("\nfastboot: unsupported oem command %s\n", cmdbuf);
+	return 0;
+}
+
+static int fbt_handle_boot(const char *cmdbuf)
 {
 	if ((priv.d_bytes) &&
 		(CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE < priv.d_bytes)) {
@@ -1506,7 +1810,7 @@ static int fbt_handle_boot(char *cmdbuf)
 		  &priv.transfer_buffer[CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE];
 
 		bootm[1] = go[1] = start;
-		sprintf (start, "0x%x", hdr);
+		sprintf (start, "%p", hdr);
 
 		/* Execution should jump to kernel so send the response
 		   now and wait a bit.  */
@@ -1524,7 +1828,7 @@ static int fbt_handle_boot(char *cmdbuf)
 			 * If not, do not override what is already there
 			 */
 			if (strlen ((char *) &fb_hdr->cmdline[0]))
-				set_env ("bootargs", (char *) &fb_hdr->cmdline[0]);
+				setenv ("bootargs", (char *) &fb_hdr->cmdline[0]);
 
 			do_bootm (NULL, 0, 2, bootm);
 		} else {
@@ -1541,6 +1845,7 @@ static int fbt_handle_boot(char *cmdbuf)
 	return 0;
 }
 
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 #ifdef	FASTBOOT_UPLOAD
 static int fbt_handle_upload(char *cmdbuf)
 {
@@ -1677,45 +1982,58 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 
 		FBTDBG("command\n");
 
-		if(memcmp(cmdbuf, "getvar:", 7) == 0) {
+		printf("cmdbuf = (%s)\n", cmdbuf);
+
+		/* %fastboot getvar: <var_name> */
+		if (memcmp(cmdbuf, "getvar:", 7) == 0) {
 			FBTDBG("getvar\n");
 			fbt_handle_getvar(cmdbuf);
 		}
 
-		if(memcmp(cmdbuf, "erase:", 6) == 0) {
+		/* %fastboot oem <cmd> */
+		if (memcmp(cmdbuf, "oem ", 4) == 0) {
+			FBTDBG("oem\n");
+			fbt_handle_oem(cmdbuf);
+		}
+
+		/* %fastboot erase <partition_name> */
+		if (memcmp(cmdbuf, "erase:", 6) == 0) {
 			FBTDBG("erase\n");
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_erase(cmdbuf);
-#endif
 		}
 
-		if(memcmp(cmdbuf, "flash:", 6) == 0) {
+		/* %fastboot flash:<partition_name> */
+		if (memcmp(cmdbuf, "flash:", 6) == 0) {
 			FBTDBG("flash\n");
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_flash(cmdbuf);
-#endif
 		}
 
-		if((memcmp(cmdbuf, "reboot", 6) == 0) ||
-			(memcmp(cmdbuf, "reboot-bootloader", 17) == 0)) {
-			FBTDBG("reboot/reboot-bootloader\n");
-			fbt_handle_reboot(cmdbuf);
+		/* %fastboot reboot
+		 * %fastboot reboot-bootloader
+		 */
+		if (memcmp(cmdbuf, "reboot", 6) == 0) {
+			FBTDBG("reboot or reboot-bootloader\n");
+			return fbt_handle_reboot(cmdbuf);
 		}
 
-		if(memcmp(cmdbuf, "continue", 8) == 0) {
+		/* %fastboot continue */
+		if (strcmp(cmdbuf, "continue") == 0) {
 			FBTDBG("continue\n");
 			strcpy(priv.response,"OKAY");
 			priv.exit = 1;
 		}
 
-		if(memcmp(cmdbuf, "boot", 4) == 0) {
+		/* %fastboot boot <kernel> [ <ramdisk> ] */
+		if (memcmp(cmdbuf, "boot", 4) == 0) {
 			FBTDBG("boot\n");
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 			fbt_handle_boot(cmdbuf);
-#endif
 		}
 
-		if(memcmp(cmdbuf, "download:", 9) == 0) {
+		/* Sent as part of a '%fastboot flash <partname>' command
+		 * This sends the data over with byte count:
+		 * %download:<num_bytes>
+		 */
+		if (memcmp(cmdbuf, "download:", 9) == 0) {
 			FBTDBG("download\n");
 
 			/* XXX: need any check for size & bytes ? */
@@ -1737,15 +2055,15 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			}
 		}
 
-		if((memcmp(cmdbuf, "upload:", 7) == 0) ||
-			(memcmp(cmdbuf, "uploadraw", 10) == 0)) {
-			FBTDBG("upload/uploadraw\n");
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 #ifdef	FASTBOOT_UPLOAD
+		if ((memcmp(cmdbuf, "upload:", 7) == 0) ||
+		    (memcmp(cmdbuf, "uploadraw", 10) == 0)) {
+			FBTDBG("upload/uploadraw\n");
 			fbt_handle_upload(cmdbuf);
-#endif
-#endif
 		}
+#endif
+#endif
 		priv.flag |= FASTBOOT_FLAG_RESPONSE;
 	} else {
 		if (length) {
@@ -1758,12 +2076,14 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 				buffer, xfr_size);
 			priv.d_bytes += xfr_size;
 
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 #ifdef	INFO
 			/* Inform via prompt that download is happening */
 			if (! (priv.d_bytes % (16 * priv.nand_block_size)))
 				printf(".");
 			if (! (priv.d_bytes % (80 * 16 * priv.nand_block_size)))
 				printf("\n");
+#endif
 #endif
 			if (priv.d_bytes >= priv.d_size) {
 				priv.d_size = 0;
@@ -1926,7 +2246,7 @@ static int fbt_handle_tx(void)
 #endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 /* command */
-int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
+int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
 	int ret = -1;
 
@@ -1970,3 +2290,229 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char *argv[])
 
 U_BOOT_CMD(fastboot, 2,	1, do_fastboot,
 	"fastboot- use USB Fastboot protocol\n", NULL);
+
+  /* Section for Android bootimage format support
+   * Refer:
+   * http://android.git.kernel.org/?p=platform/system/core.git;a=blob;f=mkbootimg/bootimg.h
+   */
+void
+bootimg_print_image_hdr (struct fastboot_boot_img_hdr *hdr)
+{
+#ifdef DEBUG
+	int i;
+	printf ("   Image magic:   %s\n", hdr->magic);
+
+	printf ("   kernel_size:   0x%x\n", hdr->kernel_size);
+	printf ("   kernel_addr:   0x%x\n", hdr->kernel_addr);
+
+	printf ("   rdisk_size:   0x%x\n", hdr->ramdisk_size);
+	printf ("   rdisk_addr:   0x%x\n", hdr->ramdisk_addr);
+
+	printf ("   second_size:   0x%x\n", hdr->second_size);
+	printf ("   second_addr:   0x%x\n", hdr->second_addr);
+
+	printf ("   tags_addr:   0x%x\n", hdr->tags_addr);
+	printf ("   page_size:   0x%x\n", hdr->page_size);
+
+	printf ("   name:      %s\n", hdr->name);
+	printf ("   cmdline:   %s\n", hdr->cmdline);
+
+	for (i=0;i<8;i++)
+		printf ("   id[%d]:   0x%x\n", i, hdr->id[i]);
+#endif
+}
+
+/* booti [<addr> | mmc0 | mmc1] [ <partition> ] */
+int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+{
+	unsigned addr;
+	char *ptn = "boot";
+	int mmcc = -1;
+	struct fastboot_boot_img_hdr *hdr = NULL;
+	bootm_headers_t images;
+
+	if (argc < 2)
+		return -1;
+
+	if (!strcmp(argv[1],"mmc0")) {
+		mmcc = 0;
+	} else if (!strcmp(argv[1],"mmc1")) {
+		mmcc = 1;
+	} else {
+		addr = simple_strtoul(argv[1], NULL, 16);
+	}
+
+	if (argc > 2)
+		ptn = argv[2];
+
+	if (mmcc != -1) {
+#if (CONFIG_MMC)
+		struct fastboot_ptentry *pte;
+		unsigned sector;
+		unsigned blocks;
+		struct mmc *mmc = find_mmc_device(mmcc);
+		if (mmc == NULL) {
+			printf("error finding mmc device %d\n", mmcc);
+			return -1;
+		}
+		pte = fastboot_flash_find_ptn(ptn);
+		if (!pte) {
+			printf("booti: cannot find '%s' partition\n", ptn);
+			goto fail;
+		}
+		if (mmc_init(mmc)) {
+			printf("mmc%d init failed\n", mmcc);
+			goto fail;
+		}
+		hdr = malloc(mmc->block_dev.blksz);
+		if (hdr == NULL) {
+			printf("error allocating blksz(%lu) buffer\n", mmc->block_dev.blksz);
+			goto fail;
+		}
+		if (mmc->block_dev.block_read(mmcc, pte->start, 1, (void*) hdr) != 1) {
+			printf("booti: mmc failed to read bootimg header\n");
+			goto fail;
+		}
+		if (memcmp(hdr->magic, FASTBOOT_BOOT_MAGIC, FASTBOOT_BOOT_MAGIC_SIZE)) {
+			printf("booti: bad boot image magic\n");
+			goto fail;
+		}
+
+		sector = pte->start + (hdr->page_size / 512);
+		blocks = DIV_ROUND_UP(hdr->kernel_size, mmc->block_dev.blksz);
+		if (mmc->block_dev.block_read(mmcc, sector, blocks,
+					      (void*) hdr->kernel_addr) != blocks) {
+			printf("booti: failed to read kernel\n");
+			goto fail;
+		}
+
+		sector += ALIGN(hdr->kernel_size, hdr->page_size) / 512;
+		blocks = DIV_ROUND_UP(hdr->ramdisk_size, mmc->block_dev.blksz);
+		if (mmc->block_dev.block_read(mmcc, sector, blocks,
+					      (void*) hdr->ramdisk_addr) != blocks) {
+			printf("booti: failed to read ramdisk\n");
+			goto fail;
+		}
+#else
+		printf("booti: mmc support not enabled\n");
+		return -1;
+#endif
+	} else {
+		void *kaddr, *raddr;
+
+		hdr = malloc(512);
+		if (hdr == NULL) {
+			printf("error allocating buffer\n");
+			return -1;
+		}
+
+		/* set this aside somewhere safe */
+		memcpy(hdr, (void*) addr, sizeof(*hdr));
+
+		if (memcmp(hdr->magic, FASTBOOT_BOOT_MAGIC, FASTBOOT_BOOT_MAGIC_SIZE)) {
+			printf("booti: bad boot image magic\n");
+			return 1;
+		}
+
+		bootimg_print_image_hdr(hdr);
+
+		kaddr = (void*)(addr + hdr->page_size);
+		raddr = (void*)(kaddr + ALIGN(hdr->kernel_size, hdr->page_size));
+
+		memmove((void*) hdr->kernel_addr, kaddr, hdr->kernel_size);
+		memmove((void*) hdr->ramdisk_addr, raddr, hdr->ramdisk_size);
+	}
+
+	printf("kernel   @ %08x (%d)\n", hdr->kernel_addr, hdr->kernel_size);
+	printf("ramdisk  @ %08x (%d)\n", hdr->ramdisk_addr, hdr->ramdisk_size);
+
+#ifdef CONFIG_CMDLINE_TAG
+	if (priv.serial_no == NULL) {
+		set_serial_number();
+	}
+	{
+		/* Use the command line in the bootimg header instead of
+		 * any hardcoded into u-boot.  Also, Android wants the
+		 * serial number on the command line instead of via
+		 * tags so append the serial number to the bootimg header
+		 * value and set the bootargs environment variable.
+		 * do_bootm_linux() will use the bootargs environment variable
+		 * to pass it to the kernel.
+		 */
+		char command_line[255];
+		sprintf(command_line, "%s androidboot.serialno=%s",
+			hdr->cmdline, priv.serial_no);
+		setenv("bootargs", command_line);
+	}
+#endif
+
+	memset(&images, 0, sizeof(images));
+	images.ep = hdr->kernel_addr;
+	images.rd_start = hdr->ramdisk_addr;
+	images.rd_end = hdr->ramdisk_addr + hdr->ramdisk_size;
+	free(hdr);
+	do_bootm_linux(0, 0, NULL, &images);
+
+	puts ("booti: Control returned to monitor - resetting...\n");
+	do_reset (cmdtp, flag, argc, argv);
+	return 1;
+
+fail:
+	/* if booti fails, always start fastboot */
+	free(hdr);
+	return do_fastboot(NULL, 0, 0, NULL);
+}
+
+U_BOOT_CMD(
+	booti,	3,	1,	do_booti,
+	"booti   - boot android bootimg\n",
+	"<addr>\n    - boot application image\n"
+	"\t'addr' should be the address of boot image which is zImage+ramdisk.img if in memory or the mmc0 or mmc1 to load from 'boot' partition in mmc\n"
+);
+
+/*
+ * Determine if we should
+ * enter fastboot mode based on board specific key press or
+ * parameter left in memory from previous boot.
+ */
+void fbt_preboot(void)
+{
+	enum fbt_reboot_type frt;
+
+	if (board_fbt_key_pressed()) {
+		setenv ("preboot", "fastboot");
+		return;
+	}
+
+	frt = board_fbt_get_reboot_type();
+	if (frt == FASTBOOT_REBOOT_RECOVERY) {
+		extern int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
+		char *boot_cmd[3] = {"booti", NULL, "recovery"};
+		char boot_device[64];
+
+		printf("\n%s: starting recovery img because of reboot flag\n", __func__);
+
+		/* pass: booti mmci<N> recovery */
+		sprintf(boot_device, "mmc%d", FASTBOOT_MMC_DEVICE_ID);
+		boot_cmd[1] = boot_device;
+
+		do_booti(NULL, 0, 3, boot_cmd);
+
+		/* returns if recovery.img is bad
+		 * Default to normal boot
+		 */
+
+		printf("\nfastboot: Error: Invalid recovery img\n");
+		return;
+	} else if (frt == FASTBOOT_REBOOT_BOOTLOADER) {
+
+		/* Case: %fastboot reboot-bootloader
+		 * Case: %adb reboot bootloader
+		 * Case: %adb reboot-bootloader
+		 */
+		printf("\n%s: starting fastboot because of reboot flag\n", __func__);
+		setenv ("preboot", "fastboot");
+	} else {
+		printf("\n%s: no special reboot flags, doing normal boot\n", __func__);
+	}
+}

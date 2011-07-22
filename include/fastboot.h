@@ -99,9 +99,10 @@
 #define	FASTBOOT_FLAG_DOWNLOAD	1
 
 /* To change design of memory handling (SD/MMC, NAND) faster, if required */
-#define FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+// #define FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 /* To activate-deactivate fastboot upload command (not part of OmapZoom) */
 // #define	FASTBOOT_UPLOAD
+
 
 struct cmd_fastboot_interface{
 
@@ -117,6 +118,7 @@ struct cmd_fastboot_interface{
 	   Set by board */
 	char *serial_no;
 
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 	/* Nand block size
 	   Supports the write option WRITE_NEXT_GOOD_BLOCK
 
@@ -126,6 +128,10 @@ struct cmd_fastboot_interface{
 	/* Nand oob size
 	   Set by board */
 	unsigned int nand_oob_size;
+#else
+	block_dev_desc_t *dev_desc;
+	unsigned int transfer_buffer_blocks;
+#endif
 
 	/* Transfer buffer, for handling flash updates
 	   Should be multiple of the nand_block_size
@@ -265,106 +271,53 @@ struct fastboot_boot_img_hdr {
 	unsigned id[8]; /* timestamp / checksum / sha1 / etc */
 };
 
-#ifdef	CONFIG_CMD_FASTBOOT
-/* A board specific test if u-boot should go into the fastboot command
-   ahead of the bootcmd
-   Returns 0 to continue with normal u-boot flow
-   Returns 1 to execute fastboot */
-extern int fastboot_preboot(void);
+typedef struct sparse_header {
+  __le32	magic;		/* 0xed26ff3a */
+  __le16	major_version;	/* (0x1) - reject images with higher major versions */
+  __le16	minor_version;	/* (0x0) - allow images with higer minor versions */
+  __le16	file_hdr_sz;	/* 28 bytes for first revision of the file format */
+  __le16	chunk_hdr_sz;	/* 12 bytes for first revision of the file format */
+  __le32	blk_sz;		/* block size in bytes, must be a multiple of 4 (4096) */
+  __le32	total_blks;	/* total blocks in the non-sparse output image */
+  __le32	total_chunks;	/* total chunks in the sparse input image */
+  __le32	image_checksum; /* CRC32 checksum of the original data, counting "don't care" */
+				/* as 0. Standard 802.3 polynomial, use a Public Domain */
+				/* table implementation */
+} sparse_header_t;
 
-/* Initizes the board specific fastboot
-   Returns 0 on success
-   Returns 1 on failure */
-extern int fastboot_init(struct cmd_fastboot_interface *interface);
+#define SPARSE_HEADER_MAGIC	0xed26ff3a
 
-/* Cleans up the board specific fastboot */
-extern void fastboot_shutdown(void);
+#define CHUNK_TYPE_RAW		0xCAC1
+#define CHUNK_TYPE_FILL		0xCAC2
+#define CHUNK_TYPE_DONT_CARE	0xCAC3
 
-/*
- * Handles board specific usb protocol exchanges
- * Returns 0 on success
- * Returns 1 on disconnects, break out of loop
- * Returns 2 if no USB activity detected
- * Returns -1 on failure, unhandled usb requests and other error conditions
-*/
-extern int fastboot_poll(void);
+typedef struct chunk_header {
+  __le16	chunk_type;	/* 0xCAC1 -> raw; 0xCAC2 -> fill; 0xCAC3 -> don't care */
+  __le16	reserved1;
+  __le32	chunk_sz;	/* in blocks in output image */
+  __le32	total_sz;	/* in bytes of chunk input file including chunk header and data */
+} chunk_header_t;
 
-/* Is this high speed (2.0) or full speed (1.1) ?
-   Returns 0 on full speed
-   Returns 1 on high speed */
-extern int fastboot_is_highspeed(void);
-
-/* Return the size of the fifo */
-extern int fastboot_fifo_size(void);
-
-/* Send a status reply to the client app
-   buffer does not have to be null terminated.
-   buffer_size must be not be larger than what is returned by
-   fastboot_fifo_size
-   Returns 0 on success
-   Returns 1 on failure */
-extern int fastboot_tx_status(const char *buffer, unsigned int buffer_size);
-
-/*
- * Send some data to the client app
- * buffer does not have to be null terminated.
- * buffer_size can be larger than what is returned by
- * fastboot_fifo_size
- * Returns number of bytes written
+/* Following a Raw or Fill chunk is data.  For a Raw chunk, it's the data in chunk_sz * blk_sz.
+ *  For a Fill chunk, it's 4 bytes of the fill data.
  */
-extern int fastboot_tx(unsigned char *buffer, unsigned int buffer_size);
 
-/* A board specific variable handler.
-   The size of the buffers is governed by the fastboot spec.
-   rx_buffer is at most 57 bytes
-   tx_buffer is at most 60 bytes
-   Returns 0 on success
-   Returns 1 on failure */
-extern int fastboot_getvar(const char *rx_buffer, char *tx_buffer);
+#ifdef	CONFIG_CMD_FASTBOOT
+enum fbt_reboot_type {
+  FASTBOOT_REBOOT_NORMAL,
+  FASTBOOT_REBOOT_BOOTLOADER,
+  FASTBOOT_REBOOT_RECOVERY,
+};
+extern void fbt_preboot(void);
+extern void fbt_reset_ptn(void);
+extern void fbt_add_ptn(fastboot_ptentry *ptn);
 
-/* The Android-style flash handling */
-
-/* tools to populate and query the partition table */
-extern void fastboot_flash_add_ptn(fastboot_ptentry *ptn);
-extern fastboot_ptentry *fastboot_flash_find_ptn(const char *name);
-extern fastboot_ptentry *fastboot_flash_get_ptn(unsigned n);
-extern unsigned int fastboot_flash_get_ptn_count(void);
-extern void fastboot_flash_dump_ptn(void);
-
-extern int fastboot_flash_init(void);
-extern int fastboot_flash_erase(fastboot_ptentry *ptn);
-extern int fastboot_flash_read_ext(fastboot_ptentry *ptn,
-				   unsigned extra_per_page, unsigned offset,
-				   void *data, unsigned bytes);
-#define fastboot_flash_read(ptn, offset, data, bytes) \
-  flash_read_ext(ptn, 0, offset, data, bytes)
-extern int fastboot_flash_write(fastboot_ptentry *ptn, unsigned extra_per_page,
-				const void *data, unsigned bytes);
-
-
-#else
-
-/* Stubs for when CONFIG_FASTBOOT is not defined */
-#define fastboot_preboot() 0
-#define fastboot_init(a) 1
-#define fastboot_shutdown()
-#define fastboot_poll() 1
-#define fastboot_is_highspeed() 0
-#define fastboot_fifo_size() 0
-#define fastboot_tx_status(a, b) 1
-#define fastboot_getvar(a, b) 1
-#define fastboot_tx(a, b) 1
-
-#define fastboot_flash_add_ptn(a)
-#define fastboot_flash_find_ptn(a) NULL
-#define fastboot_flash_get_ptn(a) NULL
-#define fastboot_flash_get_ptn_count() 0
-#define fastboot_flash_dump_ptn()
-#define fastboot_flash_init()
-#define fastboot_flash_erase(a) 1
-#define fastboot_flash_read_ext(a, b, c, d, e) 0
-#define fastboot_flash_read(a, b, c, d, e) 0
-#define fastboot_flash_write(a, b, c, d) 0
+extern int board_fbt_oem(const char *cmdbuf);
+extern void board_fbt_set_reboot_type(enum fbt_reboot_type frt);
+/* gets the reboot type, automatically clearing it for next boot */
+extern enum fbt_reboot_type board_fbt_get_reboot_type(void);
+extern int board_fbt_key_pressed(void);
+extern int board_fbt_load_ptbl(void);
 
 #endif /* CONFIG_FASTBOOT */
 #endif /* FASTBOOT_H */
