@@ -36,6 +36,7 @@ void sr32(void *, u32, u32, u32);
 u32 wait_on_value(u32, u32, void *, u32);
 void sdelay(unsigned long);
 void set_pl310_ctrl_reg(u32 val);
+void dieid_num_r(void);
 
 extern const struct omap_sysinfo sysinfo;
 
