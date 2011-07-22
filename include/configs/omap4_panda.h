@@ -49,6 +49,9 @@
 #define V_OSCK			38400000	/* Clock output from T2 */
 #define V_SCLK                   V_OSCK
 
+#define PRCM_CLK_CFG2_332MHZ     1    /* VDD2=1.15v - 166MHz DDR */
+#define PRCM_PCLK_OPP2           1    /* ARM=500MHz - VDD1=1.20v */
+
 #undef CONFIG_USE_IRQ				/* no support for IRQs */
 #define CONFIG_MISC_INIT_R
 
@@ -217,6 +220,9 @@
 #define CONFIG_STACKSIZE_IRQ	(4 << 10)	/* IRQ stack */
 #define CONFIG_STACKSIZE_FIQ	(4 << 10)	/* FIQ stack */
 #endif
+
+/* which initialization functions to call for this board */
+#define CONFIG_BOARD_EARLY_INIT_F	1     /* Call board_early_init_f */
 
 /*
  * SDRAM Memory Map
