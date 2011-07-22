@@ -184,7 +184,7 @@ stack_setup:
 	adr	r0, _start
 #ifndef CONFIG_PRELOADER
 	cmp	r0, r6
-	beq	clear_bss		/* skip relocation */
+	beq	after_copy		/* skip relocation */
 #endif
 	mov	r1, r6			/* r1 <- scratch for copy_loop */
 	ldr	r3, _bss_start_ofs
@@ -196,6 +196,7 @@ copy_loop:
 	cmp	r0, r2			/* until source end address [r2]    */
 	blo	copy_loop
 
+after_copy:
 #ifndef CONFIG_PRELOADER
 	/*
 	 * fix .rel.dyn relocations
