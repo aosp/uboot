@@ -420,6 +420,7 @@ void board_init_f (ulong bootflag)
 	debug ("relocation Offset is: %08lx\n", gd->reloc_off);
 	memcpy (id, (void *)gd, sizeof (gd_t));
 
+	printf("u-boot relocating from _TEXT_BASE at 0x%08lx to end of SDRAM at 0x%08lx\n", _TEXT_BASE, addr);
 	relocate_code (addr_sp, id, addr);
 
 	/* NOTREACHED - relocate_code() does not return */
@@ -517,8 +518,8 @@ void board_init_r (gd_t *id, ulong dest_addr)
 #endif
 
 #ifdef CONFIG_GENERIC_MMC
-       puts("MMC:   ");
-       mmc_initialize(bd);
+	puts("MMC:   ");
+	mmc_initialize(bd);
 #endif
 
 #ifdef CONFIG_HAS_DATAFLASH
