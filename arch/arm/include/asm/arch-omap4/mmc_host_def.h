@@ -25,6 +25,25 @@
 #ifndef MMC_HOST_DEF_H
 #define MMC_HOST_DEF_H
 
+/* T2 Register definitions */
+#define T2_BASE			0x4A100000
+
+typedef struct t2 {
+	unsigned char res1[0x600];	/* 0x000 */
+	unsigned int pbias_lite;	/* 0x600 */
+	unsigned char res2[0x024];	/* 0x604 */
+	unsigned int control_mmc1;	/* 0x628 */
+} t2_t;
+
+#define MMC1_PBIASLITE_PWRDNZ		(1 << 22)
+#define MMC1_PWRDNZ			(1 << 26)
+
+#define SDMMC1_DR2_SPEEDCTRL		(1 << 25)
+#define SDMMC1_DR1_SPEEDCTRL		(1 << 26)
+#define SDMMC1_DR0_SPEEDCTRL		(1 << 27)
+#define SDMMC1_PUSTRENGTH_GRP1		(1 << 30)
+#define SDMMC1_PUSTRENGTH_GRP0		(1 << 31)
+
 /*
  * OMAP HSMMC register definitions
  */

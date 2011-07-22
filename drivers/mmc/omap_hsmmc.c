@@ -38,7 +38,7 @@
 static int mmc_read_data(hsmmc_t *mmc_base, char *buf, unsigned int size);
 static int mmc_write_data(hsmmc_t *mmc_base, const char *buf, unsigned int siz);
 static struct mmc hsmmc_dev[2];
-unsigned char mmc_board_init(hsmmc_t *mmc_base)
+unsigned char mmc_board_init(struct mmc *mmc)
 {
 #if defined(CONFIG_TWL4030_POWER)
 	twl4030_power_mmc_init();
@@ -46,7 +46,6 @@ unsigned char mmc_board_init(hsmmc_t *mmc_base)
 
 #if defined(CONFIG_OMAP34XX)
 	t2_t *t2_base = (t2_t *)T2_BASE;
-	struct prcm *prcm_base = (struct prcm *)PRCM_BASE;
 
 	writel(readl(&t2_base->pbias_lite) | PBIASLITEPWRDNZ1 |
 		PBIASSPEEDCTRL0 | PBIASLITEPWRDNZ0,
@@ -55,19 +54,40 @@ unsigned char mmc_board_init(hsmmc_t *mmc_base)
 	writel(readl(&t2_base->devconf0) | MMCSDIO1ADPCLKISEL,
 		&t2_base->devconf0);
 
-	writel(readl(&t2_base->devconf1) | MMCSDIO2ADPCLKISEL,
-		&t2_base->devconf1);
-
-	writel(readl(&prcm_base->fclken1_core) |
-		EN_MMC1 | EN_MMC2 | EN_MMC3,
-		&prcm_base->fclken1_core);
-
-	writel(readl(&prcm_base->iclken1_core) |
-		EN_MMC1 | EN_MMC2 | EN_MMC3,
-		&prcm_base->iclken1_core);
 #endif
 
-/* TODO add appropriate OMAP4 init - none currently necessary */
+#if defined(CONFIG_OMAP44XX)
+	unsigned char data;
+	t2_t *t2_base = (t2_t *)T2_BASE;
+
+	switch (mmc->block_dev.dev) {
+	case 0:
+		/* Phoenix LDO config */
+		data = 0x01;
+		i2c_write(0x48, 0x98, 1, &data, 1);
+		data = 0x03;
+		i2c_write(0x48, 0x99, 1, &data, 1);
+		data = 0x21;
+		i2c_write(0x48, 0x9A, 1, &data, 1);
+		data = 0x15;
+		i2c_write(0x48, 0x9B, 1, &data, 1);
+
+		/* SLOT-0 PBIAS config */
+		writel(readl(&t2_base->pbias_lite) |
+		       MMC1_PBIASLITE_PWRDNZ | MMC1_PWRDNZ,
+		       &t2_base->pbias_lite);
+
+		writel(readl(&t2_base->control_mmc1) | SDMMC1_DR2_SPEEDCTRL |
+		       SDMMC1_DR1_SPEEDCTRL | SDMMC1_DR0_SPEEDCTRL |
+		       SDMMC1_PUSTRENGTH_GRP1 | SDMMC1_PUSTRENGTH_GRP0,
+		       &t2_base->control_mmc1);
+		break;
+	case 1:
+		break;
+	default:
+		break;
+	}
+#endif
 
 	return 0;
 }
@@ -108,7 +128,7 @@ static int mmc_init_setup(struct mmc *mmc)
 	unsigned int dsor;
 	ulong start;
 
-	mmc_board_init(mmc_base);
+	mmc_board_init(mmc);
 
 	writel(readl(&mmc_base->sysconfig) | MMC_SOFTRESET,
 		&mmc_base->sysconfig);
