@@ -534,8 +534,8 @@ int ep0_recv_setup (struct urb *urb)
 				if (le16_to_cpu (request->wValue) == USB_ENDPOINT_HALT) {
 					/*return usbd_device_feature (device, le16_to_cpu (request->wIndex), */
 					/*                    request->bRequest == USB_REQ_SET_FEATURE); */
-					/* NEED TO IMPLEMENT THIS!!! */
-					return -1;
+					/* NEED TO IMPLEMENT THIS!!!  Return 0 makes Mac OSX work somewhat. */
+					return 0;
 				} else {
 					dbg_ep0 (1, "request %s bad wValue: %04x",
 						 USBD_DEVICE_REQUESTS
