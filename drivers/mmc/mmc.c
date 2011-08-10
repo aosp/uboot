@@ -84,7 +84,7 @@ int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd, struct mmc_data *data)
 			for (i = 0; i < 4; i++) {
 				int j;
 				printf("\t\t\t\t\t%03d - ", i*4);
-				ptr = &cmd->response[i];
+				ptr = (u8*)&cmd->response[i];
 				ptr += 3;
 				for (j = 0; j < 4; j++)
 					printf("%02X ", *ptr--);
@@ -448,7 +448,6 @@ sd_send_op_cond(struct mmc *mmc)
 		cmd.flags = 0;
 
 		err = mmc_send_cmd(mmc, &cmd, NULL);
-
 		if (err)
 			return err;
 
@@ -531,14 +530,12 @@ int mmc_send_op_cond(struct mmc *mmc)
 				(mmc->voltages &
 				(cmd.response[0] & OCR_VOLTAGE_MASK)) |
 				(cmd.response[0] & OCR_ACCESS_MODE));
-
 		if (mmc->host_caps & MMC_MODE_HC)
 			cmd.cmdarg |= OCR_HCS;
 
 		cmd.flags = 0;
 
 		err = mmc_send_cmd(mmc, &cmd, NULL);
-
 		if (err)
 			return err;
 
@@ -630,7 +627,7 @@ int mmc_change_freq(struct mmc *mmc)
 	if (mmc->version < MMC_VERSION_4)
 		return 0;
 
-	mmc->card_caps |= MMC_MODE_4BIT;
+	mmc->card_caps |= MMC_MODE_4BIT | MMC_MODE_8BIT;
 
 	err = mmc_send_ext_csd(mmc, ext_csd);
 
@@ -1076,17 +1073,7 @@ int mmc_startup(struct mmc *mmc)
 		else
 			mmc_set_clock(mmc, 25000000);
 	} else {
-		if (mmc->card_caps & MMC_MODE_4BIT) {
-			/* Set the card to use 4 bit*/
-			err = mmc_switch(mmc, EXT_CSD_CMD_SET_NORMAL,
-					EXT_CSD_BUS_WIDTH,
-					EXT_CSD_BUS_WIDTH_4);
-
-			if (err)
-				return err;
-
-			mmc_set_bus_width(mmc, 4);
-		} else if (mmc->card_caps & MMC_MODE_8BIT) {
+		if (mmc->card_caps & MMC_MODE_8BIT) {
 			/* Set the card to use 8 bit*/
 			err = mmc_switch(mmc, EXT_CSD_CMD_SET_NORMAL,
 					EXT_CSD_BUS_WIDTH,
@@ -1095,7 +1082,19 @@ int mmc_startup(struct mmc *mmc)
 			if (err)
 				return err;
 
+			printf("%s: bus width = 8\n", __func__);
 			mmc_set_bus_width(mmc, 8);
+		} else if (mmc->card_caps & MMC_MODE_4BIT) {
+			/* Set the card to use 4 bit*/
+			err = mmc_switch(mmc, EXT_CSD_CMD_SET_NORMAL,
+					EXT_CSD_BUS_WIDTH,
+					EXT_CSD_BUS_WIDTH_4);
+
+			if (err)
+				return err;
+
+			printf("%s: bus width = 4\n", __func__);
+			mmc_set_bus_width(mmc, 4);
 		}
 
 		if (mmc->card_caps & MMC_MODE_HS) {
