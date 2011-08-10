@@ -488,6 +488,10 @@ int omap_mmc_init(int dev_index)
 
 	mmc->b_max = 0;
 
+#if defined(CONFIG_OMAP44XX)
+	mmc->host_caps |= MMC_MODE_8BIT;
+#endif
+
 #if defined(CONFIG_OMAP34XX)
 	/*
 	 * Silicon revs 2.1 and older do not support multiblock transfers.
