@@ -198,13 +198,33 @@ static int do_format(void)
 	block_dev_desc_t *dev_desc;
 	unsigned long blocks_to_write, result;
 
+	/*
+	 * Effectively do an "mmc rescan" to handle the case of a card
+	 * being inserted after the system booted.
+	 */
+	struct mmc *mmc = find_mmc_device(FASTBOOT_MMC_DEVICE_ID);
+	if (mmc == NULL) {
+		printf("error finding mmc device %d\n", FASTBOOT_MMC_DEVICE_ID);
+		return -1;
+	}
+	if (mmc_init(mmc)) {
+		printf("error initializing mmc device %d\n", FASTBOOT_MMC_DEVICE_ID);
+		return -1;
+	}
+
 	dev_desc = mmc_get_dev(FASTBOOT_MMC_DEVICE_ID);
+	if (!dev_desc) {
+		printf("error getting mmc device %d\n", FASTBOOT_MMC_DEVICE_ID);
+		return -1;
+	}
+	if (!dev_desc->lba) {
+		printf("mmc device %d has no space\n", FASTBOOT_MMC_DEVICE_ID);
+		return -1;
+	}
 
 	printf("blocks %lu\n", dev_desc->lba);
 
 	start_ptbl(ptbl, dev_desc->lba);
-	n = 0;
-	next = 0;
 	for (n = 0, next = 0; fbt_partitions[n].name; n++) {
 		unsigned sz = fbt_partitions[n].size_kb * 2;
 		if (!strcmp(fbt_partitions[n].name,"-")) {

@@ -2289,7 +2289,7 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 }
 
 U_BOOT_CMD(fastboot, 2,	1, do_fastboot,
-	"fastboot- use USB Fastboot protocol\n", NULL);
+	"fastboot- use USB Fastboot protocol", NULL);
 
   /* Section for Android bootimage format support
    * Refer:
@@ -2465,9 +2465,9 @@ fail:
 
 U_BOOT_CMD(
 	booti,	3,	1,	do_booti,
-	"booti   - boot android bootimg\n",
+	"booti   - boot android bootimg",
 	"<addr>\n    - boot application image\n"
-	"\t'addr' should be the address of boot image which is zImage+ramdisk.img if in memory or the mmc0 or mmc1 to load from 'boot' partition in mmc\n"
+	"\t'addr' should be the address of boot image which is zImage+ramdisk.img if in memory or the mmc0 or mmc1 to load from 'boot' partition in mmc"
 );
 
 /*
