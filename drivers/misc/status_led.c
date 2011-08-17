@@ -43,11 +43,13 @@ typedef struct {
 } led_dev_t;
 
 led_dev_t led_dev[] = {
+#if defined(STATUS_LED_BIT)
     {	STATUS_LED_BIT,
 	STATUS_LED_STATE,
 	STATUS_LED_PERIOD,
 	0,
     },
+#endif
 #if defined(STATUS_LED_BIT1)
     {	STATUS_LED_BIT1,
 	STATUS_LED_STATE1,
