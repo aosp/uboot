@@ -43,29 +43,33 @@ typedef struct led_tbl_s led_tbl_t;
 static const led_tbl_t led_commands[] = {
 #ifdef CONFIG_BOARD_SPECIFIC_LED
 #ifdef STATUS_LED_BIT
-	{ "0", STATUS_LED_BIT, NULL, NULL },
+	{ "0", STATUS_LED_BIT },
 #endif
 #ifdef STATUS_LED_BIT1
-	{ "1", STATUS_LED_BIT1, NULL, NULL },
+	{ "1", STATUS_LED_BIT1 },
 #endif
 #ifdef STATUS_LED_BIT2
-	{ "2", STATUS_LED_BIT2, NULL, NULL },
+	{ "2", STATUS_LED_BIT2 },
 #endif
 #ifdef STATUS_LED_BIT3
-	{ "3", STATUS_LED_BIT3, NULL, NULL },
+	{ "3", STATUS_LED_BIT3 },
 #endif
 #endif
 #ifdef STATUS_LED_GREEN
-	{ "green", STATUS_LED_GREEN, green_LED_off, green_LED_on },
+	{ "green", STATUS_LED_GREEN,
+	  .off = green_LED_off, .on = green_LED_on },
 #endif
 #ifdef STATUS_LED_YELLOW
-	{ "yellow", STATUS_LED_YELLOW, yellow_LED_off, yellow_LED_on },
+	{ "yellow", STATUS_LED_YELLOW,
+	  .off = yellow_LED_off, .on = yellow_LED_on },
 #endif
 #ifdef STATUS_LED_RED
-	{ "red", STATUS_LED_RED, red_LED_off, red_LED_on },
+	{ "red", STATUS_LED_RED,
+	  .off = red_LED_off, .on = red_LED_on },
 #endif
 #ifdef STATUS_LED_BLUE
-	{ "blue", STATUS_LED_BLUE, blue_LED_off, blue_LED_on },
+	{ "blue", STATUS_LED_BLUE,
+	  .off = blue_LED_off, .on = blue_LED_on },
 #endif
 	{ NULL, 0, NULL, NULL }
 };
@@ -95,24 +99,25 @@ int do_led (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		return cmd_usage(cmdtp);
 	}
 
+	int do_all = strcmp("all", argv[1]) == 0;
+
 	for (i = 0; led_commands[i].string; i++) {
-		if ((strcmp("all", argv[1]) == 0) ||
-		    (strcmp(led_commands[i].string, argv[1]) == 0)) {
-			if (led_commands[i].on) {
-				if (state) {
-					led_commands[i].on();
-				} else {
-					led_commands[i].off();
-				}
+		if (do_all || strcmp(led_commands[i].string, argv[1]) == 0) {
+			if (state && led_commands[i].on) {
+				led_commands[i].on();
+			} else if (!state && led_commands[i].off) {
+				led_commands[i].off();
 			} else {
 				__led_set(led_commands[i].mask, state);
 			}
-			break;
+			if (!do_all) {
+				break;
+			}
 		}
 	}
 
 	/* If we ran out of matches, print Usage */
-	if (!led_commands[i].string && !(strcmp("all", argv[1]) == 0)) {
+	if (!led_commands[i].string && !do_all) {
 		return cmd_usage(cmdtp);
 	}
 
@@ -148,6 +153,6 @@ U_BOOT_CMD(
 #ifdef STATUS_LED_BLUE
 	"blue|"
 #endif
-	"all] [on|off]\n",
-	"led [led_name] [on|off] sets or clears led(s)\n"
+	"all] [on|off]",
+	"led [led_name] [on|off] sets or clears led(s)"
 );
