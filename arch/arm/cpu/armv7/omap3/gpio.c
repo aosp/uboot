@@ -183,3 +183,42 @@ void omap_free_gpio(int gpio)
 
 	_reset_gpio(bank, gpio);
 }
+
+#if defined(CONFIG_CMD_GPIO)
+int gpio_request(int gp, const char *label)
+{
+	return omap_request_gpio(gp);
+}
+void gpio_free(int gp)
+{
+	/*
+	 * Initially, I was doing omap_free_gpio(gp) here, but that was
+	 * causing the GPIOs to revert back to their original state instead
+	 * of staying as an output.
+	 */
+}
+void gpio_toggle_value(int gp)
+{
+	int value = omap_get_gpio_datain(gp);
+	omap_set_gpio_dataout(gp, !value);
+}
+int gpio_direction_input(int gp)
+{
+	omap_set_gpio_direction(gp, 1);
+	return 0;
+}
+int gpio_direction_output(int gp, int value)
+{
+	omap_set_gpio_direction(gp, 0);
+	omap_set_gpio_dataout(gp, value);
+	return 0;
+}
+int gpio_get_value(int gp)
+{
+	return omap_get_gpio_datain(gp);
+}
+void gpio_set_value(int gp, int value)
+{
+	omap_set_gpio_dataout(gp, value);
+}
+#endif
