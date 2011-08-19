@@ -253,7 +253,7 @@ extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
 extern int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
 extern int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
 extern int do_bootm_linux(int flag, int argc, char *argv[], bootm_headers_t *images);
-
+int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
 extern int do_env_save (cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -1795,7 +1795,7 @@ static int fbt_handle_boot(const char *cmdbuf)
 	if ((priv.d_bytes) &&
 		(CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE < priv.d_bytes)) {
 		char start[32];
-		char *bootm[3] = { "bootm", NULL, NULL, };
+		char *booti[3] = { "booti", NULL, NULL, };
 		char *go[3]    = { "go",    NULL, NULL, };
 
 		/*
@@ -1805,12 +1805,9 @@ static int fbt_handle_boot(const char *cmdbuf)
 		struct fastboot_boot_img_hdr *fb_hdr =
 			(struct fastboot_boot_img_hdr *) priv.transfer_buffer;
 
-		/* Skip the mkbootimage header */
-		image_header_t *hdr = (image_header_t *)
-		  &priv.transfer_buffer[CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE];
 
-		bootm[1] = go[1] = start;
-		sprintf (start, "%p", hdr);
+		booti[1] = go[1] = start;
+		sprintf (start, "%p", fb_hdr);
 
 		/* Execution should jump to kernel so send the response
 		   now and wait a bit.  */
@@ -1819,24 +1816,12 @@ static int fbt_handle_boot(const char *cmdbuf)
 		fbt_handle_response();
 		udelay (1000000); /* 1 sec */
 
-		if (ntohl(hdr->ih_magic) == IH_MAGIC) {
-			/* Looks like a kernel.. */
-			FBTINFO("Booting kernel..\n");
+		do_booti(NULL, 0, 2, booti);
 
-			/*
-			 * Check if the user sent a bootargs down.
-			 * If not, do not override what is already there
-			 */
-			if (strlen ((char *) &fb_hdr->cmdline[0]))
-				setenv ("bootargs", (char *) &fb_hdr->cmdline[0]);
+		printf("do_booti() returned, trying go..\n");
 
-			do_bootm (NULL, 0, 2, bootm);
-		} else {
-			/* Raw image, maybe another uboot */
-			FBTINFO("Booting raw image..\n");
-
-			do_go (NULL, 0, 2, go);
-		}
+		FBTINFO("Booting raw image..\n");
+		do_go (NULL, 0, 2, go);
 
 		FBTERR("booting failed, reset the board\n");
 	}
@@ -2400,7 +2385,7 @@ int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	} else {
 		void *kaddr, *raddr;
 
-		hdr = malloc(512);
+		hdr = malloc(sizeof(*hdr));
 		if (hdr == NULL) {
 			printf("error allocating buffer\n");
 			return -1;
