@@ -128,7 +128,7 @@ struct fbt_partition fbt_partitions[] = {
 	{ "-", 512 },
 	{ "recovery", 8*1024 },
 	{ "boot", 8*1024 },
-	{ "system", 512*1024 },
+	{ "system", 1024*1024 },
 	{ "cache", 512*1024 },
 	{ "efs", 512 }, /* TBD: possibly for encryption keys, mac addresses, etc. */
 	{ "userdata", 0},
