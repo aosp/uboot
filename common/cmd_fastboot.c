@@ -1602,117 +1602,112 @@ static u8 do_unsparse(unsigned char *source, u32 sector, u32 section_size)
 	return 0;
 }
 
-static int fbt_handle_flash(char *cmdbuf)
+static void fbt_handle_flash(char *cmdbuf)
 {
-	int status = 0;
+	struct fastboot_ptentry *ptn;
 
-	if (priv.d_bytes) {
-		struct fastboot_ptentry *ptn;
-
-		ptn = fastboot_flash_find_ptn(cmdbuf + 6);
-		if (ptn == 0) {
-			sprintf(priv.response, "FAILpartition does not exist");
-		} else if ((priv.d_bytes > ptn->length) &&
-			!(ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV)) {
-			sprintf(priv.response, "FAILimage too large for partition");
-		} else {
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-			/* Check if this is not really a flash write
-			   but rather a saveenv */
-			if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
-				/* Since the response can only be 64 bytes,
-				   there is no point in having a large error message. */
-				char err_string[32];
-
-				if (saveenv_to_ptn(ptn, &err_string[0])) {
-					FBTINFO("savenv '%s' failed : %s\n", ptn->name, err_string);
-					sprintf(priv.response, "FAIL%s", err_string);
-				} else {
-					FBTINFO("partition '%s' saveenv-ed\n", ptn->name);
-					sprintf(priv.response, "OKAY");
-				}
-			} else {
-				/* Normal case */
-				if (write_to_ptn(ptn)) {
-					FBTINFO("flashing '%s' failed\n", ptn->name);
-					sprintf(priv.response, "FAILfailed to flash partition");
-				} else {
-					FBTINFO("partition '%s' flashed\n", ptn->name);
-					sprintf(priv.response, "OKAY");
-				}
-			}
-#else
-			if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
-
-				/* Check if this is not really a flash write,
-				 * but instead a saveenv
-				 */
-				unsigned int i = 0;
-#if defined(CONFIG_CMD_SAVEENV)
-				char *argv[2] = {NULL, "-f"};
-#endif
-				/* Env file is expected with a NULL delimeter between
-				 * env variables So replace New line Feeds (0x0a) with
-				 * NULL (0x00)
-				 */
-				for (i = 0; i < priv.d_bytes; i++) {
-					if (priv.transfer_buffer[i] == 0x0a)
-						priv.transfer_buffer[i] = 0x00;
-				}
-				memset(env_ptr->data, 0, CONFIG_ENV_SIZE);
-				memcpy(env_ptr->data, priv.transfer_buffer, priv.d_bytes);
-#if defined(CONFIG_CMD_SAVEENV)
-				do_env_save(NULL, 0, 2, argv);
-#endif
-				printf("saveenv to '%s' DONE!\n", ptn->name);
-				sprintf(priv.response, "OKAY");
-			} else {
-				/* Normal case */
-				printf("writing to partition '%s'\n", ptn->name);
-
-				/* Check if we have sparse compressed image */
-				if ( ((sparse_header_t *)priv.transfer_buffer)->magic
-				     == SPARSE_HEADER_MAGIC) {
-					printf("fastboot: %s is in sparse format\n", ptn->name);
-					if (!do_unsparse(priv.transfer_buffer,
-							 ptn->start,
-							 ptn->length)) {
-						printf("Writing sparsed: '%s' DONE!\n", ptn->name);
-						sprintf(priv.response, "OKAY");
-					} else {
-						printf("Writing sparsed '%s' FAILED!\n", ptn->name);
-						sprintf(priv.response, "FAIL: Sparsed Write");
-					}
-				} else {
-					/* Normal image: no sparse */
-					char *mmc_write[5]  = {"mmc", "write", NULL, NULL, NULL};
-					char source[32], dest[32], blk_cnt[32];
-
-					mmc_write[2] = source;
-					mmc_write[3] = dest;
-					mmc_write[4] = blk_cnt;
-
-					sprintf(source, "%p", priv.transfer_buffer);
-					sprintf(dest, "0x%x", ptn->start);
-					sprintf(blk_cnt, "0x%lx", DIV_ROUND_UP(priv.d_bytes, priv.dev_desc->blksz));
-
-					printf("Writing '%s', %s blks (%d bytes) at sector %s\n", ptn->name, blk_cnt, priv.d_bytes, dest);
-					if (do_mmcops(NULL, 0, 5, mmc_write)) {
-						printf("Writing '%s' FAILED!\n", ptn->name);
-						sprintf(priv.response, "FAIL: Write partition");
-					} else {
-						printf("Writing '%s' DONE!\n", ptn->name);
-						sprintf(priv.response, "OKAY");
-					}
-				}
-			} /* Normal Case */
-#endif
-		}
-	} else {
+	if (!priv.d_bytes) {
 		sprintf(priv.response, "FAILno image downloaded");
+		return;
 	}
 
-	return status;
+	ptn = fastboot_flash_find_ptn(cmdbuf + 6);
+	if (ptn == 0) {
+		sprintf(priv.response, "FAILpartition does not exist");
+		return;
+	}
+	if ((priv.d_bytes > ptn->length) &&
+		!(ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV)) {
+		sprintf(priv.response, "FAILimage too large for partition");
+		return;
+	}
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+	/* Check if this is not really a flash write but rather a saveenv */
+	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
+		/* Since the response can only be 64 bytes,
+		   there is no point in having a large error message. */
+		char err_string[32];
+
+		if (saveenv_to_ptn(ptn, &err_string[0])) {
+			FBTINFO("savenv '%s' failed : %s\n", ptn->name, err_string);
+			sprintf(priv.response, "FAIL%s", err_string);
+		} else {
+			FBTINFO("partition '%s' saveenv-ed\n", ptn->name);
+			sprintf(priv.response, "OKAY");
+		}
+	} else {
+		/* Normal case */
+		if (write_to_ptn(ptn)) {
+			FBTINFO("flashing '%s' failed\n", ptn->name);
+			sprintf(priv.response, "FAILfailed to flash partition");
+		} else {
+			FBTINFO("partition '%s' flashed\n", ptn->name);
+			sprintf(priv.response, "OKAY");
+		}
+	}
+#else
+	/* Check if this is not really a flash write but rather a saveenv */
+	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
+		unsigned int i = 0;
+#if defined(CONFIG_CMD_SAVEENV)
+		char *argv[2] = {NULL, "-f"};
+#endif
+		/* Env file is expected with a NULL delimeter between
+		 * env variables So replace New line Feeds (0x0a) with
+		 * NULL (0x00)
+		 */
+		for (i = 0; i < priv.d_bytes; i++) {
+			if (priv.transfer_buffer[i] == 0x0a)
+				priv.transfer_buffer[i] = 0x00;
+		}
+		memset(env_ptr->data, 0, CONFIG_ENV_SIZE);
+		memcpy(env_ptr->data, priv.transfer_buffer, priv.d_bytes);
+#if defined(CONFIG_CMD_SAVEENV)
+		do_env_save(NULL, 0, 2, argv);
+#endif
+		printf("saveenv to '%s' DONE!\n", ptn->name);
+		sprintf(priv.response, "OKAY");
+	} else {
+		/* Normal case */
+		printf("writing to partition '%s'\n", ptn->name);
+
+		/* Check if we have sparse compressed image */
+		if ( ((sparse_header_t *)priv.transfer_buffer)->magic
+		     == SPARSE_HEADER_MAGIC) {
+			printf("fastboot: %s is in sparse format\n", ptn->name);
+			if (!do_unsparse(priv.transfer_buffer,
+					 ptn->start,
+					 ptn->length)) {
+				printf("Writing sparsed: '%s' DONE!\n", ptn->name);
+				sprintf(priv.response, "OKAY");
+			} else {
+				printf("Writing sparsed '%s' FAILED!\n", ptn->name);
+				sprintf(priv.response, "FAIL: Sparsed Write");
+			}
+		} else {
+			/* Normal image: no sparse */
+			char *mmc_write[5]  = {"mmc", "write", NULL, NULL, NULL};
+			char source[32], dest[32], blk_cnt[32];
+
+			mmc_write[2] = source;
+			mmc_write[3] = dest;
+			mmc_write[4] = blk_cnt;
+
+			sprintf(source, "%p", priv.transfer_buffer);
+			sprintf(dest, "0x%x", ptn->start);
+			sprintf(blk_cnt, "0x%lx", DIV_ROUND_UP(priv.d_bytes, priv.dev_desc->blksz));
+
+			printf("Writing '%s', %s blks (%d bytes) at sector %s\n", ptn->name, blk_cnt, priv.d_bytes, dest);
+			if (do_mmcops(NULL, 0, 5, mmc_write)) {
+				printf("Writing '%s' FAILED!\n", ptn->name);
+				sprintf(priv.response, "FAIL: Write partition");
+			} else {
+				printf("Writing '%s' DONE!\n", ptn->name);
+				sprintf(priv.response, "OKAY");
+			}
+		}
+	} /* Normal Case */
+#endif
 }
 
 static int fbt_handle_getvar(char *cmdbuf)
