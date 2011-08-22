@@ -227,7 +227,7 @@ static int do_format(void)
 	start_ptbl(ptbl, dev_desc->lba);
 	for (n = 0, next = 0; fbt_partitions[n].name; n++) {
 		unsigned sz = fbt_partitions[n].size_kb * 2;
-		if (!strcmp(fbt_partitions[n].name,"-")) {
+		if (fbt_partitions[n].name[0] == '-') {
 			next += sz;
 			continue;
 		}
@@ -247,7 +247,8 @@ static int do_format(void)
 		return -1;
 	}
 
-	printf("\nnew partition table:\n");
+	printf("\nnew partition table of %lu %lu-byte blocks\n",
+		blocks_to_write, dev_desc->blksz);
 	board_fbt_load_ptbl();
 
 	return 0;
@@ -344,6 +345,7 @@ int board_fbt_load_ptbl(void)
 		goto out;
 	}
 	entry = data;
+	printf("lba size = %lu\n", mmc->block_dev.blksz);
 	printf("lba_start      partition_size          name\n");
 	printf("=========  ======================  ==============\n");
 	for (n = 0; n < (128/4); n++) {
