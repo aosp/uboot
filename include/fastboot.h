@@ -161,8 +161,9 @@ struct cmd_fastboot_interface {
 	/* Data uploaded so far */
 	u64 u_bytes;
 
-	/* XXX: what should be the size, 64 or 65 ? */
-	char response[65];
+	/* 64 byte response with a NULL following to stop strlen() */
+	char response[64];
+	char null_term;
 
 	/* Indicate response to be sent, data to be recieved */
 	unsigned int flag;

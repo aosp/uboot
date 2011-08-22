@@ -149,8 +149,6 @@ static int fbt_handle_response(void);
 /* defined and used by gadget/ep0.c */
 extern struct usb_string_descriptor **usb_strings;
 
-static struct cmd_fastboot_interface priv;
-
 /* USB Descriptor Strings */
 static char serial_number[33]; /* what should be the length ?, 33 ? */
 static u8 wstr_lang[4] = {4,USB_DT_STRING,0x9,0x4};
@@ -235,7 +233,6 @@ static struct usb_endpoint_instance endpoint_instance[NUM_ENDPOINTS + 1];
 
 /* FASBOOT specific */
 
-#define	GETVARLEN	30
 #define	SECURE		"no"
 /* U-boot version */
 extern char version_string[];
@@ -1706,20 +1703,39 @@ static void fbt_handle_flash(char *cmdbuf)
 static int fbt_handle_getvar(char *cmdbuf)
 {
 	strcpy(priv.response, "OKAY");
-	if(!strcmp(cmdbuf + strlen("getvar:"), "version")) {
-		FBTDBG("getvar version\n");
-		strcpy(priv.response + 4, FASTBOOT_VERSION);
-	} else if(!strcmp(cmdbuf + strlen("getvar:"), "version-bootloader")) {
-		strncpy(priv.response + 4, version_string,
-			min(strlen(version_string), GETVARLEN));
-	} else if(!strcmp(cmdbuf + strlen("getvar:"), "secure")) {
-		strcpy(priv.response + 4, SECURE);
-	} else if(!strcmp(cmdbuf + strlen("getvar:"), "product")) {
-		if (priv.product_name)
-			strcpy(priv.response + 4, priv.product_name);
-	} else if(!strcmp(cmdbuf + strlen("getvar:"), "serialno")) {
-		if (priv.serial_no)
-			strcpy(priv.response + 4, priv.serial_no);
+	char *subcmd = cmdbuf + strlen("getvar:");
+	char *value = NULL;
+	if(!strcmp(subcmd, "version"))
+		value = FASTBOOT_VERSION;
+	else if(!strcmp(subcmd, "version-bootloader"))
+		value = version_string;
+	else if(!strcmp(subcmd, "secure"))
+		value = SECURE;
+	else if(!strcmp(subcmd, "product"))
+		value = priv.product_name;
+	else if(!strcmp(subcmd, "serialno"))
+		value = priv.serial_no;
+#ifdef CONFIG_FASTBOOT_UBOOT_GETVAR
+	else {
+		ENTRY e, *ep;
+
+		e.key = subcmd;
+		e.data = NULL;
+		ep = NULL;
+		if (hsearch_r(e, FIND, &ep, &env_htab) && ep != NULL) {
+			value = ep->data;
+		}
+	}
+#endif
+	if (value) {
+		/* At first I was reluctant to use strncpy because it
+		 * typically pads the whole buffer with nulls, but U-Boot's
+		 * strncpy does not do that.  However, I do rely on
+		 * priv.null_term after priv.response in the struct
+		 * cmd_fastboot_interface to ensure the strlen in
+		 * fbt_response_process doesn't take a long time.
+		 */
+		strncpy(priv.response + 4, value, (sizeof(priv.response) - 4));
 	}
 	return 0;
 }
