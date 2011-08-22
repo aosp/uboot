@@ -265,7 +265,6 @@ extern int do_nand(cmd_tbl_t * cmdtp, int flag, int argc, char *const argv[]);
 #else
 
 extern int do_mmcops(cmd_tbl_t * cmdtp, int flag, int argc, char * const argv[]);
-extern env_t *env_ptr;
 
 #endif
 
@@ -1454,6 +1453,24 @@ static int fbt_handle_erase(char *cmdbuf)
 	return status;
 }
 
+#if !defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING)
+int mmc_get_env_addr(struct mmc *mmc, u32 *env_addr)
+{
+	if (mmc != find_mmc_device(FASTBOOT_MMC_DEVICE_ID)) {
+		return -1;
+	}
+
+	fastboot_ptentry *ptn = fastboot_flash_find_ptn("environment");
+	if (!ptn) {
+		return -1;
+	}
+
+	*env_addr = ptn->start * mmc->write_bl_len;
+
+	return 0;
+}
+#endif /* ! FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
+
 #define SPARSE_HEADER_MAJOR_VER 1
 
 static int mmc_write(unsigned char *src, unsigned sector, unsigned len)
@@ -1648,24 +1665,22 @@ static void fbt_handle_flash(char *cmdbuf)
 #else
 	/* Check if this is not really a flash write but rather a saveenv */
 	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
-		unsigned int i = 0;
-#if defined(CONFIG_CMD_SAVEENV)
-		char *argv[2] = {NULL, "-f"};
-#endif
-		/* Env file is expected with a NULL delimeter between
-		 * env variables So replace New line Feeds (0x0a) with
-		 * NULL (0x00)
-		 */
-		for (i = 0; i < priv.d_bytes; i++) {
-			if (priv.transfer_buffer[i] == 0x0a)
-				priv.transfer_buffer[i] = 0x00;
+		if (!himport_r(&env_htab,
+			       priv.transfer_buffer, priv.d_bytes,
+			       '\n', H_NOCLEAR)){
+			FBTINFO("Import '%s' FAILED!\n", ptn->name);
+			sprintf(priv.response, "FAIL: Import environment");
+			return;
 		}
-		memset(env_ptr->data, 0, CONFIG_ENV_SIZE);
-		memcpy(env_ptr->data, priv.transfer_buffer, priv.d_bytes);
+
 #if defined(CONFIG_CMD_SAVEENV)
-		do_env_save(NULL, 0, 2, argv);
-#endif
+		if (do_env_save(NULL, 0, 0, NULL)) {
+			printf("Writing '%s' FAILED!\n", ptn->name);
+			sprintf(priv.response, "FAIL: Write partition");
+			return;
+		}
 		printf("saveenv to '%s' DONE!\n", ptn->name);
+#endif
 		sprintf(priv.response, "OKAY");
 	} else {
 		/* Normal case */

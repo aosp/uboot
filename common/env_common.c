@@ -34,8 +34,6 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-extern env_t *env_ptr;
-
 extern void env_relocate_spec (void);
 extern uchar env_get_char_spec(int);
 
