@@ -108,11 +108,6 @@ int board_mmc_init(bd_t *bis)
 
 int board_fbt_key_pressed(void)
 {
-	/* On Tungsten: GPIO_121 button pressed causes to enter fastboot */
-	if (!(__raw_readl(OMAP44XX_GPIO4_BASE + DATA_IN_OFFSET) & (1<<25))){
-		printf("Tungsten: GPIO_121 pressed: entering fastboot....\n");
-		return 1;
-	}
 	return 0;
 }
 
