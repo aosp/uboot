@@ -60,6 +60,12 @@ int cleanup_before_linux(void)
 	dcache_disable();
 
 	/*
+	 * Make sure that the L2 cache (if present and being used) has been properly
+	 * disabled.  dcache_disable does not actually disable the L2 cache for us.
+	 */
+	v7_outer_cache_disable();
+
+	/*
 	 * After D-cache is flushed and before it is disabled there may
 	 * be some new valid entries brought into the cache. We are sure
 	 * that these lines are not dirty and will not affect our execution.
