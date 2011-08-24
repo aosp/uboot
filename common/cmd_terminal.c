@@ -29,10 +29,30 @@
 #include <stdio_dev.h>
 #include <serial.h>
 
+#ifdef CMD_TERMINAL_ESC_CH1
+static const int esc_ch1 = CMD_TERMINAL_ESC_CH1;
+#else
+static const int esc_ch1 = '~';
+#endif
+
+#ifdef CMD_TERMINAL_ESC_CH2
+static const int esc_ch2 = CMD_TERMINAL_ESC_CH2;
+#else
+static const int esc_ch2 = '.';
+#endif
+
+#ifdef CMD_TERMINAL_ESC_DELAY
+static const ulong esc_dly = CMD_TERMINAL_ESC_DELAY;
+#else
+static const ulong esc_dly = CONFIG_SYS_HZ; /* 1 second */
+#endif
+
 int do_terminal(cmd_tbl_t * cmd, int flag, int argc, char * const argv[])
 {
 	int last_tilde = 0;
 	struct stdio_dev *dev = NULL;
+	ulong read_time, last_read_time = 0;
+	int saw_esc_dly;
 
 	if (argc < 1)
 		return -1;
@@ -43,8 +63,12 @@ int do_terminal(cmd_tbl_t * cmd, int flag, int argc, char * const argv[])
 		return -1;
 
 	serial_reinit_all();
-	printf("Entering terminal mode for port %s\n", dev->name);
-	puts("Use '~.' to leave the terminal and get back to u-boot\n");
+	printf("Entering terminal mode for port %s.\n"
+		"To leave the terminal and get back to U-Boot, "
+		"send nothing for at least\n"
+		"%lu milliseconds and then quickly send the "
+		"two character sequence \"%c%c\".\n"
+		, dev->name, esc_dly * 1000 / CONFIG_SYS_HZ, esc_ch1, esc_ch2);
 
 	while (1) {
 		int c;
@@ -52,25 +76,25 @@ int do_terminal(cmd_tbl_t * cmd, int flag, int argc, char * const argv[])
 		/* read from console and display on serial port */
 		if (stdio_devices[0]->tstc()) {
 			c = stdio_devices[0]->getc();
+			read_time = get_timer(0);
+			saw_esc_dly = ((read_time - last_read_time) > esc_dly);
+			last_read_time = read_time;
 			if (last_tilde == 1) {
-				if (c == '.') {
-					putc(c);
+				if (c == esc_ch2 && !saw_esc_dly) {
 					putc('\n');
 					break;
 				} else {
 					last_tilde = 0;
 					/* write the delayed tilde */
-					dev->putc('~');
-					/* fall-through to print current
-					 * character */
+					dev->putc(esc_ch1);
+					/* and whatever just came in */
+					dev->putc(c);
 				}
-			}
-			if (c == '~') {
+			} else if (saw_esc_dly && (c == esc_ch1)) {
 				last_tilde = 1;
-				puts("[u-boot]");
-				putc(c);
+			} else {
+				dev->putc(c);
 			}
-			dev->putc(c);
 		}
 
 		/* read from serial port and display on console */
@@ -86,7 +110,7 @@ int do_terminal(cmd_tbl_t * cmd, int flag, int argc, char * const argv[])
 /***************************************************/
 
 U_BOOT_CMD(
-	terminal,	3,	1,	do_terminal,
+	terminal,	2,	0,	do_terminal,
 	"start terminal emulator",
-	""
+	"serial_port"
 );
