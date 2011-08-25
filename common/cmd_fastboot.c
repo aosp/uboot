@@ -1644,8 +1644,8 @@ static void fbt_handle_flash(char *cmdbuf)
 	/* Check if this is not really a flash write but rather a saveenv */
 	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
 		if (!himport_r(&env_htab,
-			       priv.transfer_buffer, priv.d_bytes,
-			       '\n', H_NOCLEAR)){
+			       (const char*)priv.transfer_buffer,
+			       priv.d_bytes, '\n', H_NOCLEAR)){
 			FBTINFO("Import '%s' FAILED!\n", ptn->name);
 			sprintf(priv.response, "FAIL: Import environment");
 			return;
