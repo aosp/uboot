@@ -125,7 +125,9 @@ struct fbt_partition fbt_partitions[] = {
 	{ "boot", 8*1024 },
 	{ "system", 1024*1024 },
 	{ "cache", 512*1024 },
-	{ "efs", 512 }, /* TBD: possibly for encryption keys, mac addresses, etc. */
+	{ "efs", 8*1024 }, /* TBD: possibly for encryption keys, mac addresses, etc.
+			    * minimum size for a ext4 fs is about 8MB
+			    */
 	{ "userdata", 0},
 	{ 0, 0 },
 };
