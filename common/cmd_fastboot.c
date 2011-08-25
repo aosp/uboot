@@ -1406,44 +1406,22 @@ static int fbt_handle_erase(char *cmdbuf)
 		/* MMC doesn't have a real erase function.
 		 * Just simulate by writing all 0xffffffff to the partition.
 		 */
-		char *mmc_write[5]  = {"mmc", "write", NULL, NULL, NULL};
-		char source[32], dest[32], blk_cnt[32];
-		unsigned int blocks_left_to_write = DIV_ROUND_UP(ptn->length, priv.dev_desc->blksz);
-		unsigned int write_start_lba = ptn->start;
+		char *mmc_erase[4]  = {"mmc", "erase", NULL, NULL};
+		char start_lba_hex[32], blk_cnt_hex[32];
+		unsigned blk_cnt = DIV_ROUND_UP(ptn->length, priv.dev_desc->blksz);
 
-		printf("blocks_to_write = %d\n", blocks_left_to_write);
-		mmc_write[2] = source;
-		mmc_write[3] = dest;
-		mmc_write[4] = blk_cnt;
+		mmc_erase[2] = start_lba_hex;
+		mmc_erase[3] = blk_cnt_hex;
 
-		sprintf(source, "%p", priv.transfer_buffer);
-		memset(priv.transfer_buffer, 0xff, priv.transfer_buffer_size);
+		sprintf(start_lba_hex, "%x", ptn->start);
+		sprintf(blk_cnt_hex, "%x", blk_cnt);
 
-		printf("Erasing '%s'\n", ptn->name);
-		status = 0;
-		while(blocks_left_to_write) {
-			unsigned int blocks_to_write;
-			sprintf(dest, "0x%x", write_start_lba);
-			if (blocks_left_to_write > priv.transfer_buffer_blocks) {
-				blocks_to_write = priv.transfer_buffer_blocks;
-			} else {
-				blocks_to_write = blocks_left_to_write;
-			}
-			sprintf(blk_cnt, "0x%x", blocks_to_write);
+		printf("Erasing partition '%s', start blk %d, blk_cnt %d\n",
+		       ptn->name, ptn->start, blk_cnt);
 
-			if (do_mmcops(NULL, 0, 5, mmc_write)) {
-				printf("Writing '%s' FAILED!\n", ptn->name);
-				sprintf(priv.response, "FAIL: Write partition");
-				status = -1;
-				break;
-			}
-			blocks_left_to_write -= blocks_to_write;
-			write_start_lba += blocks_to_write;
-		}
-
-		if (status < 0) {
-			sprintf(priv.response,"FAILfailed to erase partition");
+		if (do_mmcops(NULL, 0, 4, mmc_erase)) {
 			printf("Erasing '%s' FAILED!\n", ptn->name);
+			sprintf(priv.response,"FAILfailed to erase partition");
 		} else {
 			FBTINFO("partition '%s' erased\n", ptn->name);
 			sprintf(priv.response, "OKAY");
