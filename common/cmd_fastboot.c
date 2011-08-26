@@ -1408,15 +1408,15 @@ static int fbt_handle_erase(char *cmdbuf)
 		 */
 		char *mmc_erase[4]  = {"mmc", "erase", NULL, NULL};
 		char start_lba_hex[32], blk_cnt_hex[32];
-		unsigned blk_cnt = DIV_ROUND_UP(ptn->length, priv.dev_desc->blksz);
+		u64 blk_cnt = DIV_ROUND_UP(ptn->length, priv.dev_desc->blksz);
 
 		mmc_erase[2] = start_lba_hex;
 		mmc_erase[3] = blk_cnt_hex;
 
-		sprintf(start_lba_hex, "%x", ptn->start);
-		sprintf(blk_cnt_hex, "%x", blk_cnt);
+		sprintf(start_lba_hex, "%llx", ptn->start);
+		sprintf(blk_cnt_hex, "%llx", blk_cnt);
 
-		printf("Erasing partition '%s', start blk %d, blk_cnt %d\n",
+		printf("Erasing partition '%s', start blk %llu, blk_cnt %llu\n",
 		       ptn->name, ptn->start, blk_cnt);
 
 		if (do_mmcops(NULL, 0, 4, mmc_erase)) {
@@ -1687,10 +1687,10 @@ static void fbt_handle_flash(char *cmdbuf)
 			mmc_write[4] = blk_cnt;
 
 			sprintf(source, "%p", priv.transfer_buffer);
-			sprintf(dest, "0x%x", ptn->start);
-			sprintf(blk_cnt, "0x%lx", DIV_ROUND_UP(priv.d_bytes, priv.dev_desc->blksz));
+			sprintf(dest, "0x%llx", ptn->start);
+			sprintf(blk_cnt, "0x%llx", DIV_ROUND_UP(priv.d_bytes, priv.dev_desc->blksz));
 
-			printf("Writing '%s', %s blks (%d bytes) at sector %s\n", ptn->name, blk_cnt, priv.d_bytes, dest);
+			printf("Writing '%s', %s blks (%llu bytes) at sector %s\n", ptn->name, blk_cnt, priv.d_bytes, dest);
 			if (do_mmcops(NULL, 0, 5, mmc_write)) {
 				printf("Writing '%s' FAILED!\n", ptn->name);
 				sprintf(priv.response, "FAIL: Write partition");
@@ -2024,7 +2024,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 				priv.d_size = 0;
 				strcpy(priv.response, "FAILdata too large");
 			} else {
-				sprintf(priv.response, "DATA%08x", priv.d_size);
+				sprintf(priv.response, "DATA%08llx", priv.d_size);
 			}
 		}
 
