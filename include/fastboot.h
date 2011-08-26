@@ -104,7 +104,7 @@
 // #define	FASTBOOT_UPLOAD
 
 
-struct cmd_fastboot_interface{
+struct cmd_fastboot_interface {
 
 	/* A getvar string for the product name
 	   It can have a maximum of 60 characters
@@ -139,27 +139,27 @@ struct cmd_fastboot_interface{
 	   Controlled by the configure variable CONFIG_FASTBOOT_TRANSFER_BUFFER
 
 	   Set by board */
-	unsigned char *transfer_buffer;
+	u8 *transfer_buffer;
 
 	/* How big is the transfer buffer
 	   Controlled by the configure variable
 	   CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE
 
 	   Set by board	*/
-	unsigned int transfer_buffer_size;
+	u64 transfer_buffer_size;
 
 	/* Download size, if download has to be done. This can be checked to find
 		whether next packet is a command or a data */
-	unsigned int d_size;
+	u64 d_size;
 
 	/* Data downloaded so far */
-	unsigned int d_bytes;
+	u64 d_bytes;
 
 	/* Upload size, if download has to be done */
-	unsigned int u_size;
+	u64 u_size;
 
 	/* Data uploaded so far */
-	unsigned int u_bytes;
+	u64 u_bytes;
 
 	/* XXX: what should be the size, 64 or 65 ? */
 	char response[65];
@@ -183,14 +183,14 @@ typedef struct fastboot_ptentry fastboot_ptentry;
 /* flash partitions are defined in terms of blocks
 ** (flash erase units)
 */
-struct fastboot_ptentry{
+struct fastboot_ptentry {
 
 	/* The logical name for this partition, null terminated */
 	char name[16];
 	/* The start wrt the nand part, must be multiple of nand block size */
-	unsigned int start;
+	u64 start;
 	/* The length of the partition, must be multiple of nand block size */
-	unsigned int length;
+	u64 length;
 	/* Controls the details of how operations are done on the partition
 	   See the FASTBOOT_PTENTRY_FLAGS_*'s defined below */
 	unsigned int flags;

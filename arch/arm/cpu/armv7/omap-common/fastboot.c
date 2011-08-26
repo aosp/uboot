@@ -226,7 +226,7 @@ static int do_format(void)
 
 	start_ptbl(ptbl, dev_desc->lba);
 	for (n = 0, next = 0; fbt_partitions[n].name; n++) {
-		unsigned sz = fbt_partitions[n].size_kb * 2;
+		u64 sz = fbt_partitions[n].size_kb * 2;
 		if (fbt_partitions[n].name[0] == '-') {
 			next += sz;
 			continue;
@@ -312,9 +312,9 @@ static void import_efi_partition(struct efi_entry *entry)
 	fbt_add_ptn(&e);
 
 	if (e.length > 0x100000)
-		printf(" %8d  %12u(%7dM)  %s\n", e.start, e.length, e.length/0x100000, e.name);
+		printf(" %8llu  %12llu(%7lluM)  %s\n", e.start, e.length, e.length/0x100000, e.name);
 	else
-		printf(" %8d  %12u(%7dK)  %s\n", e.start, e.length, e.length/0x400, e.name);
+		printf(" %8llu  %12llu(%7lluK)  %s\n", e.start, e.length, e.length/0x400, e.name);
 }
 
 int board_fbt_load_ptbl(void)
