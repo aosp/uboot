@@ -174,10 +174,10 @@ struct mmc *find_mmc_device(int dev_num)
 	return NULL;
 }
 
-static ulong mmc_erase_t(struct mmc *mmc, ulong start, lbaint_t blkcnt)
+static ulong mmc_erase_t(struct mmc *mmc, lbaint_t start, lbaint_t blkcnt)
 {
 	struct mmc_cmd cmd;
-	ulong end;
+	lbaint_t end;
 	int err, start_cmd, end_cmd;
 
 	if (mmc->high_capacity)
@@ -227,7 +227,7 @@ err_out:
 }
 
 static unsigned long
-mmc_berase(int dev_num, unsigned long start, lbaint_t blkcnt)
+mmc_berase(int dev_num, lbaint_t start, lbaint_t blkcnt)
 {
 	int err = 0;
 	struct mmc *mmc = find_mmc_device(dev_num);
@@ -247,6 +247,8 @@ mmc_berase(int dev_num, unsigned long start, lbaint_t blkcnt)
 		blk_r = ((blkcnt - blk) > mmc->erase_grp_size) ?
 			mmc->erase_grp_size : (blkcnt - blk);
 		err = mmc_erase_t(mmc, start + blk, blk_r);
+		printf("mmc_erase_t(), start %lu, blk_cnt %lu, returned %d\n",
+		       start+blk, blk_r, err);
 		if (err)
 			break;
 
@@ -313,7 +315,7 @@ mmc_write_blocks(struct mmc *mmc, ulong start, lbaint_t blkcnt, const void*src)
 }
 
 static ulong
-mmc_bwrite(int dev_num, ulong start, lbaint_t blkcnt, const void*src)
+mmc_bwrite(int dev_num, lbaint_t start, lbaint_t blkcnt, const void*src)
 {
 	lbaint_t cur, blocks_todo = blkcnt;
 
@@ -380,7 +382,7 @@ int mmc_read_blocks(struct mmc *mmc, void *dst, ulong start, lbaint_t blkcnt)
 	return blkcnt;
 }
 
-static ulong mmc_bread(int dev_num, ulong start, lbaint_t blkcnt, void *dst)
+static ulong mmc_bread(int dev_num, lbaint_t start, lbaint_t blkcnt, void *dst)
 {
 	lbaint_t cur, blocks_todo = blkcnt;
 
