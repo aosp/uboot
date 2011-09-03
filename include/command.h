@@ -70,6 +70,7 @@ int _do_help (cmd_tbl_t *cmd_start, int cmd_items, cmd_tbl_t * cmdtp, int
 	      flag, int argc, char * const argv[]);
 cmd_tbl_t *find_cmd(const char *cmd);
 cmd_tbl_t *find_cmd_tbl (const char *cmd, cmd_tbl_t *table, int table_len);
+int make_argv(char *s, int argvsz, char *argv[]);
 
 extern int cmd_usage(cmd_tbl_t *cmdtp);
 
