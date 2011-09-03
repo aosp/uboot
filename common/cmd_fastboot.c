@@ -131,6 +131,8 @@
 #define USBFBT_BCD_DEVICE	0x00
 #define	USBFBT_MAXPOWER		0x32
 
+#define USB_FLUSH_DELAY_MICROSECS 1000
+
 #define	NUM_CONFIGS	1
 #define	NUM_INTERFACES	1
 #define	NUM_ENDPOINTS	2
@@ -529,6 +531,16 @@ static struct urb *next_urb (struct usb_device_instance *device,
 		endpoint->tx_queue++;
 	}
 	return current_urb;
+}
+
+static void fbt_wait_usb_fifo_flush(void)
+{
+	/* give time to flush FIFO and remote to receive data.
+	 * otherwise, USB can get hung.  someday we might actually
+	 * try checking USB fifo status directly but for now, just
+	 * spin for some time.
+	 */
+	udelay(USB_FLUSH_DELAY_MICROSECS);
 }
 
 /* FASTBOOT specific */
@@ -1762,18 +1774,11 @@ static int fbt_handle_reboot(const char *cmdbuf)
 	return 0;
 }
 
+static char tmp_buf[CONFIG_SYS_CBSIZE]; /* copy of fastboot cmdbuf */
+
 static int fbt_handle_oem(const char *cmdbuf)
 {
 	cmdbuf += 4;
-
-	/* %fastboot oem format */
-	if (strcmp(cmdbuf, "format") == 0){
-		FBTDBG("oem format\n");
-		if (board_fbt_oem(cmdbuf) >= 0) {
-			strcpy(priv.response,"OKAY");
-		}
-		return 0;
-	}
 
 	/* %fastboot oem recovery */
 	if (strcmp(cmdbuf, "recovery") == 0){
@@ -1788,9 +1793,56 @@ static int fbt_handle_oem(const char *cmdbuf)
 		return 0;
 	}
 
+	/* %fastboot oem ucmd ... */
+	if (strncmp(cmdbuf, "ucmd ", 5) == 0){
+		int rcode;
+		int argc;
+		char *argv[CONFIG_SYS_MAXARGS + 1];
+		cmd_tbl_t *cmdtp;
+
+		FBTDBG("oem %s\n", cmdbuf);
+		cmdbuf += 5;
+
+		/* copy to tmp_buf which will be modified by make_argv() */
+		strcpy(tmp_buf, cmdbuf);
+
+		/* separate into argv */
+		argc = make_argv(tmp_buf, ARRAY_SIZE(argv), argv);
+
+		if (argc >= 1) {
+			/* find command */
+			cmdtp = find_cmd(argv[0]);
+			if (cmdtp) {
+				/* run command */
+				rcode = (cmdtp->cmd)(cmdtp, 0, argc, argv);
+				if (rcode) {
+					strcpy(priv.response,
+					       "FAILcommand returned error");
+					return 0;
+				} else {
+					strcpy(priv.response, "OKAY");
+					return 0;
+				}
+			} else {
+				printf("unknown command %s\n",
+				       argv[0]);
+			}
+		} else {
+			printf("needs more arguments\n");
+		}
+		strcpy(priv.response,"FAILinvalid command");
+		return 0;
+	}
+
 	/* %fastboot oem [xxx] */
 	FBTDBG("oem %s\n", cmdbuf);
+	if (board_fbt_oem(cmdbuf) >= 0) {
+		strcpy(priv.response,"OKAY");
+		return 0;
+	}
+
 	printf("\nfastboot: unsupported oem command %s\n", cmdbuf);
+	strcpy(priv.response,"FAILinvalid command");
 	return 0;
 }
 
@@ -1972,6 +2024,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		FBTDBG("command\n");
 
 		printf("cmdbuf = (%s)\n", cmdbuf);
+		priv.executing_command = 1;
 
 		/* %fastboot getvar: <var_name> */
 		if (memcmp(cmdbuf, "getvar:", 7) == 0) {
@@ -2054,6 +2107,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 #endif
 #endif
 		priv.flag |= FASTBOOT_FLAG_RESPONSE;
+		priv.executing_command = 0;
 	} else {
 		if (length) {
 			unsigned int xfr_size;
@@ -2238,6 +2292,8 @@ static int fbt_handle_tx(void)
 int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
 	int ret = -1;
+
+	printf("Starting fastboot protocol\n");
 
 	ret = fbt_fastboot_init();
 
@@ -2504,4 +2560,53 @@ void fbt_preboot(void)
 	} else {
 		printf("\n%s: no special reboot flags, doing normal boot\n", __func__);
 	}
+}
+
+int fbt_send_info(const char *info)
+{
+	int bytes_left;
+	int response_max;
+
+	if (!priv.executing_command) {
+		return -1;
+	}
+
+	/* break up info into response sized chunks */
+	bytes_left = strlen(info);
+	/* remove trailing '\n' */
+	if (info[bytes_left-1] == '\n') {
+		bytes_left--;
+	}
+	/* -4 for the INFO prefix */
+	response_max = sizeof(priv.response) - 4;
+	strcpy(priv.response, "INFO");
+	while (1) {
+		if (bytes_left >= response_max) {
+			strncpy(priv.response + 4, info,
+				response_max);
+
+			/* flush any data set by command */
+			priv.flag |= FASTBOOT_FLAG_RESPONSE;
+			fbt_handle_response();
+			fbt_wait_usb_fifo_flush();
+
+			info += response_max;
+			bytes_left -= response_max;
+		} else {
+			strncpy(priv.response + 4, info,
+				bytes_left);
+
+			/* in case we stripped '\n',
+			   make sure priv.response is
+			   terminated */
+			priv.response[4 + bytes_left] = '\0';
+			break;
+		}
+	}
+
+	priv.flag |= FASTBOOT_FLAG_RESPONSE;
+	fbt_handle_response();
+	fbt_wait_usb_fifo_flush();
+
+	return 0;
 }

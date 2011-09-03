@@ -171,6 +171,9 @@ struct cmd_fastboot_interface {
 	/* configuration status  */
 	unsigned int configured;
 
+	/* processing a command */
+	unsigned int executing_command;
+
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 	unsigned int download_bytes_unpadded;
 #endif
@@ -312,6 +315,7 @@ enum fbt_reboot_type {
 extern void fbt_preboot(void);
 extern void fbt_reset_ptn(void);
 extern void fbt_add_ptn(fastboot_ptentry *ptn);
+extern int fbt_send_info(const char *info);
 
 extern int board_fbt_oem(const char *cmdbuf);
 extern void board_fbt_set_reboot_type(enum fbt_reboot_type frt);

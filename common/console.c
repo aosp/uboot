@@ -27,6 +27,10 @@
 #include <stdio_dev.h>
 #include <exports.h>
 
+#ifdef CONFIG_FASTBOOT
+#include <fastboot.h>
+#endif
+
 DECLARE_GLOBAL_DATA_PTR;
 
 #ifdef CONFIG_SYS_CONSOLE_IS_IN_ENV
@@ -381,6 +385,10 @@ int printf(const char *fmt, ...)
 
 	/* Print the string */
 	puts(printbuffer);
+
+#ifdef CONFIG_FASTBOOT
+	fbt_send_info(printbuffer);
+#endif
 	return i;
 }
 
