@@ -64,35 +64,35 @@
 
 #define	ERR
 #define	WARN
-//#define INFO
-//#define DEBUG
+/* #define INFO */
+/* #define DEBUG */
 
 #ifdef DEBUG
-#define FBTDBG(fmt,args...)\
-        printf("DEBUG: [%s]: %d: \n"fmt, __FUNCTION__, __LINE__,##args)
+#define FBTDBG(fmt, args...)\
+	printf("DEBUG: [%s]: %d:\n"fmt, __func__, __LINE__, ##args)
 #else
-#define FBTDBG(fmt,args...) do{}while(0)
+#define FBTDBG(fmt, args...) do {} while (0)
 #endif
 
 #ifdef INFO
-#define FBTINFO(fmt,args...)\
-        printf("INFO: [%s]: "fmt, __FUNCTION__, ##args)
+#define FBTINFO(fmt, args...)\
+	printf("INFO: [%s]: "fmt, __func__, ##args)
 #else
-#define FBTINFO(fmt,args...) do{}while(0)
+#define FBTINFO(fmt, args...) do {} while (0)
 #endif
 
 #ifdef WARN
-#define FBTWARN(fmt,args...)\
-        printf("WARNING: [%s]: "fmt, __FUNCTION__, ##args)
+#define FBTWARN(fmt, args...)\
+	printf("WARNING: [%s]: "fmt, __func__, ##args)
 #else
-#define FBTWARN(fmt,args...) do{}while(0)
+#define FBTWARN(fmt, args...) do {} while (0)
 #endif
 
 #ifdef ERR
-#define FBTERR(fmt,args...)\
-        printf("ERROR: [%s]: "fmt, __FUNCTION__, ##args)
+#define FBTERR(fmt, args...)\
+	printf("ERROR: [%s]: "fmt, __func__, ##args)
 #else
-#define FBTERR(fmt,args...) do{}while(0)
+#define FBTERR(fmt, args...) do {} while (0)
 #endif
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -153,7 +153,7 @@ extern struct usb_string_descriptor **usb_strings;
 
 /* USB Descriptor Strings */
 static char serial_number[33]; /* what should be the length ?, 33 ? */
-static u8 wstr_lang[4] = {4,USB_DT_STRING,0x9,0x4};
+static u8 wstr_lang[4] = {4, USB_DT_STRING, 0x9, 0x4};
 static u8 wstr_manufacturer[2 + 2*(sizeof(CONFIG_USBD_MANUFACTURER)-1)];
 static u8 wstr_product[2 + 2*(sizeof(CONFIG_USBD_PRODUCT_NAME)-1)];
 static u8 wstr_serial[2 + 2*(sizeof(serial_number) - 1)];
@@ -170,7 +170,7 @@ static struct usb_device_descriptor device_descriptor = {
 	.bDeviceProtocol =	0x00,
 	.bMaxPacketSize0 =	EP0_MAX_PACKET_SIZE,
 	.idVendor =		cpu_to_le16(CONFIG_USBD_VENDORID),
-	.idProduct = 		cpu_to_le16(CONFIG_USBD_PRODUCTID),
+	.idProduct =		cpu_to_le16(CONFIG_USBD_PRODUCTID),
 	.bcdDevice =		cpu_to_le16(USBFBT_BCD_DEVICE),
 	.iManufacturer =	STR_MANUFACTURER,
 	.iProduct =		STR_PRODUCT,
@@ -239,31 +239,33 @@ static struct usb_endpoint_instance endpoint_instance[NUM_ENDPOINTS + 1];
 /* U-boot version */
 extern char version_string[];
 
-static struct cmd_fastboot_interface priv =
-{
-        .transfer_buffer       = (unsigned char *)CONFIG_FASTBOOT_TRANSFER_BUFFER,
-        .transfer_buffer_size  = CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE,
+static struct cmd_fastboot_interface priv = {
+	.transfer_buffer       = (u8 *)CONFIG_FASTBOOT_TRANSFER_BUFFER,
+	.transfer_buffer_size  = CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE,
 };
 
-static int fbt_init_endpoints (void);
+static int fbt_init_endpoints(void);
+static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
 
-extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
-/* Use do_bootm and do_go for fastboot's 'boot' command */
-extern int do_bootm (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
-extern int do_go (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
-extern int do_bootm_linux(int flag, int argc, char *argv[], bootm_headers_t *images);
-int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
-extern int do_env_save (cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
+extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
+/* Use do_bootm_linux and do_go for fastboot's 'boot' command */
+extern int do_go(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
+extern int do_bootm_linux(int flag, int argc, char *argv[],
+			  bootm_headers_t *images);
+extern int do_env_save(cmd_tbl_t *cmdtp, int flag, int argc,
+		       char *const argv[]);
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 /* Use do_env_set and do_env_save to permenantly save data */
-extern int do_env_set ( cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
-extern int do_switch_ecc(cmd_tbl_t * cmdtp, int flag, int argc, char *const argv[]);
-extern int do_nand(cmd_tbl_t * cmdtp, int flag, int argc, char *const argv[]);
+extern int do_env_set(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
+extern int do_switch_ecc(cmd_tbl_t *cmdtp, int flag, int argc,
+			 char *const argv[]);
+extern int do_nand(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
 
 #else
 
-extern int do_mmcops(cmd_tbl_t * cmdtp, int flag, int argc, char * const argv[]);
+extern int do_mmcops(cmd_tbl_t *cmdtp, int flag, int argc,
+		     char *const argv[]);
 
 #endif
 
@@ -277,11 +279,11 @@ static int static_pcount = -1;
 
 /* USB specific */
 
-/* utility function for converting char* to wide string used by USB */
-static void str2wide (char *str, u16 * wide)
+/* utility function for converting char * to wide string used by USB */
+static void str2wide(char *str, u16 * wide)
 {
 	int i;
-	for (i = 0; i < strlen (str) && str[i]; i++){
+	for (i = 0; i < strlen(str) && str[i]; i++) {
 		#if defined(__LITTLE_ENDIAN)
 			wide[i] = (u16) str[i];
 		#elif defined(__BIG_ENDIAN)
@@ -297,37 +299,36 @@ static int fbt_init_strings(void)
 {
 	struct usb_string_descriptor *string;
 
-	fbt_string_table[STR_LANG] =
-		(struct usb_string_descriptor*)wstr_lang;
+	fbt_string_table[STR_LANG] = (struct usb_string_descriptor *)wstr_lang;
 
 	string = (struct usb_string_descriptor *) wstr_manufacturer;
 	string->bLength = sizeof(wstr_manufacturer);
 	string->bDescriptorType = USB_DT_STRING;
-	str2wide (CONFIG_USBD_MANUFACTURER, string->wData);
+	str2wide(CONFIG_USBD_MANUFACTURER, string->wData);
 	fbt_string_table[STR_MANUFACTURER] = string;
 
 	string = (struct usb_string_descriptor *) wstr_product;
 	string->bLength = sizeof(wstr_product);
 	string->bDescriptorType = USB_DT_STRING;
-	str2wide (CONFIG_USBD_PRODUCT_NAME, string->wData);
+	str2wide(CONFIG_USBD_PRODUCT_NAME, string->wData);
 	fbt_string_table[STR_PRODUCT] = string;
 
 	string = (struct usb_string_descriptor *) wstr_serial;
 	string->bLength = sizeof(wstr_serial);
 	string->bDescriptorType = USB_DT_STRING;
-	str2wide (serial_number, string->wData);
+	str2wide(serial_number, string->wData);
 	fbt_string_table[STR_SERIAL] = string;
 
 	string = (struct usb_string_descriptor *) wstr_configuration;
 	string->bLength = sizeof(wstr_configuration);
 	string->bDescriptorType = USB_DT_STRING;
-	str2wide (CONFIG_USBD_CONFIGURATION_STR, string->wData);
+	str2wide(CONFIG_USBD_CONFIGURATION_STR, string->wData);
 	fbt_string_table[STR_CONFIGURATION] = string;
 
 	string = (struct usb_string_descriptor *) wstr_interface;
 	string->bLength = sizeof(wstr_interface);
 	string->bDescriptorType = USB_DT_STRING;
-	str2wide (CONFIG_USBD_INTERFACE_STR, string->wData);
+	str2wide(CONFIG_USBD_INTERFACE_STR, string->wData);
 	fbt_string_table[STR_INTERFACE] = string;
 
 	/* Now, initialize the string table for ep0 handling */
@@ -349,7 +350,7 @@ static void fbt_event_handler (struct usb_device_instance *device,
 		break;
 
 	case DEVICE_ADDRESS_ASSIGNED:
-		fbt_init_endpoints ();
+		fbt_init_endpoints();
 
 	default:
 		break;
@@ -362,7 +363,7 @@ static int fbt_init_instances(void)
 	int i;
 
 	/* initialize device instance */
-	memset (device_instance, 0, sizeof (struct usb_device_instance));
+	memset(device_instance, 0, sizeof(struct usb_device_instance));
 	device_instance->device_state = STATE_INIT;
 	device_instance->device_descriptor = &device_descriptor;
 	device_instance->event = fbt_event_handler;
@@ -374,7 +375,7 @@ static int fbt_init_instances(void)
 	/* XXX: what is this bus instance for ?, can't it be removed by moving
 	    endpoint_array and serial_number_str is moved to device instance */
 	/* initialize bus instance */
-	memset (bus_instance, 0, sizeof (struct usb_bus_instance));
+	memset(bus_instance, 0, sizeof(struct usb_bus_instance));
 	bus_instance->device = device_instance;
 	bus_instance->endpoint_array = endpoint_instance;
 	/* XXX: what is the relevance of max_endpoints & maxpacketsize ? */
@@ -383,8 +384,7 @@ static int fbt_init_instances(void)
 	bus_instance->serial_number_str = serial_number;
 
 	/* configuration instance */
-	memset (config_instance, 0,
-		sizeof (struct usb_configuration_instance));
+	memset(config_instance, 0, sizeof(struct usb_configuration_instance));
 	config_instance->interfaces = NUM_INTERFACES;
 	config_instance->configuration_descriptor =
 		(struct usb_configuration_descriptor *)&fbt_config_desc;
@@ -392,21 +392,18 @@ static int fbt_init_instances(void)
 
 	/* XXX: is alternate instance required in case of no alternate ? */
 	/* interface instance */
-	memset (interface_instance, 0,
-		sizeof (struct usb_interface_instance));
+	memset(interface_instance, 0, sizeof(struct usb_interface_instance));
 	interface_instance->alternates = 1;
 	interface_instance->alternates_instance_array = alternate_instance;
 
 	/* alternates instance */
-	memset (alternate_instance, 0,
-		sizeof (struct usb_alternate_instance));
+	memset(alternate_instance, 0, sizeof(struct usb_alternate_instance));
 	alternate_instance->interface_descriptor = interface_descriptors;
 	alternate_instance->endpoints = NUM_ENDPOINTS;
 	alternate_instance->endpoints_descriptor_array = ep_descriptor_ptrs;
 
 	/* endpoint instances */
-	memset (&endpoint_instance[0], 0,
-		sizeof (struct usb_endpoint_instance));
+	memset(endpoint_instance, 0, sizeof(endpoint_instance));
 	endpoint_instance[0].endpoint_address = 0;
 	endpoint_instance[0].rcv_packetSize = EP0_MAX_PACKET_SIZE;
 	endpoint_instance[0].rcv_attributes = USB_ENDPOINT_XFER_CONTROL;
@@ -414,12 +411,9 @@ static int fbt_init_instances(void)
 	endpoint_instance[0].tx_attributes = USB_ENDPOINT_XFER_CONTROL;
 	/* XXX: following statement to done along with other endpoints
 		at another place ? */
-	udc_setup_ep (device_instance, 0, &endpoint_instance[0]);
+	udc_setup_ep(device_instance, 0, &endpoint_instance[0]);
 
 	for (i = 1; i <= NUM_ENDPOINTS; i++) {
-		memset (&endpoint_instance[i], 0,
-			sizeof (struct usb_endpoint_instance));
-
 		endpoint_instance[i].endpoint_address =
 			ep_descriptor_ptrs[i - 1]->bEndpointAddress;
 
@@ -438,19 +432,19 @@ static int fbt_init_instances(void)
 		endpoint_instance[i].tx_attributes =
 			ep_descriptor_ptrs[i - 1]->bmAttributes;
 
-		urb_link_init (&endpoint_instance[i].rcv);
-		urb_link_init (&endpoint_instance[i].rdy);
-		urb_link_init (&endpoint_instance[i].tx);
-		urb_link_init (&endpoint_instance[i].done);
+		urb_link_init(&endpoint_instance[i].rcv);
+		urb_link_init(&endpoint_instance[i].rdy);
+		urb_link_init(&endpoint_instance[i].tx);
+		urb_link_init(&endpoint_instance[i].done);
 
 		if (endpoint_instance[i].endpoint_address & USB_DIR_IN)
 			endpoint_instance[i].tx_urb =
-				usbd_alloc_urb (device_instance,
-						&endpoint_instance[i]);
+				usbd_alloc_urb(device_instance,
+					       &endpoint_instance[i]);
 		else
 			endpoint_instance[i].rcv_urb =
-				usbd_alloc_urb (device_instance,
-						&endpoint_instance[i]);
+				usbd_alloc_urb(device_instance,
+					       &endpoint_instance[i]);
 	}
 
 	return 0;
@@ -494,40 +488,37 @@ static int fbt_init_endpoints(void)
 		endpoint_instance[i].rcv_packetSize =
 			le16_to_cpu(ep_descriptor_ptrs[i - 1]->wMaxPacketSize);
 
-		udc_setup_ep (device_instance, i, &endpoint_instance[i]);
-
+		udc_setup_ep(device_instance, i, &endpoint_instance[i]);
 	}
 
 	return 0;
 }
 
-static struct urb *next_urb (struct usb_device_instance *device,
-			     struct usb_endpoint_instance *endpoint)
+static struct urb *next_urb(struct usb_device_instance *device,
+			    struct usb_endpoint_instance *endpoint)
 {
-	struct urb *current_urb = NULL;
+	struct urb *current_urb;
 	int space;
 
 	/* If there's a queue, then we should add to the last urb */
-	if (!endpoint->tx_queue) {
+	if (!endpoint->tx_queue)
 		current_urb = endpoint->tx_urb;
-	} else {
+	else {
 		/* Last urb from tx chain */
-		current_urb =
-			p2surround (struct urb, link, endpoint->tx.prev);
+		current_urb = p2surround(struct urb, link, endpoint->tx.prev);
 	}
 
 	/* Make sure this one has enough room */
 	space = current_urb->buffer_length - current_urb->actual_length;
-	if (space > 0) {
+	if (space > 0)
 		return current_urb;
-	} else {		/* No space here */
+	else {		/* No space here */
 		/* First look at done list */
-		current_urb = first_urb_detached (&endpoint->done);
-		if (!current_urb) {
-			current_urb = usbd_alloc_urb (device, endpoint);
-		}
+		current_urb = first_urb_detached(&endpoint->done);
+		if (!current_urb)
+			current_urb = usbd_alloc_urb(device, endpoint);
 
-		urb_append (&endpoint->tx, current_urb);
+		urb_append(&endpoint->tx, current_urb);
 		endpoint->tx_queue++;
 	}
 	return current_urb;
@@ -556,8 +547,8 @@ void fbt_reset_ptn(void)
 void fbt_add_ptn(fastboot_ptentry *ptn)
 {
 	if (pcount < MAX_PTN) {
-	        memcpy(ptable + pcount, ptn, sizeof(*ptn));
-	        pcount++;
+		memcpy(ptable + pcount, ptn, sizeof(*ptn));
+		pcount++;
 	}
 }
 
@@ -565,14 +556,13 @@ static fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
 {
 	unsigned int n;
 
-	if (pcount == 0) {
+	if (pcount == 0)
 		board_fbt_load_ptbl();
-	}
 
 	for (n = 0; n < pcount; n++) {
 		/* Make sure a substring is not accepted */
 		if (strlen(name) == strlen(ptable[n].name)) {
-			if(0 == strcmp(ptable[n].name, name))
+			if (0 == strcmp(ptable[n].name, name))
 				return ptable + n;
 		}
 	}
@@ -582,11 +572,9 @@ static fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 static fastboot_ptentry *fastboot_get_ptn(unsigned int n)
 {
-	if (n < pcount) {
+	if (n < pcount)
 		return ptable + n;
-	} else {
-	        return 0;
-	}
+	return 0;
 }
 
 static void save_env(struct fastboot_ptentry *ptn,
@@ -596,14 +584,15 @@ static void save_env(struct fastboot_ptentry *ptn,
 	char *saveenv[2] = { "setenv", NULL, };
 	char *ecc[3]     = { "nandecc", "sw", NULL, };
 
-	setenv (var, val);
+	setenv(var, val);
 
 	/* Some flashing requires the nand's ecc to be set */
 	ecc[1] = ecc_type;
 	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) &&
 	    (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC))	{
 		/* Both can not be true */
-		FBTWARN("can not do hw and sw ecc for partition '%s'\n", ptn->name);
+		FBTWARN("can not do hw and sw ecc for partition '%s'\n",
+			ptn->name);
 		FBTWARN("Ignoring these flags\n");
 	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) {
 		sprintf(ecc_type, "hw");
@@ -631,35 +620,33 @@ static void save_block_values(struct fastboot_ptentry *ptn,
 	setenv[1] = var;
 	setenv[2] = val;
 
-	FBTINFO ("saving it..\n");
+	FBTINFO("saving it..\n");
 
 	if (size == 0) {
 		/* The error case, where the variables are being unset */
 
-		sprintf (var, "%s_nand_offset", ptn->name);
-		//		sprintf (val, "");
-		do_env_set (NULL, 0, 3, setenv);
+		sprintf(var, "%s_nand_offset", ptn->name);
+		do_env_set(NULL, 0, 3, setenv);
 
-		sprintf (var, "%s_nand_size", ptn->name);
-		//		sprintf (val, "");
-		do_env_set (NULL, 0, 3, setenv);
+		sprintf(var, "%s_nand_size", ptn->name);
+		do_env_set(NULL, 0, 3, setenv);
 	} else {
 		/* Normal case */
 
-		sprintf (var, "%s_nand_offset", ptn->name);
-		sprintf (val, "0x%x", offset);
+		sprintf(var, "%s_nand_offset", ptn->name);
+		sprintf(val, "0x%x", offset);
 
 		FBTINFO("%s %s %s\n", setenv[0], setenv[1], setenv[2]);
 
-		do_env_set (NULL, 0, 3, setenv);
+		do_env_set(NULL, 0, 3, setenv);
 
 		sprintf(var, "%s_nand_size", ptn->name);
 
-		sprintf (val, "0x%x", size);
+		sprintf(val, "0x%x", size);
 
 		FBTINFO("%s %s %s\n", setenv[0], setenv[1], setenv[2]);
 
-		do_env_set (NULL, 0, 3, setenv);
+		do_env_set(NULL, 0, 3, setenv);
 	}
 
 
@@ -669,34 +656,31 @@ static void save_block_values(struct fastboot_ptentry *ptn,
 	   someplace else. */
 	env_ptn = fastboot_flash_find_ptn("environment");
 
-	if (env_ptn)
-	{
+	if (env_ptn) {
+		unsigned int flags = env_ptn->flags;
+
 		/* Some flashing requires the nand's ecc to be set */
 		ecc[1] = ecc_type;
-		if ((env_ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) &&
-		    (env_ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC))
-		{
+		if ((flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) &&
+		    (flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC)) {
 			/* Both can not be true */
-			FBTWARN("can not do hw and sw ecc for partition '%s'\n", ptn->name);
+			FBTWARN("can not do hw and sw ecc for partition '%s'\n",
+				ptn->name);
 			FBTWARN("Ignoring these flags\n");
-		}
-		else if (env_ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC)
-		{
-			sprintf (ecc_type, "hw");
-			do_switch_ecc (NULL, 0, 2, ecc);
-		}
-		else if (env_ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC)
-		{
-			sprintf (ecc_type, "sw");
-			do_switch_ecc (NULL, 0, 2, ecc);
+		} else if (flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) {
+			sprintf(ecc_type, "hw");
+			do_switch_ecc(NULL, 0, 2, ecc);
+		} else if (flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC) {
+			sprintf(ecc_type, "sw");
+			do_switch_ecc(NULL, 0, 2, ecc);
 		}
 
-		sprintf (start, "0x%x", env_ptn->start);
-		sprintf (length, "0x%x", env_ptn->length);
+		sprintf(start, "0x%x", env_ptn->start);
+		sprintf(length, "0x%x", env_ptn->length);
 
 	}
 
-	do_env_save (NULL, 0, 1, saveenv);
+	do_env_save(NULL, 0, 1, saveenv);
 }
 
 /* When save = 0, just parse.  The input is unchanged
@@ -943,13 +927,45 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 	/* Some flashing requires writing the same data in multiple,
 	   consecutive flash partitions */
 	repeat_max = 1;
-	if (FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(ptn->flags)) {
+	repeat = FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(ptn->flags);
+	if (repeat) {
 		if (ptn->flags &
 		    FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK) {
-			FBTWARN("can not do both 'contiguous block' and 'repeat' writes for for partition '%s'\n", ptn->name);
+			FBTWARN("can not do both 'contiguous block'"
+				" and 'repeat' writes for for"
+				" partition '%s'\n", ptn->name);
 			FBTWARN("Ignoring repeat flag\n");
-		} else {
-			repeat_max = (FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(ptn->flags));
+		} else
+			repeat_max = repeat;
+	}
+
+	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_NEXT_GOOD_BLOCK) &&
+	    (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK)) {
+		/* Both can not be true */
+		FBTWARN("can not do 'next good block' and"
+			" 'contiguous block' for partition '%s'\n",
+			ptn->name);
+		FBTWARN("Ignoring write request\n");
+		return -1;
+	}
+
+	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_NEXT_GOOD_BLOCK) ||
+	    (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK)) {
+		if (priv.nand_block_size == 0) {
+			FBTWARN("nand block size can not be 0 when using"
+				" 'next good block' or 'contiguous block' for"
+				" partition '%s'\n", ptn->name);
+			FBTWARN("Ignoring write request\n");
+			return -1;
+		}
+	}
+	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK) {
+		if (0 != nand_curr_device) {
+			FBTERR("only handling 1 NAND per board when using"
+			       " 'contiguous block' for partition '%s'\n",
+			       ptn->name);
+			FBTERR("Ignoring write request\n");
+			return -1;
 		}
 	}
 
@@ -963,126 +979,102 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 
 		do_nand(NULL, 0, 4, erase);
 
-		if ((ptn->flags &
-		     FASTBOOT_PTENTRY_FLAGS_WRITE_NEXT_GOOD_BLOCK) &&
-		    (ptn->flags &
-		     FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK)) {
-			/* Both can not be true */
-			FBTWARN("can not do 'next good block' and 'contiguous block' for partition '%s'\n", ptn->name);
-			FBTWARN("Ignoring these flags\n");
-		} else if (ptn->flags &
-			   FASTBOOT_PTENTRY_FLAGS_WRITE_NEXT_GOOD_BLOCK) {
+		if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_NEXT_GOOD_BLOCK) {
 			/* Keep writing until you get a good block
 			   transfer_buffer should already be aligned */
-			if (priv.nand_block_size) {
-				unsigned int blocks = priv.d_bytes /
-					priv.nand_block_size;
-				unsigned int i = 0;
-				unsigned int offset = 0;
+			unsigned int blocks;
+			unsigned int i = 0;
+			unsigned int offset = 0;
 
-				sprintf(wlength, "0x%x",
-					priv.nand_block_size);
-				while (i < blocks) {
-					/* Check for overflow */
-					if (offset >= ptn->length)
-						break;
+			blocks = priv.d_bytes / priv.nand_block_size;
 
-					/* download's address only advance
-					   if last write was successful */
-					sprintf(addr, "%p",
-						priv.transfer_buffer +
-						(i * priv.nand_block_size));
+			sprintf(wlength, "0x%x", priv.nand_block_size);
+			while (i < blocks) {
+				/* Check for overflow */
+				if (offset >= ptn->length)
+					break;
 
-					/* nand's address always advances */
-					sprintf(wstart, "0x%x",
-						ptn->start + (repeat * ptn->length) + offset);
+				/* download's address only advance
+				   if last write was successful */
+				sprintf(addr, "%p",
+					priv.transfer_buffer +
+					(i * priv.nand_block_size));
 
-					ret = do_nand(NULL, 0, 5, write);
-					if (ret)
-						break;
-					else
-						i++;
+				/* nand's address always advances */
+				sprintf(wstart, "0x%x",
+					ptn->start +
+					(repeat * ptn->length) + offset);
 
-					/* Go to next nand block */
-					offset += priv.nand_block_size;
-				}
-			} else {
-				FBTWARN("nand block size can not be 0 when using 'next good block' for partition '%s'\n", ptn->name);
-				FBTWARN("Ignoring write request\n");
+				ret = do_nand(NULL, 0, 5, write);
+				if (ret)
+					break;
+				else
+					i++;
+
+				/* Go to next nand block */
+				offset += priv.nand_block_size;
 			}
 		} else if (ptn->flags &
 			 FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK) {
 			/* Keep writing until you get a good block
 			   transfer_buffer should already be aligned */
-			if (priv.nand_block_size) {
-				if (0 == nand_curr_device) {
-					nand_info_t *nand;
-					unsigned long off;
-					unsigned int ok_start;
+			nand_info_t *nand;
+			unsigned long off;
+			unsigned int ok_start;
 
-					nand = &nand_info[nand_curr_device];
+			nand = &nand_info[nand_curr_device];
 
-					FBTINFO("\nDevice %d bad blocks:\n",
-					       nand_curr_device);
+			FBTINFO("\nDevice %d bad blocks:\n", nand_curr_device);
 
-					/* Initialize the ok_start to the
-					   start of the partition
-					   Then try to find a block large
-					   enough for the download */
-					ok_start = ptn->start;
+			/* Initialize the ok_start to the start of the
+			   partition. Then try to find a block large
+			   enough for the download */
+			ok_start = ptn->start;
 
-					/* It is assumed that the start and
-					   length are multiples of block size */
-					for (off = ptn->start;
-					     off < ptn->start + ptn->length;
-					     off += nand->erasesize) {
-						if (nand_block_isbad(nand, off)) {
-							/* Reset the ok_start
-							   to the next block */
-							ok_start = off +
-								nand->erasesize;
-						}
+			/* It is assumed that the start and
+			   length are multiples of block size */
+			for (off = ptn->start;
+			     off < ptn->start + ptn->length;
+			     off += nand->erasesize) {
+				if (nand_block_isbad(nand, off)) {
+					/* Reset the ok_start
+					   to the next block */
+					ok_start = off + nand->erasesize;
+				}
 
-						/* Check if we have enough
-						   blocks */
-						if ((ok_start - off) >=
-						    priv.d_bytes)
-							break;
-					}
+				/* Check if we have enough
+				   blocks */
+				if ((ok_start - off) >= priv.d_bytes)
+					break;
+			}
 
-					/* Check if there is enough space */
-					if (ok_start + priv.d_bytes <=
-					    ptn->start + ptn->length) {
-						sprintf(addr,    "%p", priv.transfer_buffer);
-						sprintf(wstart,  "0x%x", ok_start);
-						sprintf(wlength, "0x%x", priv.d_bytes);
+			/* Check if there is enough space */
+			if (ok_start + priv.d_bytes <=
+			    ptn->start + ptn->length) {
+				sprintf(addr,    "%p", priv.transfer_buffer);
+				sprintf(wstart,  "0x%x", ok_start);
+				sprintf(wlength, "0x%x", priv.d_bytes);
 
-						ret = do_nand(NULL, 0, 5, write);
+				ret = do_nand(NULL, 0, 5, write);
 
-						/* Save the results into an
-						   environment variable on the
-						   format
-						   ptn_name + 'offset'
-						   ptn_name + 'size'  */
-						if (ret) {
-							/* failed */
-							save_block_values(ptn, 0, 0);
-						} else {
-							/* success */
-							save_block_values(ptn, ok_start, priv.d_bytes);
-						}
-					} else {
-						FBTERR("could not find enough contiguous space in partition '%s' \n", ptn->name);
-						FBTERR("Ignoring write request\n");
-					}
+				/* Save the results into an environment
+				   variable on the format
+				   ptn_name + 'offset'
+				   ptn_name + 'size'  */
+				if (ret) {
+					/* failed */
+					save_block_values(ptn, 0, 0);
 				} else {
-					/* TBD : Generalize flash handling */
-					FBTERR("only handling 1 NAND per board");
-					FBTERR("Ignoring write request\n");
+					/* success */
+					save_block_values(ptn, ok_start,
+							  priv.d_bytes);
 				}
 			} else {
-				FBTWARN("nand block size can not be 0 when using 'continuous block' for partition '%s'\n", ptn->name);
-				FBTWARN("Ignoring write request\n");
+				FBTERR("could not find enough"
+				       " contiguous space in"
+				       " partition '%s'\n",
+				       ptn->name);
+				FBTERR("Ignoring write request\n");
 			}
 		} else {
 			/* Normal case */
@@ -1104,7 +1096,6 @@ static int write_to_ptn(struct fastboot_ptentry *ptn)
 							  priv.d_bytes);
 			}
 		}
-
 
 		if (ret)
 			break;
@@ -1205,7 +1196,8 @@ static int add_partition_from_environment(char *s, char **retptr)
 		name = ++s;
 		p = strchr((const char *)name, delim);
 		if (!p) {
-			FBTERR("no closing %c found in partition name\n", delim);
+			FBTERR("no closing %c found in partition name\n",
+			       delim);
 			return 1;
 		}
 		name_len = p - name;
@@ -1239,7 +1231,8 @@ static int add_partition_from_environment(char *s, char **retptr)
 			s += 1;
 	}
 
-	/* enter this partition (offset will be calculated later if it is zero at this point) */
+	/* enter this partition (offset will be calculated later if
+	 * it is zero at this point) */
 	part.length = size;
 	part.start = offset;
 	part.flags = flags;
@@ -1257,10 +1250,10 @@ static int add_partition_from_environment(char *s, char **retptr)
 		return 1;
 	}
 
-
 	/* Check if this overlaps a static partition */
 	if (check_against_static_partition(&part)) {
-		FBTINFO("Adding: %s, offset 0x%8.8x, size 0x%8.8x, flags 0x%8.8x\n",
+		FBTINFO("Adding: %s, offset 0x%8.8x, size 0x%8.8x,"
+			" flags 0x%8.8x\n",
 		       part.name, part.start, part.length, part.flags);
 		fastboot_flash_add_ptn(&part);
 	}
@@ -1367,10 +1360,12 @@ static int fbt_fastboot_init(void)
 
 	priv.dev_desc = get_dev("mmc", FASTBOOT_MMC_DEVICE_ID);
 	if (priv.dev_desc == NULL) {
-		printf ("** mmc device %d not supported\n", FASTBOOT_MMC_DEVICE_ID);
+		printf("** mmc device %d not supported\n",
+		       FASTBOOT_MMC_DEVICE_ID);
 		return 1;
 	}
-	priv.transfer_buffer_blocks = priv.transfer_buffer_size / priv.dev_desc->blksz;
+	priv.transfer_buffer_blocks = (priv.transfer_buffer_size /
+				       priv.dev_desc->blksz);
 	return 0;
 }
 
@@ -1393,20 +1388,21 @@ static int fbt_handle_erase(char *cmdbuf)
 		erase[2] = start;
 		erase[3] = length;
 
-		repeat_max = 1;
-		if (FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(ptn->flags))
-			repeat_max = FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(ptn->flags);
+		repeat_max = FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(ptn->flags);
+		if (repeat_max == 0)
+			repeat_max = 1;
 
-		sprintf (length, "0x%x", ptn->length);
+		sprintf(length, "0x%x", ptn->length);
 		for (repeat = 0; repeat < repeat_max; repeat++) {
-			sprintf (start, "0x%x", ptn->start + (repeat * ptn->length));
-			status = do_nand (NULL, 0, 4, erase);
+			sprintf(start, "0x%x",
+				ptn->start + (repeat * ptn->length));
+			status = do_nand(NULL, 0, 4, erase);
 			if (status)
 				break;
 		}
 
 		if (status) {
-			sprintf(priv.response,"FAILfailed to erase partition");
+			sprintf(priv.response, "FAILfailed to erase partition");
 		} else {
 			FBTINFO("partition '%s' erased\n", ptn->name);
 			sprintf(priv.response, "OKAY");
@@ -1430,7 +1426,7 @@ static int fbt_handle_erase(char *cmdbuf)
 
 		if (do_mmcops(NULL, 0, 4, mmc_erase)) {
 			printf("Erasing '%s' FAILED!\n", ptn->name);
-			sprintf(priv.response,"FAILfailed to erase partition");
+			sprintf(priv.response, "FAILfailed to erase partition");
 		} else {
 			FBTINFO("partition '%s' erased\n", ptn->name);
 			sprintf(priv.response, "OKAY");
@@ -1443,14 +1439,12 @@ static int fbt_handle_erase(char *cmdbuf)
 #if !defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING)
 int mmc_get_env_addr(struct mmc *mmc, u32 *env_addr)
 {
-	if (mmc != find_mmc_device(FASTBOOT_MMC_DEVICE_ID)) {
+	if (mmc != find_mmc_device(FASTBOOT_MMC_DEVICE_ID))
 		return -1;
-	}
 
 	fastboot_ptentry *ptn = fastboot_flash_find_ptn("environment");
-	if (!ptn) {
+	if (!ptn)
 		return -1;
-	}
 
 	*env_addr = ptn->start * mmc->write_bl_len;
 
@@ -1463,8 +1457,10 @@ int mmc_get_env_addr(struct mmc *mmc, u32 *env_addr)
 static int mmc_write(unsigned char *src, unsigned sector, unsigned len)
 {
 	lbaint_t blkcnt = len/priv.dev_desc->blksz;
-	if (priv.dev_desc->block_write(priv.dev_desc->dev, sector, blkcnt, src) != blkcnt) {
-		printf("mmc write to sector %d of %d bytes (%lu blkcnt) failed\n", sector, len, blkcnt);
+	if (priv.dev_desc->block_write(priv.dev_desc->dev,
+				       sector, blkcnt, src) != blkcnt) {
+		printf("mmc write to sector %d of %d bytes"
+		       " (%lu blkcnt) failed\n", sector, len, blkcnt);
 		return -1;
 	}
 	return 0;
@@ -1482,7 +1478,8 @@ static int mmc_compare(unsigned char *src, unsigned sector, unsigned len)
 	}
 
 	while (len > 0) {
-		if (priv.dev_desc->block_read(priv.dev_desc->dev, sector, 1, data) != 1) {
+		if (priv.dev_desc->block_read(priv.dev_desc->dev,
+					      sector, 1, data) != 1) {
 			printf("mmc read error sector %d\n", sector);
 			goto out;
 		}
@@ -1502,9 +1499,10 @@ out:
 #endif
 
 static int _unsparse(unsigned char *source, u32 sector, u32 section_size,
-		     int (*func)(unsigned char *src, unsigned sector, unsigned len))
+		     int (*func)(unsigned char *src,
+				 unsigned sector, unsigned len))
 {
-	sparse_header_t *header = (void*) source;
+	sparse_header_t *header = (void *) source;
 	u32 i, outlen = 0;
 
 	if ((header->total_blks * header->blk_sz) > section_size) {
@@ -1531,7 +1529,7 @@ static int _unsparse(unsigned char *source, u32 sector, u32 section_size,
 	for (i = 0; i < header->total_chunks; i++) {
 		unsigned int len = 0;
 		int r;
-		chunk_header_t *chunk = (void*) source;
+		chunk_header_t *chunk = (void *) source;
 
 		/* move to next chunk */
 		source += sizeof(chunk_header_t);
@@ -1541,17 +1539,20 @@ static int _unsparse(unsigned char *source, u32 sector, u32 section_size,
 			len = chunk->chunk_sz * header->blk_sz;
 
 			if (chunk->total_sz != (len + sizeof(chunk_header_t))) {
-				printf("sparse: bad chunk size for chunk %d, type Raw\n", i);
+				printf("sparse: bad chunk size for"
+				       " chunk %d, type Raw\n", i);
 				return 1;
 			}
 
 			outlen += len;
 			if (outlen > section_size) {
-				printf("sparse: section size %d MB limit: exceeded\n", section_size/(1024*1024));
+				printf("sparse: section size %d MB limit:"
+				       " exceeded\n", section_size/(1024*1024));
 				return 1;
 			}
 #ifdef DEBUG
-			printf("sparse: RAW blk=%d bsz=%d: write(sector=%d,len=%d)\n",
+			printf("sparse: RAW blk=%d bsz=%d:"
+			       " write(sector=%d,len=%d)\n",
 			       chunk->chunk_sz, header->blk_sz, sector, len);
 #endif
 			r = func(source, sector, len);
@@ -1571,20 +1572,23 @@ static int _unsparse(unsigned char *source, u32 sector, u32 section_size,
 			}
 			len = chunk->chunk_sz * header->blk_sz;
 #ifdef DEBUG
-			printf("sparse: DONT_CARE blk=%d bsz=%d: skip(sector=%d,len=%d)\n",
+			printf("sparse: DONT_CARE blk=%d bsz=%d:"
+			       " skip(sector=%d,len=%d)\n",
 			       chunk->chunk_sz, header->blk_sz, sector, len);
 #endif
 
 			outlen += len;
 			if (outlen > section_size) {
-				printf("sparse: section size %d MB limit: exceeded\n", section_size/(1024*1024));
+				printf("sparse: section size %d MB limit:"
+				       " exceeded\n", section_size/(1024*1024));
 				return 1;
 			}
 			sector += (len / 512);
 			break;
 
 		default:
-			printf("sparse: unknown chunk ID %04x\n", chunk->chunk_type);
+			printf("sparse: unknown chunk ID %04x\n",
+			       chunk->chunk_type);
 			return 1;
 		}
 	}
@@ -1633,7 +1637,8 @@ static void fbt_handle_flash(char *cmdbuf)
 		char err_string[32];
 
 		if (saveenv_to_ptn(ptn, &err_string[0])) {
-			FBTINFO("savenv '%s' failed : %s\n", ptn->name, err_string);
+			FBTINFO("savenv '%s' failed : %s\n",
+				ptn->name, err_string);
 			sprintf(priv.response, "FAIL%s", err_string);
 		} else {
 			FBTINFO("partition '%s' saveenv-ed\n", ptn->name);
@@ -1653,8 +1658,8 @@ static void fbt_handle_flash(char *cmdbuf)
 	/* Check if this is not really a flash write but rather a saveenv */
 	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
 		if (!himport_r(&env_htab,
-			       (const char*)priv.transfer_buffer,
-			       priv.d_bytes, '\n', H_NOCLEAR)){
+			       (const char *)priv.transfer_buffer,
+			       priv.d_bytes, '\n', H_NOCLEAR)) {
 			FBTINFO("Import '%s' FAILED!\n", ptn->name);
 			sprintf(priv.response, "FAIL: Import environment");
 			return;
@@ -1674,21 +1679,23 @@ static void fbt_handle_flash(char *cmdbuf)
 		printf("writing to partition '%s'\n", ptn->name);
 
 		/* Check if we have sparse compressed image */
-		if ( ((sparse_header_t *)priv.transfer_buffer)->magic
-		     == SPARSE_HEADER_MAGIC) {
+		if (((sparse_header_t *)priv.transfer_buffer)->magic
+		    == SPARSE_HEADER_MAGIC) {
 			printf("fastboot: %s is in sparse format\n", ptn->name);
 			if (!do_unsparse(priv.transfer_buffer,
 					 ptn->start,
 					 ptn->length)) {
-				printf("Writing sparsed: '%s' DONE!\n", ptn->name);
+				printf("Writing sparsed: '%s' DONE!\n",
+				       ptn->name);
 				sprintf(priv.response, "OKAY");
 			} else {
-				printf("Writing sparsed '%s' FAILED!\n", ptn->name);
+				printf("Writing sparsed '%s' FAILED!\n",
+				       ptn->name);
 				sprintf(priv.response, "FAIL: Sparsed Write");
 			}
 		} else {
 			/* Normal image: no sparse */
-			char *mmc_write[5]  = {"mmc", "write", NULL, NULL, NULL};
+			char *mmc_write[5] = {"mmc", "write", NULL, NULL, NULL};
 			char source[32], dest[32], blk_cnt[32];
 
 			mmc_write[2] = source;
@@ -1697,9 +1704,13 @@ static void fbt_handle_flash(char *cmdbuf)
 
 			sprintf(source, "%p", priv.transfer_buffer);
 			sprintf(dest, "0x%llx", ptn->start);
-			sprintf(blk_cnt, "0x%llx", DIV_ROUND_UP(priv.d_bytes, priv.dev_desc->blksz));
+			sprintf(blk_cnt, "0x%llx",
+				DIV_ROUND_UP(priv.d_bytes,
+					     priv.dev_desc->blksz));
 
-			printf("Writing '%s', %s blks (%llu bytes) at sector %s\n", ptn->name, blk_cnt, priv.d_bytes, dest);
+			printf("Writing '%s', %s blks (%llu bytes)"
+			       "at sector %s\n", ptn->name, blk_cnt,
+			       priv.d_bytes, dest);
 			if (do_mmcops(NULL, 0, 5, mmc_write)) {
 				printf("Writing '%s' FAILED!\n", ptn->name);
 				sprintf(priv.response, "FAIL: Write partition");
@@ -1717,15 +1728,15 @@ static int fbt_handle_getvar(char *cmdbuf)
 	strcpy(priv.response, "OKAY");
 	char *subcmd = cmdbuf + strlen("getvar:");
 	char *value = NULL;
-	if(!strcmp(subcmd, "version"))
+	if (!strcmp(subcmd, "version"))
 		value = FASTBOOT_VERSION;
-	else if(!strcmp(subcmd, "version-bootloader"))
+	else if (!strcmp(subcmd, "version-bootloader"))
 		value = version_string;
-	else if(!strcmp(subcmd, "secure"))
+	else if (!strcmp(subcmd, "secure"))
 		value = SECURE;
-	else if(!strcmp(subcmd, "product"))
+	else if (!strcmp(subcmd, "product"))
 		value = priv.product_name;
-	else if(!strcmp(subcmd, "serialno"))
+	else if (!strcmp(subcmd, "serialno"))
 		value = priv.serial_no;
 #ifdef CONFIG_FASTBOOT_UBOOT_GETVAR
 	else {
@@ -1734,9 +1745,8 @@ static int fbt_handle_getvar(char *cmdbuf)
 		e.key = subcmd;
 		e.data = NULL;
 		ep = NULL;
-		if (hsearch_r(e, FIND, &ep, &env_htab) && ep != NULL) {
+		if (hsearch_r(e, FIND, &ep, &env_htab) && ep != NULL)
 			value = ep->data;
-		}
 	}
 #endif
 	if (value) {
@@ -1764,12 +1774,12 @@ static int fbt_handle_reboot(const char *cmdbuf)
 		board_fbt_set_reboot_type(FASTBOOT_REBOOT_RECOVERY);
 	}
 
-	strcpy(priv.response,"OKAY");
+	strcpy(priv.response, "OKAY");
 	priv.flag |= FASTBOOT_FLAG_RESPONSE;
 	fbt_handle_response();
-	udelay (1000000); /* 1 sec */
+	udelay(1000000); /* 1 sec */
 
-	do_reset (NULL, 0, 0, NULL);
+	do_reset(NULL, 0, 0, NULL);
 
 	return 0;
 }
@@ -1781,20 +1791,20 @@ static int fbt_handle_oem(const char *cmdbuf)
 	cmdbuf += 4;
 
 	/* %fastboot oem recovery */
-	if (strcmp(cmdbuf, "recovery") == 0){
+	if (strcmp(cmdbuf, "recovery") == 0) {
 		FBTDBG("oem recovery\n");
 		return fbt_handle_reboot("reboot-recovery");
 	}
 
 	/* %fastboot oem unlock */
-	if (strcmp(cmdbuf, "unlock") == 0){
+	if (strcmp(cmdbuf, "unlock") == 0) {
 		FBTDBG("oem unlock\n");
 		printf("\nfastboot: oem unlock not implemented yet!!\n");
 		return 0;
 	}
 
 	/* %fastboot oem ucmd ... */
-	if (strncmp(cmdbuf, "ucmd ", 5) == 0){
+	if (strncmp(cmdbuf, "ucmd ", 5) == 0) {
 		int rcode;
 		int argc;
 		char *argv[CONFIG_SYS_MAXARGS + 1];
@@ -1830,19 +1840,19 @@ static int fbt_handle_oem(const char *cmdbuf)
 		} else {
 			printf("needs more arguments\n");
 		}
-		strcpy(priv.response,"FAILinvalid command");
+		strcpy(priv.response, "FAILinvalid command");
 		return 0;
 	}
 
 	/* %fastboot oem [xxx] */
 	FBTDBG("oem %s\n", cmdbuf);
 	if (board_fbt_oem(cmdbuf) >= 0) {
-		strcpy(priv.response,"OKAY");
+		strcpy(priv.response, "OKAY");
 		return 0;
 	}
 
 	printf("\nfastboot: unsupported oem command %s\n", cmdbuf);
-	strcpy(priv.response,"FAILinvalid command");
+	strcpy(priv.response, "FAILinvalid command");
 	return 0;
 }
 
@@ -1863,21 +1873,21 @@ static int fbt_handle_boot(const char *cmdbuf)
 
 
 		booti[1] = go[1] = start;
-		sprintf (start, "%p", fb_hdr);
+		sprintf(start, "%p", fb_hdr);
 
 		/* Execution should jump to kernel so send the response
 		   now and wait a bit.  */
 		sprintf(priv.response, "OKAY");
 		priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		fbt_handle_response();
-		udelay (1000000); /* 1 sec */
+		udelay(1000000); /* 1 sec */
 
 		do_booti(NULL, 0, 2, booti);
 
 		printf("do_booti() returned, trying go..\n");
 
 		FBTINFO("Booting raw image..\n");
-		do_go (NULL, 0, 2, go);
+		do_go(NULL, 0, 2, go);
 
 		FBTERR("booting failed, reset the board\n");
 	}
@@ -2011,6 +2021,61 @@ static int fbt_handle_upload(char *cmdbuf)
 #endif /* FASTBOOT_UPLOAD */
 #endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
+static int fbt_rx_process_download(unsigned char *buffer, int length)
+{
+	unsigned int xfr_size;
+
+	if (length == 0) {
+		FBTWARN("empty buffer download\n");
+		return 0;
+	}
+
+	xfr_size = priv.d_size - priv.d_bytes;
+	if (xfr_size > length)
+		xfr_size = length;
+	memcpy(priv.transfer_buffer + priv.d_bytes, buffer, xfr_size);
+	priv.d_bytes += xfr_size;
+
+#if defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING) && defined(INFO)
+	/* Inform via prompt that download is happening */
+	if (!(priv.d_bytes % (16 * priv.nand_block_size)))
+		printf(".");
+	if (!(priv.d_bytes % (80 * 16 * priv.nand_block_size)))
+		printf("\n");
+#endif
+	if (priv.d_bytes >= priv.d_size) {
+		priv.d_size = 0;
+		strcpy(priv.response, "OKAY");
+		priv.flag |= FASTBOOT_FLAG_RESPONSE;
+#ifdef	INFO
+		printf(".\n");
+#endif
+
+#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
+		priv.download_bytes_unpadded = priv.d_size;
+		/* XXX: Revisit padding handling */
+		if (priv.nand_block_size &&
+		    (priv.d_bytes % priv.nand_block_size)) {
+			unsigned int pad;
+			unsigned int i;
+
+			pad = (priv.nand_block_size -
+			       (priv.d_bytes % priv.nand_block_size));
+
+			for (i = 0; i < pad; i++) {
+				if (priv.d_bytes >= priv.transfer_buffer_size)
+					break;
+
+				priv.transfer_buffer[priv.d_bytes] = 0;
+				priv.d_bytes++;
+			}
+		}
+#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
+		FBTINFO("downloaded %d bytes\n", priv.d_bytes);
+	}
+	return 0;
+}
+
 /* XXX: Replace magic number & strings with macros */
 static int fbt_rx_process(unsigned char *buffer, int length)
 {
@@ -2061,7 +2126,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		/* %fastboot continue */
 		if (strcmp(cmdbuf, "continue") == 0) {
 			FBTDBG("continue\n");
-			strcpy(priv.response,"OKAY");
+			strcpy(priv.response, "OKAY");
 			priv.exit = 1;
 		}
 
@@ -2083,7 +2148,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 				simple_strtoul (cmdbuf + 9, NULL, 16);
 			priv.d_bytes = 0;
 
-			FBTINFO ("starting download of %d bytes\n",
+			FBTINFO("starting download of %d bytes\n",
 				priv.d_size);
 
 			if (priv.d_size == 0) {
@@ -2093,74 +2158,24 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 				priv.d_size = 0;
 				strcpy(priv.response, "FAILdata too large");
 			} else {
-				sprintf(priv.response, "DATA%08llx", priv.d_size);
+				sprintf(priv.response, "DATA%08llx",
+					priv.d_size);
 			}
 		}
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-#ifdef	FASTBOOT_UPLOAD
+#if defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING) && defined(FASTBOOT_UPLOAD)
 		if ((memcmp(cmdbuf, "upload:", 7) == 0) ||
 		    (memcmp(cmdbuf, "uploadraw", 10) == 0)) {
 			FBTDBG("upload/uploadraw\n");
 			fbt_handle_upload(cmdbuf);
 		}
 #endif
-#endif
 		priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		priv.executing_command = 0;
-	} else {
-		if (length) {
-			unsigned int xfr_size;
-
-			xfr_size = priv.d_size - priv.d_bytes;
-			if (xfr_size > length)
-				xfr_size = length;
-			memcpy(priv.transfer_buffer + priv.d_bytes,
-				buffer, xfr_size);
-			priv.d_bytes += xfr_size;
-
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-#ifdef	INFO
-			/* Inform via prompt that download is happening */
-			if (! (priv.d_bytes % (16 * priv.nand_block_size)))
-				printf(".");
-			if (! (priv.d_bytes % (80 * 16 * priv.nand_block_size)))
-				printf("\n");
-#endif
-#endif
-			if (priv.d_bytes >= priv.d_size) {
-				priv.d_size = 0;
-				strcpy(priv.response, "OKAY");
-				priv.flag |= FASTBOOT_FLAG_RESPONSE;
-#ifdef	INFO
-				printf(".\n");
-#endif
-
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-				priv.download_bytes_unpadded = priv.d_size;
-				/* XXX: Revisit padding handling */
-				if (priv.nand_block_size) {
-					if (priv.d_bytes % priv.nand_block_size) {
-						unsigned int pad = priv.nand_block_size - (priv.d_bytes % priv.nand_block_size);
-						unsigned int i;
-
-						for (i = 0; i < pad; i++) {
-							if (priv.d_bytes >= priv.transfer_buffer_size)
-								break;
-
-							priv.transfer_buffer[priv.d_bytes] = 0;
-							priv.d_bytes++;
-						}
-					}
-				}
-#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
-				FBTINFO("downloaded %d bytes\n", priv.d_bytes);
-			}
-		} else
-			FBTWARN("empty buffer download\n");
+		return 0;
 	}
 
-	return 0;
+	return fbt_rx_process_download(buffer, length);
 }
 
 static int fbt_handle_rx(void)
@@ -2173,10 +2188,10 @@ static int fbt_handle_rx(void)
 		FBTDBG("rx length: %u\n", ep->rcv_urb->actual_length);
 		fbt_rx_process(ep->rcv_urb->buffer, ep->rcv_urb->actual_length);
 		/* Required to poison rx urb buffer as in omapzoom ?,
-		    yes, as fastboot command are sent w/o NULL termination.
-		    Attempt is made here to reduce poison length, may be safer
-		    to posion the whole buffer, also it is assumed that at
-		    the time of creation of urb it is poisoned 	*/
+		   yes, as fastboot command are sent w/o NULL termination.
+		   Attempt is made here to reduce poison length, may be safer
+		   to posion the whole buffer, also it is assumed that at
+		   the time of creation of urb it is poisoned */
 		memset(ep->rcv_urb->buffer, 0, ep->rcv_urb->actual_length);
 		ep->rcv_urb->actual_length = 0;
 	}
@@ -2191,19 +2206,19 @@ static int fbt_response_process(void)
 	unsigned char *dest = NULL;
 	int n, ret = 0;
 
-	current_urb = next_urb (device_instance, ep);
+	current_urb = next_urb(device_instance, ep);
 	if (!current_urb) {
 		FBTERR("%s: current_urb NULL", __func__);
 		return -1;
 	}
 
 	dest = current_urb->buffer + current_urb->actual_length;
-	n = MIN (64, strlen(priv.response));
+	n = MIN(64, strlen(priv.response));
 	memcpy(dest, priv.response, n);
 	current_urb->actual_length += n;
 	FBTDBG("response urb length: %u\n", current_urb->actual_length);
 	if (ep->last == 0) {
-		ret = udc_endpoint_write (ep);
+		ret = udc_endpoint_write(ep);
 		return ret;
 	}
 
@@ -2229,18 +2244,18 @@ static int fbt_tx_process(void)
 	unsigned char *dest = NULL;
 	int n = 0, ret = 0;
 
-	current_urb = next_urb (device_instance, ep);
+	current_urb = next_urb(device_instance, ep);
 	if (!current_urb) {
 		FBTERR("%s: current_urb NULL", __func__);
 		return -1;
 	}
 
 	dest = current_urb->buffer + current_urb->actual_length;
-	n = MIN (64, priv.u_size - priv.u_bytes);
+	n = MIN(64, priv.u_size - priv.u_bytes);
 	memcpy(dest, priv.transfer_buffer + priv.u_bytes, n);
 	current_urb->actual_length += n;
 	if (ep->last == 0) {
-		ret = udc_endpoint_write (ep);
+		ret = udc_endpoint_write(ep);
 		/* XXX: "ret = n" should be done iff n bytes has been
 		 * transmitted, "udc_endpoint_write" to be changed for it,
 		 * now it always return 0.
@@ -2265,9 +2280,9 @@ static int fbt_handle_tx(void)
 			priv.u_bytes += bytes_written;
 #ifdef	INFO
 			/* Inform via prompt that upload is happening */
-			if (! (priv.d_bytes % (16 * priv.nand_block_size)))
+			if (!(priv.d_bytes % (16 * priv.nand_block_size)))
 				printf(".");
-			if (! (priv.d_bytes % (80 * 16 * priv.nand_block_size)))
+			if (!(priv.d_bytes % (80 * 16 * priv.nand_block_size)))
 				printf("\n");
 #endif
 			if (priv.u_bytes >= priv.u_size)
@@ -2299,7 +2314,8 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 	ret = fbt_init_endpoint_ptrs();
 
-	if ((ret = udc_init()) < 0) {
+	ret = udc_init();
+	if (ret < 0) {
 		FBTERR("%s: MUSB UDC init failure\n", __func__);
 		return ret;
 	}
@@ -2307,12 +2323,12 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	ret = fbt_init_strings();
 	ret = fbt_init_instances();
 
-	udc_startup_events (device_instance);
+	udc_startup_events(device_instance);
 	udc_connect();
 
 	FBTINFO("fastboot initialized\n");
 
-	while(1) {
+	while (1) {
 		udc_irq();
 		if (priv.configured) {
 			fbt_handle_rx();
@@ -2336,39 +2352,39 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 U_BOOT_CMD(fastboot, 2,	1, do_fastboot,
 	"fastboot- use USB Fastboot protocol", NULL);
 
-  /* Section for Android bootimage format support
-   * Refer:
-   * http://android.git.kernel.org/?p=platform/system/core.git;a=blob;f=mkbootimg/bootimg.h
-   */
+/* Section for Android bootimage format support
+ * Refer:
+ * http://android.git.kernel.org/?p=platform/system/core.git;a=blob;f=mkbootimg/bootimg.h
+ */
 void
-bootimg_print_image_hdr (struct fastboot_boot_img_hdr *hdr)
+bootimg_print_image_hdr(struct fastboot_boot_img_hdr *hdr)
 {
 #ifdef DEBUG
 	int i;
-	printf ("   Image magic:   %s\n", hdr->magic);
+	printf("   Image magic:   %s\n", hdr->magic);
 
-	printf ("   kernel_size:   0x%x\n", hdr->kernel_size);
-	printf ("   kernel_addr:   0x%x\n", hdr->kernel_addr);
+	printf("   kernel_size:   0x%x\n", hdr->kernel_size);
+	printf("   kernel_addr:   0x%x\n", hdr->kernel_addr);
 
-	printf ("   rdisk_size:   0x%x\n", hdr->ramdisk_size);
-	printf ("   rdisk_addr:   0x%x\n", hdr->ramdisk_addr);
+	printf("   rdisk_size:   0x%x\n", hdr->ramdisk_size);
+	printf("   rdisk_addr:   0x%x\n", hdr->ramdisk_addr);
 
-	printf ("   second_size:   0x%x\n", hdr->second_size);
-	printf ("   second_addr:   0x%x\n", hdr->second_addr);
+	printf("   second_size:   0x%x\n", hdr->second_size);
+	printf("   second_addr:   0x%x\n", hdr->second_addr);
 
-	printf ("   tags_addr:   0x%x\n", hdr->tags_addr);
-	printf ("   page_size:   0x%x\n", hdr->page_size);
+	printf("   tags_addr:   0x%x\n", hdr->tags_addr);
+	printf("   page_size:   0x%x\n", hdr->page_size);
 
-	printf ("   name:      %s\n", hdr->name);
-	printf ("   cmdline:   %s\n", hdr->cmdline);
+	printf("   name:      %s\n", hdr->name);
+	printf("   cmdline:   %s\n", hdr->cmdline);
 
-	for (i=0;i<8;i++)
-		printf ("   id[%d]:   0x%x\n", i, hdr->id[i]);
+	for (i = 0; i < 8; i++)
+		printf("   id[%d]:   0x%x\n", i, hdr->id[i]);
 #endif
 }
 
 /* booti [<addr> | mmc0 | mmc1] [ <partition> ] */
-int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
 	unsigned addr;
 	char *ptn = "boot";
@@ -2379,13 +2395,12 @@ int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	if (argc < 2)
 		return -1;
 
-	if (!strcmp(argv[1],"mmc0")) {
+	if (!strcmp(argv[1], "mmc0"))
 		mmcc = 0;
-	} else if (!strcmp(argv[1],"mmc1")) {
+	else if (!strcmp(argv[1], "mmc1"))
 		mmcc = 1;
-	} else {
+	else
 		addr = simple_strtoul(argv[1], NULL, 16);
-	}
 
 	if (argc > 2)
 		ptn = argv[2];
@@ -2411,14 +2426,17 @@ int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		}
 		hdr = malloc(mmc->block_dev.blksz);
 		if (hdr == NULL) {
-			printf("error allocating blksz(%lu) buffer\n", mmc->block_dev.blksz);
+			printf("error allocating blksz(%lu) buffer\n",
+			       mmc->block_dev.blksz);
 			goto fail;
 		}
-		if (mmc->block_dev.block_read(mmcc, pte->start, 1, (void*) hdr) != 1) {
+		if (mmc->block_dev.block_read(mmcc, pte->start,
+					      1, (void *) hdr) != 1) {
 			printf("booti: mmc failed to read bootimg header\n");
 			goto fail;
 		}
-		if (memcmp(hdr->magic, FASTBOOT_BOOT_MAGIC, FASTBOOT_BOOT_MAGIC_SIZE)) {
+		if (memcmp(hdr->magic, FASTBOOT_BOOT_MAGIC,
+			   FASTBOOT_BOOT_MAGIC_SIZE)) {
 			printf("booti: bad boot image magic\n");
 			goto fail;
 		}
@@ -2426,7 +2444,8 @@ int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		sector = pte->start + (hdr->page_size / 512);
 		blocks = DIV_ROUND_UP(hdr->kernel_size, mmc->block_dev.blksz);
 		if (mmc->block_dev.block_read(mmcc, sector, blocks,
-					      (void*) hdr->kernel_addr) != blocks) {
+					      (void *) hdr->kernel_addr) !=
+		    blocks) {
 			printf("booti: failed to read kernel\n");
 			goto fail;
 		}
@@ -2434,7 +2453,8 @@ int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		sector += ALIGN(hdr->kernel_size, hdr->page_size) / 512;
 		blocks = DIV_ROUND_UP(hdr->ramdisk_size, mmc->block_dev.blksz);
 		if (mmc->block_dev.block_read(mmcc, sector, blocks,
-					      (void*) hdr->ramdisk_addr) != blocks) {
+					      (void *) hdr->ramdisk_addr) !=
+		    blocks) {
 			printf("booti: failed to read ramdisk\n");
 			goto fail;
 		}
@@ -2452,30 +2472,33 @@ int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		}
 
 		/* set this aside somewhere safe */
-		memcpy(hdr, (void*) addr, sizeof(*hdr));
+		memcpy(hdr, (void *) addr, sizeof(*hdr));
 
-		if (memcmp(hdr->magic, FASTBOOT_BOOT_MAGIC, FASTBOOT_BOOT_MAGIC_SIZE)) {
+		if (memcmp(hdr->magic, FASTBOOT_BOOT_MAGIC,
+			   FASTBOOT_BOOT_MAGIC_SIZE)) {
 			printf("booti: bad boot image magic\n");
 			return 1;
 		}
 
 		bootimg_print_image_hdr(hdr);
 
-		kaddr = (void*)(addr + hdr->page_size);
-		raddr = (void*)(kaddr + ALIGN(hdr->kernel_size, hdr->page_size));
-
-		memmove((void*) hdr->kernel_addr, kaddr, hdr->kernel_size);
-		memmove((void*) hdr->ramdisk_addr, raddr, hdr->ramdisk_size);
+		kaddr = (void *)(addr + hdr->page_size);
+		raddr = (void *)(kaddr + ALIGN(hdr->kernel_size,
+					       hdr->page_size));
+		memmove((void *)hdr->kernel_addr, kaddr, hdr->kernel_size);
+		memmove((void *)hdr->ramdisk_addr, raddr, hdr->ramdisk_size);
 	}
 
 	printf("kernel   @ %08x (%d)\n", hdr->kernel_addr, hdr->kernel_size);
 	printf("ramdisk  @ %08x (%d)\n", hdr->ramdisk_addr, hdr->ramdisk_size);
 
 #ifdef CONFIG_CMDLINE_TAG
-	if (priv.serial_no == NULL) {
-		set_serial_number();
-	}
 	{
+		char command_line[255];
+
+		if (priv.serial_no == NULL)
+			set_serial_number();
+
 		/* Use the command line in the bootimg header instead of
 		 * any hardcoded into u-boot.  Also, Android wants the
 		 * serial number on the command line instead of via
@@ -2484,7 +2507,6 @@ int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		 * do_bootm_linux() will use the bootargs environment variable
 		 * to pass it to the kernel.
 		 */
-		char command_line[255];
 		sprintf(command_line, "%s androidboot.serialno=%s",
 			hdr->cmdline, priv.serial_no);
 		setenv("bootargs", command_line);
@@ -2498,8 +2520,8 @@ int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	free(hdr);
 	do_bootm_linux(0, 0, NULL, &images);
 
-	puts ("booti: Control returned to monitor - resetting...\n");
-	do_reset (cmdtp, flag, argc, argv);
+	puts("booti: Control returned to monitor - resetting...\n");
+	do_reset(cmdtp, flag, argc, argv);
 	return 1;
 
 fail:
@@ -2525,17 +2547,17 @@ void fbt_preboot(void)
 	enum fbt_reboot_type frt;
 
 	if (board_fbt_key_pressed()) {
-		setenv ("preboot", "fastboot");
+		setenv("preboot", "fastboot");
 		return;
 	}
 
 	frt = board_fbt_get_reboot_type();
 	if (frt == FASTBOOT_REBOOT_RECOVERY) {
-		extern int do_booti (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
 		char *boot_cmd[3] = {"booti", NULL, "recovery"};
 		char boot_device[64];
 
-		printf("\n%s: starting recovery img because of reboot flag\n", __func__);
+		printf("\n%s: starting recovery img because of reboot flag\n",
+		       __func__);
 
 		/* pass: booti mmci<N> recovery */
 		sprintf(boot_device, "mmc%d", FASTBOOT_MMC_DEVICE_ID);
@@ -2555,11 +2577,12 @@ void fbt_preboot(void)
 		 * Case: %adb reboot bootloader
 		 * Case: %adb reboot-bootloader
 		 */
-		printf("\n%s: starting fastboot because of reboot flag\n", __func__);
-		setenv ("preboot", "fastboot");
-	} else {
-		printf("\n%s: no special reboot flags, doing normal boot\n", __func__);
-	}
+		printf("\n%s: starting fastboot because of reboot flag\n",
+		       __func__);
+		setenv("preboot", "fastboot");
+	} else
+		printf("\n%s: no special reboot flags, doing normal boot\n",
+		       __func__);
 }
 
 int fbt_send_info(const char *info)
@@ -2567,16 +2590,15 @@ int fbt_send_info(const char *info)
 	int bytes_left;
 	int response_max;
 
-	if (!priv.executing_command) {
+	if (!priv.executing_command)
 		return -1;
-	}
 
 	/* break up info into response sized chunks */
 	bytes_left = strlen(info);
 	/* remove trailing '\n' */
-	if (info[bytes_left-1] == '\n') {
+	if (info[bytes_left-1] == '\n')
 		bytes_left--;
-	}
+
 	/* -4 for the INFO prefix */
 	response_max = sizeof(priv.response) - 4;
 	strcpy(priv.response, "INFO");
