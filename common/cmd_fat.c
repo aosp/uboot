@@ -153,7 +153,7 @@ int do_fat_fsinfo (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	char *ep;
 	block_dev_desc_t *dev_desc=NULL;
 
-	if (argc < 2) {
+	if (argc < 3) {
 		printf("usage: fatinfo <interface> <dev[:part]>\n");
 		return 0;
 	}
