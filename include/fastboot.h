@@ -103,6 +103,17 @@
 /* To activate-deactivate fastboot upload command (not part of OmapZoom) */
 // #define	FASTBOOT_UPLOAD
 
+#define FASTBOOT_MAX_INFO_NAMELEN 32
+
+struct device_info {
+	const char *name;
+	char *value;
+};
+
+struct info_partition_header {
+	u32 magic;
+	u32 num_values;
+};
 
 struct cmd_fastboot_interface {
 
@@ -179,6 +190,10 @@ struct cmd_fastboot_interface {
 #endif
 
 	unsigned int exit;
+
+	/* device specific info */
+	unsigned int dev_info_uninitialized;
+	struct device_info dev_info[FASTBOOT_NUM_DEVICE_INFO];
 };
 
 /* Android-style flash naming */
@@ -239,6 +254,13 @@ struct fastboot_ptentry {
 
 /* Sets the NANDECC to use X-loader/U-boot layout for writing */
 #define FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_2        0x00001000
+
+/* Write the partition as a series of variable/value pairs.
+   It is also a read only partition (if already written to
+   before, do not allow it to be erased or written to again). */
+#define FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO            0x00002000
+
+
 
 /* Status values */
 #define FASTBOOT_OK			0

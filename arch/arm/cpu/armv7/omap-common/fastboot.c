@@ -309,6 +309,8 @@ static void import_efi_partition(struct efi_entry *entry)
 
 	if (!strcmp(e.name,"environment"))
 		e.flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_ENV;
+	if (!strcmp(e.name,"device_info"))
+		e.flags |= FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO;
 	fbt_add_ptn(&e);
 
 	if (e.length > 0x100000)
