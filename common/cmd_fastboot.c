@@ -1454,12 +1454,12 @@ int mmc_get_env_addr(struct mmc *mmc, u32 *env_addr)
 
 #define SPARSE_HEADER_MAJOR_VER 1
 
-static int mmc_write(unsigned char *src, unsigned sector, unsigned len)
+static int mmc_write(unsigned char *src, u64 sector, u64 len)
 {
 	lbaint_t blkcnt = len/priv.dev_desc->blksz;
 	if (priv.dev_desc->block_write(priv.dev_desc->dev,
 				       sector, blkcnt, src) != blkcnt) {
-		printf("mmc write to sector %d of %d bytes"
+		printf("mmc write to sector %llu of %llu bytes"
 		       " (%lu blkcnt) failed\n", sector, len, blkcnt);
 		return -1;
 	}
@@ -1467,7 +1467,7 @@ static int mmc_write(unsigned char *src, unsigned sector, unsigned len)
 }
 
 #ifdef DEBUG
-static int mmc_compare(unsigned char *src, unsigned sector, unsigned len)
+static int mmc_compare(unsigned char *src, u64 sector, u64 len)
 {
 	u8 *data = malloc(priv.dev_desc->blksz);
 	int result = -1;
@@ -1498,15 +1498,14 @@ out:
 }
 #endif
 
-static int _unsparse(unsigned char *source, u32 sector, u32 section_size,
-		     int (*func)(unsigned char *src,
-				 unsigned sector, unsigned len))
+static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
+		     int (*func)(unsigned char *src, u64 sector, u64 len))
 {
 	sparse_header_t *header = (void *) source;
 	u32 i, outlen = 0;
 
 	if ((header->total_blks * header->blk_sz) > section_size) {
-		printf("sparse: section size %d MB limit: exceeded\n",
+		printf("sparse: section size %llu MB limit: exceeded\n",
 				section_size/(1024*1024));
 		return 1;
 	}
@@ -1546,7 +1545,7 @@ static int _unsparse(unsigned char *source, u32 sector, u32 section_size,
 
 			outlen += len;
 			if (outlen > section_size) {
-				printf("sparse: section size %d MB limit:"
+				printf("sparse: section size %llu MB limit:"
 				       " exceeded\n", section_size/(1024*1024));
 				return 1;
 			}
@@ -1579,7 +1578,7 @@ static int _unsparse(unsigned char *source, u32 sector, u32 section_size,
 
 			outlen += len;
 			if (outlen > section_size) {
-				printf("sparse: section size %d MB limit:"
+				printf("sparse: section size %llu MB limit:"
 				       " exceeded\n", section_size/(1024*1024));
 				return 1;
 			}
@@ -1597,7 +1596,7 @@ static int _unsparse(unsigned char *source, u32 sector, u32 section_size,
 	return 0;
 }
 
-static u8 do_unsparse(unsigned char *source, u32 sector, u32 section_size)
+static u8 do_unsparse(unsigned char *source, u64 sector, u64 section_size)
 {
 	if (_unsparse(source, sector, section_size, mmc_write))
 		return 1;
