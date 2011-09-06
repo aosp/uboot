@@ -147,6 +147,7 @@ struct _fbt_config_desc {
 };
 
 static int fbt_handle_response(void);
+static fastboot_ptentry *fastboot_flash_find_ptn(const char *name);
 
 /* defined and used by gadget/ep0.c */
 extern struct usb_string_descriptor **usb_strings;
@@ -238,6 +239,8 @@ static struct usb_endpoint_instance endpoint_instance[NUM_ENDPOINTS + 1];
 #define	SECURE		"no"
 /* U-boot version */
 extern char version_string[];
+
+static const char info_partition_magic[] = {'I', 'n', 'f', 'o'};
 
 static struct cmd_fastboot_interface priv = {
 	.transfer_buffer       = (u8 *)CONFIG_FASTBOOT_TRANSFER_BUFFER,
@@ -552,12 +555,100 @@ void fbt_add_ptn(fastboot_ptentry *ptn)
 	}
 }
 
+static int fbt_load_partition_table(void)
+{
+	struct fastboot_ptentry *info_ptn;
+	unsigned int i;
+
+	if (board_fbt_load_ptbl()) {
+		printf("board_fbt_load_ptbl() failed\n");
+		return -1;
+	}
+
+	priv.dev_desc = get_dev("mmc", FASTBOOT_MMC_DEVICE_ID);
+	if (priv.dev_desc == NULL) {
+		printf("** mmc device %d not supported\n",
+		       FASTBOOT_MMC_DEVICE_ID);
+		return 1;
+	}
+
+	priv.transfer_buffer_blocks = (priv.transfer_buffer_size /
+				       priv.dev_desc->blksz);
+
+	/* load device info partition if it exists */
+	info_ptn = fastboot_flash_find_ptn("device_info");
+	if (info_ptn) {
+		struct info_partition_header *info_header;
+		char *name, *next_name;
+		char *value;
+
+		if (priv.dev_desc->block_read(priv.dev_desc->dev,
+					      info_ptn->start, 1,
+					      priv.transfer_buffer) != 1) {
+			printf("failed to read info partition\n");
+			goto no_existing_info;
+		}
+
+		/* parse the info partition read from mmc */
+		info_header =
+			(struct info_partition_header *)priv.transfer_buffer;
+		name = (char *)(info_header + 1);
+		value = name;
+
+		if (memcmp(&info_header->magic, info_partition_magic,
+			   sizeof(info_partition_magic)) != 0) {
+			printf("info partition magic 0x%x invalid,"
+			       " assuming none\n", info_header->magic);
+			goto no_existing_info;
+		}
+		if (info_header->num_values > FASTBOOT_MAX_NUM_DEVICE_INFO) {
+			printf("info partition num values %d too large "
+			       " (max %d)\n", info_header->num_values,
+			       FASTBOOT_MAX_NUM_DEVICE_INFO);
+			goto no_existing_info;
+		}
+		priv.num_device_info = info_header->num_values;
+		/* the name/value pairs are in the format:
+		 *    name1=value1\n
+		 *    name2=value2\n
+		 * this makes it easier to read if we dump the partition
+		 * to a file
+		 */
+		printf("%d device info entries read from %s partition:\n",
+		       priv.num_device_info, info_ptn->name);
+		for (i = 0; i < priv.num_device_info; i++) {
+			while (*value != '=')
+				value++;
+			*value++ = '\0';
+			next_name = value;
+			while (*next_name != '\n')
+				next_name++;
+			*next_name++ = '\0';
+			priv.dev_info[i].name = strdup(name);
+			priv.dev_info[i].value = strdup(value);
+			printf("\t%s=%s\n", priv.dev_info[i].name,
+			       priv.dev_info[i].value);
+			name = next_name;
+		}
+		priv.dev_info_uninitialized = 0;
+	} else {
+no_existing_info:
+		priv.dev_info_uninitialized = 1;
+		printf("No existing device info found.\n");
+	}
+	return 0;
+}
+
 static fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
 {
 	unsigned int n;
 
-	if (pcount == 0)
-		board_fbt_load_ptbl();
+	if (pcount == 0) {
+		if (fbt_load_partition_table()) {
+			printf("Unable to load partition table, aborting\n");
+			return NULL;
+		}
+	}
 
 	for (n = 0; n < pcount; n++) {
 		/* Make sure a substring is not accepted */
@@ -1358,14 +1449,9 @@ static int fbt_fastboot_init(void)
 	priv.nand_oob_size                 = FASTBOOT_NAND_OOB_SIZE;
 #endif
 
-	priv.dev_desc = get_dev("mmc", FASTBOOT_MMC_DEVICE_ID);
-	if (priv.dev_desc == NULL) {
-		printf("** mmc device %d not supported\n",
-		       FASTBOOT_MMC_DEVICE_ID);
+	if (fbt_load_partition_table())
 		return 1;
-	}
-	priv.transfer_buffer_blocks = (priv.transfer_buffer_size /
-				       priv.dev_desc->blksz);
+
 	return 0;
 }
 
@@ -1377,7 +1463,17 @@ static int fbt_handle_erase(char *cmdbuf)
 	ptn = fastboot_flash_find_ptn(cmdbuf + 6);
 	if (ptn == 0) {
 		sprintf(priv.response, "FAILpartition does not exist");
-	} else {
+		return 0;
+	}
+
+	/* don't allow erasing a valid device info partition */
+	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO) &&
+	    (!priv.dev_info_uninitialized)) {
+		printf("Not allowed to erase %s partition\n", ptn->name);
+		return 0;
+	}
+
+	{
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 		char start[32], length[32];
 		int status, repeat, repeat_max;
@@ -1609,6 +1705,47 @@ static u8 do_unsparse(unsigned char *source, u64 sector, u64 section_size)
 	return 0;
 }
 
+static int fbt_save_info(struct fastboot_ptentry *info_ptn)
+{
+	struct info_partition_header *info_header;
+	char *name;
+	char *value;
+	int i;
+
+	if (!priv.dev_info_uninitialized) {
+		printf("%s partition already initialized, "
+		       " cannot write to it again\n", info_ptn->name);
+		return -1;
+	}
+
+	info_header = (struct info_partition_header *)priv.transfer_buffer;
+	name = (char *)(info_header + 1);
+	memset(info_header, 0, priv.dev_desc->blksz);
+	memcpy(&info_header->magic, info_partition_magic,
+	       sizeof(info_partition_magic));
+	info_header->num_values = priv.num_device_info;
+
+	for (i = 0; i < priv.num_device_info; i++) {
+		unsigned int len = strlen(priv.dev_info[i].name);
+		memcpy(name, priv.dev_info[i].name, len);
+		value = name + len;
+		*value++ = '=';
+		if (priv.dev_info[i].value) {
+			len = strlen(priv.dev_info[i].value);
+			memcpy(value, priv.dev_info[i].value, len);
+			name = value + len;
+			*name++ = '\n';
+		}
+	}
+	if (priv.dev_desc->block_write(priv.dev_desc->dev,
+				       info_ptn->start, 1, info_header) != 1) {
+		printf("mmc write to sector %llu failed", info_ptn->start);
+		return -1;
+	}
+	priv.dev_info_uninitialized = 0;
+	return 0;
+}
+
 static void fbt_handle_flash(char *cmdbuf)
 {
 	struct fastboot_ptentry *ptn;
@@ -1623,6 +1760,14 @@ static void fbt_handle_flash(char *cmdbuf)
 		sprintf(priv.response, "FAILpartition does not exist");
 		return;
 	}
+
+	/* Prevent using flash command to write to device_info partition */
+	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO) {
+		sprintf(priv.response,
+			"FAILpartition not writable using flash command");
+		return;
+	}
+
 	if ((priv.d_bytes > ptn->length) &&
 		!(ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV)) {
 		sprintf(priv.response, "FAILimage too large for partition");
@@ -1785,6 +1930,69 @@ static int fbt_handle_reboot(const char *cmdbuf)
 
 static char tmp_buf[CONFIG_SYS_CBSIZE]; /* copy of fastboot cmdbuf */
 
+static int fbt_handle_oem_setinfo(const char *cmdbuf)
+{
+	char *name, *value;
+	struct device_info *di;
+
+	FBTDBG("oem setinfo\n");
+
+	/* this is only allowed if the device info isn't already
+	 * initlialized in flash
+	 */
+	if (!priv.dev_info_uninitialized) {
+		printf("Not allowed to change device info already in flash\n");
+		strcpy(priv.response, "FAILnot allowed to change"
+		       " device info already in flash");
+		return 0;
+	}
+
+	if (priv.num_device_info == FASTBOOT_MAX_NUM_DEVICE_INFO) {
+		printf("Already at maximum number of device info (%d),"
+		       " no more allowed\n", FASTBOOT_MAX_NUM_DEVICE_INFO);
+		strcpy(priv.response, "FAILmax device info reached");
+		return 0;
+	}
+
+	/* copy to tmp_buf which will be modified by str_tok() */
+	strcpy(tmp_buf, cmdbuf);
+
+	name = strtok(tmp_buf, "=");
+	value = strtok(NULL, "\n");
+	if (!name || !value) {
+		printf("Invalid format for setinfo.\n");
+		printf("Syntax is "
+		       "'fastboot oem setinfo <info_name>=<info_value>\n");
+		strcpy(priv.response, "FAILinvalid device info");
+		return 0;
+	}
+
+	/* we enter new value at end so last slot should be free.
+	 * we don't currently allow changing a value already set.
+	 */
+	di = &priv.dev_info[priv.num_device_info];
+	if (di->name || di->value) {
+		printf("Error, device info entry not free as expected\n");
+		strcpy(priv.response, "FAILinternal error");
+		return 0;
+	}
+
+	di->name = strdup(name);
+	di->value = strdup(value);
+	if ((di->name == NULL) || (di->value == NULL)) {
+		printf("strdup() failed, unable to set info\n");
+		strcpy(priv.response, "FAILstrdup() failure\n");
+		free(di->name);
+		free(di->value);
+		return 0;
+	}
+
+	printf("Set device info %s=%s\n", di->name, di->value);
+	strcpy(priv.response, "OKAY");
+	priv.num_device_info++;
+	return 0;
+}
+
 static int fbt_handle_oem(const char *cmdbuf)
 {
 	cmdbuf += 4;
@@ -1799,6 +2007,32 @@ static int fbt_handle_oem(const char *cmdbuf)
 	if (strcmp(cmdbuf, "unlock") == 0) {
 		FBTDBG("oem unlock\n");
 		printf("\nfastboot: oem unlock not implemented yet!!\n");
+		return 0;
+	}
+
+	/* %fastboot oem setinfo <info_name>=<info_value> */
+	if (strncmp(cmdbuf, "setinfo ", 8) == 0) {
+		cmdbuf += 8;
+		return fbt_handle_oem_setinfo(cmdbuf);
+	}
+
+	/* %fastboot oem saveinfo */
+	if (strcmp(cmdbuf, "saveinfo") == 0) {
+		struct fastboot_ptentry *info_ptn;
+		info_ptn = fastboot_flash_find_ptn("device_info");
+
+		if (info_ptn == NULL) {
+			sprintf(priv.response, "FAILpartition does not exist");
+			return 0;
+		}
+		if (fbt_save_info(info_ptn)) {
+			printf("Writing '%s' FAILED!\n", info_ptn->name);
+			sprintf(priv.response, "FAIL: Write partition");
+		} else {
+			printf("Device info saved to partition '%s'\n",
+			       info_ptn->name);
+			sprintf(priv.response, "OKAY");
+		}
 		return 0;
 	}
 
@@ -2494,6 +2728,7 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 #ifdef CONFIG_CMDLINE_TAG
 	{
 		char command_line[255];
+		int i;
 
 		if (priv.serial_no == NULL)
 			set_serial_number();
@@ -2508,6 +2743,15 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		 */
 		sprintf(command_line, "%s androidboot.serialno=%s",
 			hdr->cmdline, priv.serial_no);
+
+		for (i = 0; i < priv.num_device_info; i++) {
+			/* Append special device specific information like
+			 * MAC addresses */
+			sprintf(command_line, "%s %s=%s",
+				command_line, priv.dev_info[i].name,
+				priv.dev_info[i].value);
+		}
+
 		setenv("bootargs", command_line);
 	}
 #endif
