@@ -103,10 +103,11 @@
 /* To activate-deactivate fastboot upload command (not part of OmapZoom) */
 // #define	FASTBOOT_UPLOAD
 
-#define FASTBOOT_MAX_INFO_NAMELEN 32
+#define FASTBOOT_MAX_INFO_NAMELEN    32
+#define FASTBOOT_MAX_NUM_DEVICE_INFO 32
 
 struct device_info {
-	const char *name;
+	char *name;
 	char *value;
 };
 
@@ -193,7 +194,8 @@ struct cmd_fastboot_interface {
 
 	/* device specific info */
 	unsigned int dev_info_uninitialized;
-	struct device_info dev_info[FASTBOOT_NUM_DEVICE_INFO];
+	unsigned int num_device_info;
+	struct device_info dev_info[FASTBOOT_MAX_NUM_DEVICE_INFO];
 };
 
 /* Android-style flash naming */

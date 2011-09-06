@@ -117,15 +117,19 @@ struct fbt_partition {
 };
 
 struct fbt_partition fbt_partitions[] = {
-	{ "-", 128 },
+	{ "--pad", 128 },
 	{ "xloader", 128 },
 	{ "bootloader", 256 },
-	{ "-", 512 },
+	{ "device_info", 512 }, /* device specific info like MAC addresses.
+				 * read-only once it has been written to.
+				 * bootloader parses this at boot and sends
+				 * the contents to the kernel via cmdline args.
+				 */
 	{ "recovery", 8*1024 },
 	{ "boot", 8*1024 },
 	{ "system", 1024*1024 },
 	{ "cache", 512*1024 },
-	{ "efs", 8*1024 }, /* TBD: possibly for encryption keys, mac addresses, etc.
+	{ "efs", 8*1024 }, /* TBD: possibly for encryption keys,
 			    * minimum size for a ext4 fs is about 8MB
 			    */
 	{ "userdata", 0},
