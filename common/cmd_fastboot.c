@@ -2726,12 +2726,15 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	printf("ramdisk  @ %08x (%d)\n", hdr->ramdisk_addr, hdr->ramdisk_size);
 
 #ifdef CONFIG_CMDLINE_TAG
+	if (priv.serial_no == NULL)
+		set_serial_number();
+
+#ifdef CONFIG_FASTBOOT_PRESERVE_BOOTARGS
+	setenv("hdr_cmdline", (char *)hdr->cmdline);
+#else
 	{
 		char command_line[255];
 		int i;
-
-		if (priv.serial_no == NULL)
-			set_serial_number();
 
 		/* Use the command line in the bootimg header instead of
 		 * any hardcoded into u-boot.  Also, Android wants the
@@ -2754,7 +2757,8 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 		setenv("bootargs", command_line);
 	}
-#endif
+#endif /* CONFIG_FASTBOOT_PRESERVE_BOOTARGS */
+#endif /* CONFIG_CMDLINE_TAG */
 
 	memset(&images, 0, sizeof(images));
 	images.ep = hdr->kernel_addr;
