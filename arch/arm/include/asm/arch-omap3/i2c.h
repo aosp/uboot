@@ -59,6 +59,8 @@ struct i2c {
 	unsigned short res14;
 	unsigned short systest;	/* 0x3c */
 	unsigned short res15;
+	unsigned short bufstat;	/* 0x40 */
+	unsigned short res16;
 };
 
 #endif /* _OMAP3_I2C_H_ */
