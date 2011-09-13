@@ -180,8 +180,16 @@
 /*
  * Environment setup
  */
-
 #define CONFIG_BOOTDELAY	0
+#ifdef CONFIG_MFG
+/*
+ * If this is a build used for manufacturing, force the system into the
+ * diagnostic console automatically every time by deliberately not defining
+ * CONFIG_BOOTCOMMNAD.
+ */
+#else
+#define CONFIG_BOOTCOMMAND "booti mmc0"
+#endif
 
 #define CONFIG_ENV_OVERWRITE
 
@@ -189,8 +197,7 @@
 	"console=ttyS2,115200n8\0" \
 	"usbtty=cdc_acm\0" \
 	"vram=16M\0" \
-	"mmcdev=0\0" \
-        "bootcmd=booti mmc0\0"
+	"mmcdev=0\0"
 
 #define CONFIG_AUTO_COMPLETE		1
 

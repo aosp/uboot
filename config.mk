@@ -267,6 +267,14 @@ endif
 
 #########################################################################
 
+# If make was invoked with "MFG=1" as an argument, define CONFIG_MFG for cpp.
+# This is used to build a variant for manufacturing.
+ifdef MFG
+CFLAGS += -DCONFIG_MFG
+endif
+
+#########################################################################
+
 export	HOSTCC HOSTCFLAGS HOSTLDFLAGS PEDCFLAGS HOSTSTRIP CROSS_COMPILE \
 	AS LD CC CPP AR NM STRIP OBJCOPY OBJDUMP MAKE
 export	CONFIG_SYS_TEXT_BASE PLATFORM_CPPFLAGS PLATFORM_RELFLAGS CPPFLAGS CFLAGS AFLAGS
