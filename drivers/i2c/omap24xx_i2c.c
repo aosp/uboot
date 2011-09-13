@@ -209,13 +209,11 @@ static int i2c_read_internal(u8 devaddr, uint addr, int alen,
 			}
 		}
 
-		/* wait until bus not busy */
-		wait_for_bb();
-
-		status = readw(&i2c_base->stat);
-		if (status & I2C_STAT_NACK) {
-			printf("I2C_READ: received NACK to address\n");
+		status = wait_for_pin();
+		if (status == 0 || status & I2C_STAT_NACK) {
 			i2c_error = 1;
+			printf("%s: i2c error, status = 0x%x\n",
+			       __func__, status);
 			goto read_exit;
 		}
 	}
