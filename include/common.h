@@ -686,6 +686,7 @@ int	tstc(void);
 
 /* stdout */
 void	putc(const char c);
+void	putc_raw(const char c);
 void	puts(const char *s);
 int	printf(const char *fmt, ...)
 		__attribute__ ((format (__printf__, 1, 2)));
@@ -708,6 +709,7 @@ int	fprintf(int file, const char *fmt, ...)
 		__attribute__ ((format (__printf__, 2, 3)));
 void	fputs(int file, const char *s);
 void	fputc(int file, const char c);
+void	fputc_raw(int file, const char c);
 int	ftstc(int file);
 int	fgetc(int file);
 

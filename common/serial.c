@@ -106,6 +106,7 @@ int serial_register (struct serial_device *dev)
 	dev->getc += gd->reloc_off;
 	dev->tstc += gd->reloc_off;
 	dev->putc += gd->reloc_off;
+	dev->putc_raw += gd->reloc_off;
 	dev->puts += gd->reloc_off;
 #endif
 
@@ -190,6 +191,7 @@ void serial_stdio_init (void)
 		dev.start = s->init;
 		dev.stop = s->uninit;
 		dev.putc = s->putc;
+		dev.putc_raw = s->putc_raw;
 		dev.puts = s->puts;
 		dev.getc = s->getc;
 		dev.tstc = s->tstc;
@@ -278,6 +280,18 @@ void serial_putc (const char c)
 	}
 
 	serial_current->putc (c);
+}
+
+void serial_putc_raw (const char c)
+{
+	if (!(gd->flags & GD_FLG_RELOC) || !serial_current) {
+		struct serial_device *dev = default_serial_console ();
+
+		dev->putc_raw (c);
+		return;
+	}
+
+	serial_current->putc_raw (c);
 }
 
 void serial_puts (const char *s)
