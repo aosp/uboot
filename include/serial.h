@@ -15,6 +15,7 @@ struct serial_device {
 	int (*tstc) (void);
 	void (*putc) (const char c);
 	void (*puts) (const char *s);
+	void (*putc_raw) (const char c);
 
 	struct serial_device *next;
 };

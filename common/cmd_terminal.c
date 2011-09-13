@@ -86,21 +86,21 @@ int do_terminal(cmd_tbl_t * cmd, int flag, int argc, char * const argv[])
 				} else {
 					last_tilde = 0;
 					/* write the delayed tilde */
-					dev->putc(esc_ch1);
+					dev->putc_raw(esc_ch1);
 					/* and whatever just came in */
-					dev->putc(c);
+					dev->putc_raw(c);
 				}
 			} else if (saw_esc_dly && (c == esc_ch1)) {
 				last_tilde = 1;
 			} else {
-				dev->putc(c);
+				dev->putc_raw(c);
 			}
 		}
 
 		/* read from serial port and display on console */
 		if (dev->tstc()) {
 			c = dev->getc();
-			putc(c);
+			putc_raw(c);
 		}
 	}
 	return 0;

@@ -49,6 +49,7 @@ struct stdio_dev {
 /* OUTPUT functions */
 
 	void (*putc) (const char c);	/* To put a char			*/
+	void (*putc_raw) (const char c);/* To put a char without translations	*/
 	void (*puts) (const char *s);	/* To put a string (accelerator)	*/
 
 /* INPUT functions */

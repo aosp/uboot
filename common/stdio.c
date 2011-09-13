@@ -77,6 +77,7 @@ static void drv_system_init (void)
 	strcpy (dev.name, "serial");
 	dev.flags = DEV_FLAGS_OUTPUT | DEV_FLAGS_INPUT | DEV_FLAGS_SYSTEM;
 	dev.putc = serial_putc;
+	dev.putc_raw = serial_putc_raw;
 	dev.puts = serial_puts;
 	dev.getc = serial_getc;
 	dev.tstc = serial_tstc;
@@ -88,6 +89,7 @@ static void drv_system_init (void)
 	strcpy (dev.name, "nulldev");
 	dev.flags = DEV_FLAGS_OUTPUT | DEV_FLAGS_INPUT | DEV_FLAGS_SYSTEM;
 	dev.putc = nulldev_putc;
+	dev.putc_raw = nulldev_putc;
 	dev.puts = nulldev_puts;
 	dev.getc = nulldev_input;
 	dev.tstc = nulldev_input;

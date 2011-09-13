@@ -150,6 +150,18 @@ static void console_putc(int file, const char c)
 	}
 }
 
+static void console_putc_raw(int file, const char c)
+{
+	int i;
+	struct stdio_dev *dev;
+
+	for (i = 0; i < cd_count[file]; i++) {
+		dev = console_devices[file][i];
+		if (dev->putc != NULL)
+			dev->putc_raw(c);
+	}
+}
+
 static void console_puts(int file, const char *s)
 {
 	int i;
@@ -185,6 +197,11 @@ static inline int console_tstc(int file)
 static inline void console_putc(int file, const char c)
 {
 	stdio_devices[file]->putc(c);
+}
+
+static inline void console_putc_raw(int file, const char c)
+{
+	stdio_devices[file]->putc_raw(c);
 }
 
 static inline void console_puts(int file, const char *s)
@@ -268,6 +285,12 @@ void fputc(int file, const char c)
 		console_putc(file, c);
 }
 
+void fputc_raw(int file, const char c)
+{
+	if (file < MAX_FILES)
+		console_putc_raw(file, c);
+}
+
 void fputs(int file, const char *s)
 {
 	if (file < MAX_FILES)
@@ -345,6 +368,27 @@ void putc(const char c)
 	} else {
 		/* Send directly to the handler */
 		serial_putc(c);
+	}
+}
+
+void putc_raw(const char c)
+{
+#ifdef CONFIG_SILENT_CONSOLE
+	if (gd->flags & GD_FLG_SILENT)
+		return;
+#endif
+
+#ifdef CONFIG_DISABLE_CONSOLE
+	if (gd->flags & GD_FLG_DISABLE_CONSOLE)
+		return;
+#endif
+
+	if (gd->flags & GD_FLG_DEVINIT) {
+		/* Send to the standard output */
+		fputc_raw(stdout, c);
+	} else {
+		/* Send directly to the handler */
+		serial_putc_raw(c);
 	}
 }
 

@@ -114,7 +114,9 @@ static NS16550_t serial_ports[4] = {
     void eserial##port##_putc (const char c) {\
 	serial_putc_dev(port, c);}\
     void eserial##port##_puts (const char *s) {\
-	serial_puts_dev(port, s);}
+	serial_puts_dev(port, s);}\
+    void eserial##port##_putc_raw (const char c) {\
+	serial_putc_raw_dev(port, c);}
 
 /* Serial device descriptor */
 #define INIT_ESERIAL_STRUCTURE(port,name,bus) {\
@@ -126,7 +128,8 @@ static NS16550_t serial_ports[4] = {
 	eserial##port##_getc,\
 	eserial##port##_tstc,\
 	eserial##port##_putc,\
-	eserial##port##_puts, }
+	eserial##port##_puts,\
+	eserial##port##_putc_raw, }
 
 #endif /* CONFIG_SERIAL_MULTI */
 
