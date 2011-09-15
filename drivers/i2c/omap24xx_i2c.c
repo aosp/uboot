@@ -210,6 +210,11 @@ static int i2c_read_internal(u8 devaddr, uint addr, int alen,
 		}
 
 		status = wait_for_pin();
+		/* ack the stat except [R/X]DR and [R/X]RDY, which
+		 * are done afer the data operation is complete
+		 */
+		writew(status & ~(I2C_STAT_RRDY | I2C_STAT_XRDY),
+		       &i2c_base->stat);
 		if (status == 0 || status & I2C_STAT_NACK) {
 			i2c_error = 1;
 			printf("%s: i2c error, status = 0x%x\n",
