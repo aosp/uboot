@@ -141,6 +141,7 @@ end:
 	}
 }
 
+#ifdef CONFIG_SPL_FAT_SUPPORT
 static void mmc_load_image_fat(struct mmc *mmc)
 {
 	s32 err;
@@ -173,6 +174,7 @@ end:
 		hang();
 	}
 }
+#endif
 
 static void mmc_load_image(void)
 {
@@ -198,10 +200,14 @@ static void mmc_load_image(void)
 	if (boot_mode == MMCSD_MODE_RAW) {
 		debug("boot mode - RAW\n");
 		mmc_load_image_raw(mmc);
-	} else if (boot_mode == MMCSD_MODE_FAT) {
+	}
+#ifdef CONFIG_SPL_FAT_SUPPORT
+	else if (boot_mode == MMCSD_MODE_FAT) {
 		debug("boot mode - FAT\n");
 		mmc_load_image_fat(mmc);
-	} else {
+	}
+#endif
+	else {
 		puts("spl: wrong MMC boot mode\n");
 		hang();
 	}

@@ -25,7 +25,9 @@ include $(TOPDIR)/config.mk
 
 LIB	= $(obj)lib$(BOARD).o
 
+ifndef CONFIG_SPL_BUILD
 COBJS	:= $(BOARD).o steelhead_avr.o
+endif
 
 SRCS	:= $(COBJS:.o=.c)
 OBJS	:= $(addprefix $(obj),$(COBJS))

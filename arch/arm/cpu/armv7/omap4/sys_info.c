@@ -101,26 +101,6 @@ int print_cpuinfo (void)
 	u32 cpu_id = get_cpu_id();
 	u32 device_type = get_device_type();
 
-#if defined(L3_165MHZ)
-	char p_l3[] = "165";
-#elif defined(L3_110MHZ)
-	char p_l3[] = "110";
-#elif defined(L3_133MHZ)
-	char p_l3[] = "133";
-#elif defined(L3_100MHZ)
-	char p_l3[] = "100"
-#endif
-
-#if defined(PRCM_PCLK_OPP1)
-	char p_cpu[] = "1";
-#elif defined(PRCM_PCLK_OPP2)
-	char p_cpu[] = "2";
-#elif defined(PRCM_PCLK_OPP3)
-	char p_cpu[] = "3";
-#elif defined(PRCM_PCLK_OPP4)
-	char p_cpu[] = "4"
-#endif
-
 	cpu_family_s = "OMAP";
 
 	switch (cpu_id) {
@@ -184,8 +164,8 @@ OMAP4430_type:
 		break;
 	}
 
-	printf("OMAP%s-%s, CPU-OPP%s, L3-%sMHz, Max CPU Clock %s\n",
-	       cpu_s, sec_s, p_cpu, p_l3, max_clk);
+	printf("OMAP%s-%s, Max CPU Clock %s\n",
+	       cpu_s, sec_s, max_clk);
 
 	return 0;
 }
