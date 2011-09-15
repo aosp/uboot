@@ -33,11 +33,6 @@
  */
 #define LDELAY		1000000
 
-#define CM_CLKMODE_DPLL_CORE		0x4A004120
-#define CM_CLKMODE_DPLL_PER		0x4A008140
-#define CM_CLKMODE_DPLL_MPU		0x4A004160
-#define CM_CLKSEL_CORE			0x4A004100
-
 struct omap4_prcm_regs {
 	/* cm1.ckgen */
 	u32 cm_clksel_core;

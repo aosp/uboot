@@ -430,7 +430,7 @@ int printf(const char *fmt, ...)
 	/* Print the string */
 	puts(printbuffer);
 
-#ifdef CONFIG_FASTBOOT
+#if defined(CONFIG_FASTBOOT) && !defined(CONFIG_SPL_BUILD)
 	fbt_send_info(printbuffer);
 #endif
 	return i;
