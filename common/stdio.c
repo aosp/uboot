@@ -162,7 +162,7 @@ int stdio_deregister(const char *devname)
 	int l;
 	struct list_head *pos;
 	struct stdio_dev *dev;
-	char temp_names[3][8];
+	char temp_names[3][16];
 
 	dev = stdio_get_by_name(devname);
 
@@ -176,7 +176,7 @@ int stdio_deregister(const char *devname)
 		}
 		memcpy (&temp_names[l][0],
 			stdio_devices[l]->name,
-			sizeof(stdio_devices[l]->name));
+			sizeof(temp_names[l]));
 	}
 
 	list_del(&(dev->list));

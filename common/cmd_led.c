@@ -34,8 +34,9 @@
 struct led_tbl_s {
 	char		*string;	/* String for use in the command */
 	led_id_t	mask;		/* Mask used for calling __led_set() */
-	void		(*on)(void);	/* Optional fucntion for turning LED on */
-	void		(*off)(void);	/* Optional fucntion for turning LED on */
+	void		(*off)(void);	/* Optional function for turning LED off */
+	void		(*on)(void);	/* Optional function for turning LED on */
+	void		(*toggle)(void);/* Optional function for toggling LED */
 };
 
 typedef struct led_tbl_s led_tbl_t;
@@ -57,67 +58,84 @@ static const led_tbl_t led_commands[] = {
 #endif
 #ifdef STATUS_LED_GREEN
 	{ "green", STATUS_LED_GREEN,
-	  .off = green_LED_off, .on = green_LED_on },
+	  .off = green_led_off, .on = green_led_on },
 #endif
 #ifdef STATUS_LED_YELLOW
 	{ "yellow", STATUS_LED_YELLOW,
-	  .off = yellow_LED_off, .on = yellow_LED_on },
+	  .off = yellow_led_off, .on = yellow_led_on },
 #endif
 #ifdef STATUS_LED_RED
 	{ "red", STATUS_LED_RED,
-	  .off = red_LED_off, .on = red_LED_on },
+	  .off = red_led_off, .on = red_led_on },
 #endif
 #ifdef STATUS_LED_BLUE
 	{ "blue", STATUS_LED_BLUE,
-	  .off = blue_LED_off, .on = blue_LED_on },
+	  .off = blue_led_off, .on = blue_led_on },
 #endif
-	{ NULL, 0, NULL, NULL }
+	{ NULL, 0, NULL, NULL, NULL }
 };
 
-int str_onoff (char *var)
+enum led_cmd { LED_ON, LED_OFF, LED_TOGGLE };
+
+enum led_cmd get_led_cmd(char *var)
 {
 	if (strcmp(var, "off") == 0) {
-		return 0;
+		return LED_OFF;
 	}
 	if (strcmp(var, "on") == 0) {
-		return 1;
+		return LED_ON;
 	}
+	if (strcmp(var, "toggle") == 0)
+		return LED_TOGGLE;
 	return -1;
 }
 
 int do_led (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
-	int state, i;
+	int i, match = 0;
+	enum led_cmd cmd;
 
 	/* Validate arguments */
 	if ((argc != 3)) {
 		return cmd_usage(cmdtp);
 	}
 
-	state = str_onoff(argv[2]);
-	if (state < 0) {
+	cmd = get_led_cmd(argv[2]);
+	if (cmd < 0) {
 		return cmd_usage(cmdtp);
 	}
 
-	int do_all = strcmp("all", argv[1]) == 0;
-
 	for (i = 0; led_commands[i].string; i++) {
-		if (do_all || strcmp(led_commands[i].string, argv[1]) == 0) {
-			if (state && led_commands[i].on) {
-				led_commands[i].on();
-			} else if (!state && led_commands[i].off) {
-				led_commands[i].off();
-			} else {
-				__led_set(led_commands[i].mask, state);
-			}
-			if (!do_all) {
+		if ((strcmp("all", argv[1]) == 0) ||
+		    (strcmp(led_commands[i].string, argv[1]) == 0)) {
+			match = 1;
+			switch (cmd) {
+			case LED_ON:
+				if (led_commands[i].on)
+					led_commands[i].on();
+				else
+					__led_set(led_commands[i].mask, 1);
 				break;
+			case LED_OFF:
+				if (led_commands[i].off)
+					led_commands[i].off();
+				else
+					__led_set(led_commands[i].mask, 0);
+				break;
+			case LED_TOGGLE:
+				if (led_commands[i].toggle)
+					led_commands[i].toggle();
+				else
+					__led_toggle(led_commands[i].mask);
 			}
+			/* Need to set only 1 led if led_name wasn't 'all' */
+			if (strcmp("all", argv[1]) != 0)
+				break;
 		}
 	}
 
 	/* If we ran out of matches, print Usage */
-	if (!led_commands[i].string && !do_all) {
+	if (!match) {
 		return cmd_usage(cmdtp);
 	}
 
@@ -153,6 +171,6 @@ U_BOOT_CMD(
 #ifdef STATUS_LED_BLUE
 	"blue|"
 #endif
-	"all] [on|off]",
-	"led [led_name] [on|off] sets or clears led(s)"
+	"all] [on|off|toggle]",
+	"led [led_name] [on|off|toggle] sets or clears led(s)"
 );
