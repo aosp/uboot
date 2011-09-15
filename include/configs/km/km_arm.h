@@ -67,17 +67,16 @@
 #define CONFIG_KM_CRAMFS_ADDR	0x2400000
 #define CONFIG_KM_KERNEL_ADDR	0x2000000	/* 4096KBytes */
 
+/* architecture specific default bootargs */
+#define CONFIG_KM_DEF_BOOT_ARGS_CPU					\
+		"bootcountaddr=${bootcountaddr} ${mtdparts}"
+
 #define CONFIG_KM_DEF_ENV_CPU						\
-	"addbootcount="							\
-		"setenv bootargs ${bootargs} "				\
-		"bootcountaddr=${bootcountaddr}\0"			\
-	"addmtdparts=setenv bootargs ${bootargs} ${mtdparts}\0"		\
-	"boot=bootm ${actual_kernel_addr} - -\0"			\
+	"boot=bootm ${load_addr_r} - -\0"				\
 	"cramfsloadfdt=true\0"						\
+	"u-boot="xstr(CONFIG_HOSTNAME) "/u-boot.kwb\0"			\
 	CONFIG_KM_DEF_ENV_UPDATE					\
 	""
-
-#define CONFIG_KM_ARCH_DBG_FILE		"scripts/debug-arm-env.txt"
 
 #define CONFIG_SKIP_LOWLEVEL_INIT	/* disable board lowlevel_init */
 #define CONFIG_MISC_INIT_R
@@ -196,6 +195,12 @@ int get_scl(void);
 
 #endif
 
+/* EEprom support 24C128, 24C256 valid for environment eeprom */
+#define CONFIG_SYS_I2C_MULTI_EEPROMS
+#define CONFIG_SYS_EEPROM_PAGE_WRITE_ENABLE
+#define CONFIG_SYS_EEPROM_PAGE_WRITE_BITS	6 /* 64 Byte write page */
+#define CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS	10
+
 #define CONFIG_SYS_I2C_EEPROM_ADDR	0x50
 #define CONFIG_SYS_I2C_EEPROM_ADDR_LEN	2
 
@@ -229,7 +234,7 @@ int get_scl(void);
 #define	CONFIG_KM_DEF_ENV_UPDATE					\
 	"update="							\
 		"spi on;sf probe 0;sf erase 0 50000;"			\
-		"sf write ${u-boot_addr_r} 0 ${filesize};"		\
+		"sf write ${load_addr_r} 0 ${filesize};"		\
 		"spi off\0"
 
 /*
@@ -243,7 +248,7 @@ int get_scl(void);
 		" ${addr} " xstr(CONFIG_ENV_OFFSET) " 4 && "		\
 		"eeprom write " xstr(CONFIG_SYS_DEF_EEPROM_ADDR)	\
 		" ${addr} " xstr(CONFIG_ENV_OFFSET_REDUND) " 4\0"	\
-	"rootpath=/opt/eldk/arm\0"					\
+	"arch=arm\0"							\
 	"EEprom_ivm=" KM_IVM_BUS "\0"					\
 	""
 

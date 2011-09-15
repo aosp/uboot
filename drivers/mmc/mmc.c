@@ -115,7 +115,8 @@ int mmc_send_status(struct mmc *mmc, int timeout)
 
 	cmd.cmdidx = MMC_CMD_SEND_STATUS;
 	cmd.resp_type = MMC_RSP_R1;
-	cmd.cmdarg = 0;
+	if (!mmc_host_is_spi(mmc))
+		cmd.cmdarg = mmc->rca << 16;
 	cmd.flags = 0;
 
 	do {
@@ -1168,12 +1169,14 @@ int mmc_register(struct mmc *mmc)
 	return 0;
 }
 
+#ifdef CONFIG_PARTITIONS
 block_dev_desc_t *mmc_get_dev(int dev)
 {
 	struct mmc *mmc = find_mmc_device(dev);
 
 	return mmc ? &mmc->block_dev : NULL;
 }
+#endif
 
 int mmc_init(struct mmc *mmc)
 {

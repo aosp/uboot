@@ -38,11 +38,23 @@
 #include <asm/arch/mem.h>
 #include <asm/cache.h>
 #include <asm/armv7.h>
+#include <asm/arch/gpio.h>
 
 /* Declarations */
 extern omap3_sysinfo sysinfo;
 static void omap3_setup_aux_cr(void);
 static void omap3_invalidate_l2_cache_secure(void);
+
+static const struct gpio_bank gpio_bank_34xx[6] = {
+	{ (void *)OMAP34XX_GPIO1_BASE, METHOD_GPIO_24XX },
+	{ (void *)OMAP34XX_GPIO2_BASE, METHOD_GPIO_24XX },
+	{ (void *)OMAP34XX_GPIO3_BASE, METHOD_GPIO_24XX },
+	{ (void *)OMAP34XX_GPIO4_BASE, METHOD_GPIO_24XX },
+	{ (void *)OMAP34XX_GPIO5_BASE, METHOD_GPIO_24XX },
+	{ (void *)OMAP34XX_GPIO6_BASE, METHOD_GPIO_24XX },
+};
+
+const struct gpio_bank *const omap_gpio_bank = gpio_bank_34xx;
 
 /******************************************************************************
  * Routine: delay
@@ -388,5 +400,13 @@ void v7_outer_cache_disable(void)
 	 * by an erratum)
 	 */
 	omap3_update_aux_cr(0, 0x2);
+}
+#endif
+
+#ifndef CONFIG_SYS_DCACHE_OFF
+void enable_caches(void)
+{
+	/* Enable D-cache. I-cache is already enabled in start.S */
+	dcache_enable();
 }
 #endif

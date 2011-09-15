@@ -130,17 +130,22 @@ static const table_entry_t uimage_os[] = {
 };
 
 static const table_entry_t uimage_type[] = {
-	{	IH_TYPE_INVALID,    NULL,	  "Invalid Image",	},
 	{	IH_TYPE_FILESYSTEM, "filesystem", "Filesystem Image",	},
 	{	IH_TYPE_FIRMWARE,   "firmware",	  "Firmware",		},
+	{	IH_TYPE_FLATDT,     "flat_dt",    "Flat Device Tree",	},
+	{	IH_TYPE_INVALID,    NULL,	  "Invalid Image",	},
+	{	IH_TYPE_IMXIMAGE,   "imximage",   "Freescale i.MX Boot Image",},
 	{	IH_TYPE_KERNEL,	    "kernel",	  "Kernel Image",	},
+	{	IH_TYPE_KWBIMAGE,   "kwbimage",   "Kirkwood Boot Image",},
 	{	IH_TYPE_MULTI,	    "multi",	  "Multi-File Image",	},
+	{	IH_TYPE_OMAPIMAGE,  "omapimage",  "TI OMAP SPL With GP CH",},
 	{	IH_TYPE_RAMDISK,    "ramdisk",	  "RAMDisk Image",	},
 	{	IH_TYPE_SCRIPT,     "script",	  "Script",		},
 	{	IH_TYPE_STANDALONE, "standalone", "Standalone Program", },
 	{	IH_TYPE_FLATDT,     "flat_dt",    "Flat Device Tree",	},
 	{	IH_TYPE_KWBIMAGE,   "kwbimage",   "Kirkwood Boot Image",},
 	{	IH_TYPE_IMXIMAGE,   "imximage",   "Freescale i.MX Boot Image",},
+	{	IH_TYPE_UBLIMAGE,   "ublimage",   "Davinci UBL image",},
 	{	-1,		    "",		  "",			},
 };
 
@@ -965,17 +970,6 @@ int boot_get_ramdisk (int argc, char * const argv[], bootm_headers_t *images,
 			rd_data = rd_len = rd_load = 0;
 			return 1;
 		}
-
-#if defined(CONFIG_B2) || defined(CONFIG_EVB4510) || defined(CONFIG_ARMADILLO)
-		/*
-		 * We need to copy the ramdisk to SRAM to let Linux boot
-		 */
-		if (rd_data) {
-			memmove ((void *)rd_load, (uchar *)rd_data, rd_len);
-			rd_data = rd_load;
-		}
-#endif /* CONFIG_B2 || CONFIG_EVB4510 || CONFIG_ARMADILLO */
-
 	} else if (images->legacy_hdr_valid &&
 			image_check_type (&images->legacy_hdr_os_copy, IH_TYPE_MULTI)) {
 		/*
