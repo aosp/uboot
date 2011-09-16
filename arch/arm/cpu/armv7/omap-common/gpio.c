@@ -234,9 +234,25 @@ int gpio_request(int gpio, const char *label)
 
 /**
  * Reset and free the gpio after using it.
+ *
+ * Note: do not actually do this in manufacturing builds.  The Tungsten 
+ * project uses the uboot gpio console during factory line diagnostics to do
+ * basic pin IO tests.  The consoles code follows the pattern of
+ *
+ * 1) Request target gpio
+ * 2) Get/Set/Toggle target gpio
+ * 3) Free target gpio
+ *
+ * Allowing the implementation of free to reset a given GPIO back to being an
+ * input causes the console's pattern to break the diags which need the pin to
+ * hold its state after the command has been issued until the external test rig
+ * can verify the pin state.  For now, we just #if this out; but there probably
+ * should be a more general fix applied to the console commands at some future
+ * point in time.
  */
 void gpio_free(unsigned gpio)
 {
+#ifndef CONFIG_MFG
 	const struct gpio_bank *bank;
 
 	if (check_gpio(gpio) < 0)
@@ -244,4 +260,5 @@ void gpio_free(unsigned gpio)
 	bank = get_gpio_bank(gpio);
 
 	_set_gpio_direction(bank, get_gpio_index(gpio), 1);
+#endif
 }

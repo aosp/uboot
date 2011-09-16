@@ -182,13 +182,17 @@
 #define CONFIG_BOOTDELAY	0
 #ifdef CONFIG_MFG
 /*
- * If this is a build used for manufacturing, force the system into the
- * diagnostic console automatically every time by deliberately not defining
- * CONFIG_BOOTCOMMNAD.
+ * Manufacturing build:
+ * + Force the system into the diagnostic console automatically every time by
+ *   deliberately not defining CONFIG_BOOTCOMMAND.
+ * + Turn on the gpio console commands.
  */
+#define CONFIG_CMD_GPIO
 #else
 #define CONFIG_BOOTCOMMAND "booti mmc0"
 #endif
+
+#define name_to_gpio(name) tungsten_name_to_gpio(name)
 
 #define CONFIG_ENV_OVERWRITE
 

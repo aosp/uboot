@@ -61,7 +61,6 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	{GPMC_CLK, (PTD | M3)},						/* gpio_55 */
 	{GPMC_NADV_ALE, (M3)},						/* gpio_56 */
 	{GPMC_NBE0_CLE, (M3)},						/* gpio_59 */
-	{GPMC_NBE1, (PTD | M3)},					/* gpio_60 */
 	{GPMC_WAIT0, (PTU | IEN | M3)},					/* gpio_61 */
 	{GPMC_WAIT1,  (PTD | OFF_EN | OFF_PD | OFF_OUT_PTD | M3)},	/* gpio_62 */
 	{C2C_DATA11, (PTD | M3)},					/* gpio_100 */
@@ -69,8 +68,6 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	{C2C_DATA13, (PTD | M3)},					/* gpio_102 */
 	{C2C_DATA14, (M1)},						/* dsi2_te0 */
 	{C2C_DATA15, (PTD | M3)},					/* gpio_104 */
-	{HDMI_HPD, (M0)},						/* hdmi_hpd */
-	{HDMI_CEC, (M0)},						/* hdmi_cec */
 	{HDMI_DDC_SCL, (PTU | M0)},					/* hdmi_ddc_scl */
 	{HDMI_DDC_SDA, (PTU | IEN | M0)},				/* hdmi_ddc_sda */
 	{CSI21_DX0, (IEN | M0)},					/* csi21_dx0 */
@@ -107,7 +104,6 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	{USBC1_ICUSB_DP, (IEN | M0)},					/* usbc1_icusb_dp */
 	{USBC1_ICUSB_DM, (IEN | M0)},					/* usbc1_icusb_dm */
 	{ABE_MCBSP2_CLKX, (IEN | OFF_EN | OFF_PD | OFF_IN | M0)},	/* abe_mcbsp2_clkx */
-	{ABE_MCBSP2_DR, (IEN | OFF_EN | OFF_OUT_PTD | M0)},		/* abe_mcbsp2_dr */
 	{ABE_MCBSP2_DX, (OFF_EN | OFF_OUT_PTD | M0)},			/* abe_mcbsp2_dx */
 	{ABE_MCBSP2_FSX, (IEN | OFF_EN | OFF_PD | OFF_IN | M0)},	/* abe_mcbsp2_fsx */
 	{ABE_MCBSP1_CLKX, (IEN | M0)},					/* abe_mcbsp1_clkx */
@@ -206,6 +202,21 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	{DPM_EMU17, (IEN | M5)},					/* dispc2_data2 */
 	{DPM_EMU18, (IEN | M5)},					/* dispc2_data1 */
 	{DPM_EMU19, (IEN | M5)},					/* dispc2_data0 */
+#ifndef CONFIG_MFG
+	{ABE_MCBSP2_DR, (IEN | OFF_EN | OFF_OUT_PTD | M0)},		/* abe_mcbsp2_dr */
+	{HDMI_HPD, (M0)},						/* hdmi_hpd */
+	{HDMI_CEC, (M0)},						/* hdmi_cec */
+	{GPMC_NBE1, (PTD | M3)},					/* gpio_60 */
+#else
+	/* during the first stage of manufacturing diagnostics, many pins are
+	 * configured as GPIOs for basic connectivity testing.  This section
+	 * makes sure pins are properly configured as either inputs or outputs
+	 * for diagnostics. */
+	{ABE_MCBSP2_DR, (M3)},						/* gpio_111 - output, no pullup/down */
+	{HDMI_HPD, (IEN | PTD | M3)},					/* gpio_63  - input,  pulldown */
+	{HDMI_CEC, (M3)},						/* gpio_64  - output, no pullup/down */
+	{GPMC_NBE1, (M3)},						/* gpio_60  - output, no pullup/down */
+#endif
 };
 
 static const struct pad_conf_entry wkup_padconf_array_non_essential[] = {

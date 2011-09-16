@@ -34,6 +34,7 @@
 #include <fastboot.h>
 #include <mmc.h>
 #include <malloc.h>
+#include <linux/string.h>
 
 #include "tungsten_mux_data.h"
 
@@ -134,4 +135,33 @@ int board_late_init(void)
 	fbt_preboot();
 
 	return 0;
+}
+
+
+struct gpio_name_mapping {
+	const char* name;
+	int num;
+};
+
+int tungsten_name_to_gpio(const char* name) {
+	static const struct gpio_name_mapping map[] = {
+		{ "spdif",		111 },
+		{ "hdmi_hpd",		63 },
+		{ "hdmi_cec",		64 },
+		{ "hdmi_ct_cp_hpd",	60 },
+	};
+	int i;
+	const char* tmp;
+
+	for (i = 0; i < ARRAY_SIZE(map); ++i) {
+		if (!strcmp(name, map[i].name))
+			return map[i].num;
+	}
+
+	for (tmp = name; *tmp; ++tmp)
+		if ((*tmp < '0') || (*tmp >
+							'9'))
+			return -1;
+
+	return simple_strtoul(name, NULL, 10);
 }
