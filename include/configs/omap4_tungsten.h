@@ -275,9 +275,7 @@
 #endif
 
 /* Defines for SPL */
-//#define CONFIG_SPL
-
-#ifdef CONFIG_SPL
+#define CONFIG_SPL
 #define CONFIG_SPL_TEXT_BASE		0x40304350
 #define CONFIG_SPL_MAX_SIZE		(38 * 1024)
 #define CONFIG_SPL_STACK		LOW_LEVEL_SRAM_STACK
@@ -285,20 +283,13 @@
 #define CONFIG_SPL_BSS_START_ADDR	0x80000000
 #define CONFIG_SPL_BSS_MAX_SIZE		0x80000		/* 512 KB */
 
-#define CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR	0x300 /* address 0x60000 */
+#define CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR	0x200 /* address 0x40000 */
 #define CONFIG_SYS_U_BOOT_MAX_SIZE_SECTORS	0x200 /* 256 KB */
-#if 0
-#define CONFIG_SYS_MMC_SD_FAT_BOOT_PARTITION	1
-#define CONFIG_SPL_FAT_LOAD_PAYLOAD_NAME	"u-boot.img"
-#endif
 
 #define CONFIG_SPL_LIBCOMMON_SUPPORT
 #define CONFIG_SPL_LIBDISK_SUPPORT
 #define CONFIG_SPL_I2C_SUPPORT
 #define CONFIG_SPL_MMC_SUPPORT
-#if 0
-#define CONFIG_SPL_FAT_SUPPORT
-#endif
 #define CONFIG_SPL_LIBGENERIC_SUPPORT
 #define CONFIG_SPL_SERIAL_SUPPORT
 #define CONFIG_SPL_LDSCRIPT "arch/arm/cpu/armv7/omap-common/u-boot-spl.lds"
@@ -310,9 +301,5 @@
  * other needs.
  */
 #define CONFIG_SYS_TEXT_BASE		0x80100000
-
-#else
-#define CONFIG_SYS_TEXT_BASE		0x80e80000
-#endif
 
 #endif /* __CONFIG_H */
