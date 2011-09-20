@@ -224,7 +224,7 @@ static inline void wait_for_bypass(u32 *const base)
 
 	if (!wait_on_value(ST_DPLL_CLK_MASK, 0, &dpll_regs->cm_idlest_dpll,
 				LDELAY)) {
-		printf("Bypassing DPLL failed %p\n", base);
+		printf("Bypassing DPLL failed for 0x%p\n", base);
 	}
 }
 
@@ -243,7 +243,7 @@ static inline void wait_for_lock(u32 *const base)
 
 	if (!wait_on_value(ST_DPLL_CLK_MASK, ST_DPLL_CLK_MASK,
 		&dpll_regs->cm_idlest_dpll, LDELAY)) {
-		printf("DPLL locking failed for %p\n", base);
+		printf("DPLL locking failed for 0x%p\n", base);
 		hang();
 	}
 }
@@ -368,7 +368,6 @@ void configure_mpu_dpll(void)
 		clrbits_le32(&mpu_dpll_regs->cm_clksel_dpll,
 			CM_CLKSEL_DCC_EN_MASK);
 	}
-
 	do_setup_dpll(&prcm->cm_clkmode_dpll_mpu, params, DPLL_LOCK);
 	debug("MPU DPLL locked\n");
 }
@@ -603,7 +602,7 @@ static inline void enable_clock_domain(u32 *const clkctrl_reg, u32 enable_mode)
 {
 	clrsetbits_le32(clkctrl_reg, CD_CLKCTRL_CLKTRCTRL_MASK,
 			enable_mode << CD_CLKCTRL_CLKTRCTRL_SHIFT);
-	debug("Enable clock domain - 0x%08x\n", clkctrl_reg);
+	debug("Enable clock domain - 0x%p\n", clkctrl_reg);
 }
 
 static inline void wait_for_clk_enable(u32 *clkctrl_addr)
@@ -630,7 +629,7 @@ static inline void enable_clock_module(u32 *const clkctrl_addr, u32 enable_mode,
 {
 	clrsetbits_le32(clkctrl_addr, MODULE_CLKCTRL_MODULEMODE_MASK,
 			enable_mode << MODULE_CLKCTRL_MODULEMODE_SHIFT);
-	debug("Enable clock module - 0x%08x\n", clkctrl_addr);
+	debug("Enable clock module - 0x%p\n", clkctrl_addr);
 	if (wait_for_enable)
 		wait_for_clk_enable(clkctrl_addr);
 }
