@@ -187,42 +187,72 @@ static u32 cortex_a9_rev(void)
 
 static void init_omap4_revision(void)
 {
-	/*
-	 * For some of the ES2/ES1 boards ID_CODE is not reliable:
-	 * Also, ES1 and ES2 have different ARM revisions
-	 * So use ARM revision for identification
-	 */
-	unsigned int arm_rev = cortex_a9_rev();
+	u32 idcode;
+	u8 rev;
 
-	switch (arm_rev) {
-	case MIDR_CORTEX_A9_R0P1:
-		*omap4_revision = OMAP4430_ES1_0;
-		break;
-	case MIDR_CORTEX_A9_R1P2:
-		switch (readl(CONTROL_ID_CODE)) {
-		case OMAP4_CONTROL_ID_CODE_ES2_0:
-			*omap4_revision = OMAP4430_ES2_0;
+	/*
+	 * NOTE: OMAP4460+ uses ramp system for identification and hawkeye
+	 * variable is reused for the same. Since the values are unique
+	 * we continue to use the current system
+	 */
+	u16 hawkeye;
+
+	/*
+	 * The IC rev detection is done with hawkeye and rev.
+	 * Note that rev does not map directly to defined processor
+	 * revision numbers as ES1.0 uses value 0.
+	 */
+	idcode = readl(CONTROL_ID_CODE);
+	hawkeye = (idcode >> 12) & 0xffff;
+	rev = (idcode >> 28) & 0xf;
+
+	/*
+	 * Few initial 4430 ES2.0 samples IDCODE is same as ES1.0
+	 * Use ARM register to detect the correct ES version
+	 */
+	if (!rev && (hawkeye != 0xb94e)) {
+		idcode = cortex_a9_rev();
+		rev = (idcode & 0xf) - 1;
+	}
+
+	switch (hawkeye) {
+	case 0xb852:
+		switch (rev) {
+		case 0:
+			*omap4_revision = OMAP4430_ES1_0;
 			break;
-		case OMAP4_CONTROL_ID_CODE_ES2_1:
-			*omap4_revision = OMAP4430_ES2_1;
-			break;
-		case OMAP4_CONTROL_ID_CODE_ES2_2:
-			*omap4_revision = OMAP4430_ES2_2;
-			break;
+		case 1:
 		default:
 			*omap4_revision = OMAP4430_ES2_0;
+		}
+		break;
+	case 0xb95c:
+		switch (rev) {
+		case 3:
+			*omap4_revision = OMAP4430_ES2_1;
+			break;
+		case 4:
+			*omap4_revision = OMAP4430_ES2_2;
+			break;
+		case 6:
+		default:
+			*omap4_revision = OMAP4430_ES2_3;
+		}
+		break;
+	case 0xb94e:
+		switch (rev) {
+		case 0:
+			*omap4_revision = OMAP4460_ES1_0;
+			break;
+		case 2:
+		default:
+			*omap4_revision = OMAP4460_ES1_1;
 			break;
 		}
 		break;
-	case MIDR_CORTEX_A9_R1P3:
-		*omap4_revision = OMAP4430_ES2_3;
-		break;
-	case MIDR_CORTEX_A9_R2P10:
-		*omap4_revision = OMAP4460_ES1_0;
-		break;
 	default:
-		*omap4_revision = OMAP4430_SILICON_ID_INVALID;
-		break;
+		/* Unknown default to latest silicon rev as default */
+		*omap4_revision = OMAP4430_ES2_2;
 	}
 }
 

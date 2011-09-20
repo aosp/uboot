@@ -133,7 +133,11 @@ OMAP4430_type:
 		}
 		break;
 	case OMAP4460_ES10:
-		cpu_s = "4460";
+		cpu_s = "4460 ES1.0";
+		goto OMAP4460_type;
+	case OMAP4460_ES11:
+		cpu_s = "4460 ES1.1";
+OMAP4460_type:
 		switch (silicon_type) {
 		case SILICON_TYPE_STANDARD_PERFORMANCE:
 		  max_clk = "1.2 GHz";

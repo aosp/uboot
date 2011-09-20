@@ -53,6 +53,7 @@ struct ctrl_id {
 #define OMAP4430_ES22	0x4b95c02f
 #define OMAP4430_ES23	0x6b95c02f
 #define OMAP4460_ES10	0x0b94e02f
+#define OMAP4460_ES11	0x2b94e02f
 
 /* device_type is bits 7:0 of prod_id_0 */
 #define DEVICE_TYPE_MASK 0x000000ff
