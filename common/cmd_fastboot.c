@@ -1556,7 +1556,7 @@ static int mmc_write(unsigned char *src, u64 sector, u64 len)
 	if (priv.dev_desc->block_write(priv.dev_desc->dev,
 				       sector, blkcnt, src) != blkcnt) {
 		printf("mmc write to sector %llu of %llu bytes"
-		       " (%lu blkcnt) failed\n", sector, len, blkcnt);
+		       " (%ld blkcnt) failed\n", sector, len, blkcnt);
 		return -1;
 	}
 	return 0;
@@ -1576,11 +1576,11 @@ static int mmc_compare(unsigned char *src, u64 sector, u64 len)
 	while (len > 0) {
 		if (priv.dev_desc->block_read(priv.dev_desc->dev,
 					      sector, 1, data) != 1) {
-			printf("mmc read error sector %d\n", sector);
+			printf("mmc read error sector %llu\n", sector);
 			goto out;
 		}
 		if (memcmp(data, src, priv.dev_desc->blksz)) {
-			printf("mmc data mismatch sector %d\n", sector);
+			printf("mmc data mismatch sector %llu\n", sector);
 			goto out;
 		}
 		len -= priv.dev_desc->blksz;
@@ -1622,7 +1622,7 @@ static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
 	source += header->file_hdr_sz;
 
 	for (i = 0; i < header->total_chunks; i++) {
-		unsigned int len = 0;
+		u64 clen = 0;
 		int r;
 		chunk_header_t *chunk = (void *) source;
 
@@ -1631,15 +1631,15 @@ static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
 
 		switch (chunk->chunk_type) {
 		case CHUNK_TYPE_RAW:
-			len = chunk->chunk_sz * header->blk_sz;
+			clen = (u64)chunk->chunk_sz * header->blk_sz;
 
-			if (chunk->total_sz != (len + sizeof(chunk_header_t))) {
+			if (chunk->total_sz != (clen + sizeof(chunk_header_t))) {
 				printf("sparse: bad chunk size for"
 				       " chunk %d, type Raw\n", i);
 				return 1;
 			}
 
-			outlen += len;
+			outlen += clen;
 			if (outlen > section_size) {
 				printf("sparse: section size %llu MB limit:"
 				       " exceeded\n", section_size/(1024*1024));
@@ -1647,17 +1647,17 @@ static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
 			}
 #ifdef DEBUG
 			printf("sparse: RAW blk=%d bsz=%d:"
-			       " write(sector=%d,len=%d)\n",
-			       chunk->chunk_sz, header->blk_sz, sector, len);
+			       " write(sector=%llu,clen=%llu)\n",
+			       chunk->chunk_sz, header->blk_sz, sector, clen);
 #endif
-			r = func(source, sector, len);
+			r = func(source, sector, clen);
 			if (r < 0) {
 				printf("sparse: mmc func failed\n");
 				return 1;
 			}
 
-			sector += (len / 512);
-			source += len;
+			sector += (clen / 512);
+			source += clen;
 			break;
 
 		case CHUNK_TYPE_DONT_CARE:
@@ -1665,20 +1665,20 @@ static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
 				printf("sparse: bogus DONT CARE chunk\n");
 				return 1;
 			}
-			len = chunk->chunk_sz * header->blk_sz;
+			clen = chunk->chunk_sz * header->blk_sz;
 #ifdef DEBUG
 			printf("sparse: DONT_CARE blk=%d bsz=%d:"
-			       " skip(sector=%d,len=%d)\n",
-			       chunk->chunk_sz, header->blk_sz, sector, len);
+			       " skip(sector=%llu,clen=%llu)\n",
+			       chunk->chunk_sz, header->blk_sz, sector, clen);
 #endif
 
-			outlen += len;
+			outlen += clen;
 			if (outlen > section_size) {
 				printf("sparse: section size %llu MB limit:"
 				       " exceeded\n", section_size/(1024*1024));
 				return 1;
 			}
-			sector += (len / 512);
+			sector += (clen / 512);
 			break;
 
 		default:
@@ -1697,7 +1697,7 @@ static u8 do_unsparse(unsigned char *source, u64 sector, u64 section_size)
 	if (_unsparse(source, sector, section_size, mmc_write))
 		return 1;
 #ifdef DEBUG
-	printf("sparse: compare mmc slot[%d] @ sector %d\n",
+	printf("sparse: compare mmc slot[%d] @ sector %llu\n",
 	       FASTBOOT_MMC_DEVICE_ID, sector);
 	if (_unsparse(source, sector, section_size, mmc_compare))
 		return 1;
