@@ -246,7 +246,6 @@
 #endif
 
 /* which initialization functions to call for this board */
-#define CONFIG_BOARD_EARLY_INIT_F	1     /* Call board_early_init_f */
 #define BOARD_LATE_INIT			1
 
 /*

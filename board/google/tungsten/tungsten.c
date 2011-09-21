@@ -51,19 +51,12 @@ const struct omap_sysinfo sysinfo = {
  */
 int board_init(void)
 {
+	/* gpmc_init() touches bss, which cannot be used until
+	 * after relocation.
+	 */
+	gpmc_init();
 	gd->bd->bi_arch_number = MACH_TYPE_STEELHEAD;
 	gd->bd->bi_boot_params = (0x80000000 + 0x100); /* boot param addr */
-	return 0;
-}
-
-/**
- * @brief board_early_init_f
- *
- * @return 0
- */
-int board_early_init_f(void)
-{
-	gpmc_init();
 	return 0;
 }
 
