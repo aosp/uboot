@@ -124,6 +124,18 @@
 #define CONFIG_MUSB_UDC			1
 #define CONFIG_USB_OMAP3		1
 
+/* Disable some non-essential dpll and clock setup because it
+ * increases power consumption and heat significantly.  We'll let
+ * the kernel initialize these.
+ */
+#define CONFIG_SKIP_NON_ESSENTIAL_CLOCKS 1
+
+/* Don't change the MPU dpll.  Leave it as the ROM bootloader set it.
+   This reduces power consumption in the bootloader.  We run slower
+   but we're fast enough for now and allows us to stay running
+   in the bootloader longer.
+*/
+#define CONFIG_SKIP_CONFIGURE_MPU_DPLL 1
 
 /* Fastboot settings
  */

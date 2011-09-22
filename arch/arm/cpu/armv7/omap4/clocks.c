@@ -332,6 +332,23 @@ u32 omap4_ddr_clk(void)
 	return ddr_clk;
 }
 
+static void print_current_freq(u32 *const base)
+{
+	u32 temp;
+	struct dpll_regs *const dpll_regs = (struct dpll_regs *)base;
+	u32 freq_in_khz;
+	u32 sysclk_ind =  get_sys_clk_index();
+	int m, n;
+
+	temp = readl(&dpll_regs->cm_clksel_dpll);
+	m = (temp & CM_CLKSEL_DPLL_M_MASK) >> CM_CLKSEL_DPLL_M_SHIFT;
+	n = (temp & CM_CLKSEL_DPLL_N_MASK) >> CM_CLKSEL_DPLL_N_SHIFT;
+	freq_in_khz = (((sys_clk_array[sysclk_ind] / 1000) *
+			(m * 2)) / (n + 1));
+	printf("Freq for base 0x%p = %dKHz(%dMHz), M = %d, N = %d\n",
+	       base, freq_in_khz, freq_in_khz / 1000, m, n);
+}
+
 /*
  * Lock MPU dpll
  *
@@ -369,6 +386,10 @@ void configure_mpu_dpll(void)
 			CM_CLKSEL_DCC_EN_MASK);
 	}
 	do_setup_dpll(&prcm->cm_clkmode_dpll_mpu, params, DPLL_LOCK);
+
+	printf("%s: mpu freq after change:\n", __func__);
+	print_current_freq(&prcm->cm_clkmode_dpll_mpu);
+
 	debug("MPU DPLL locked\n");
 }
 
@@ -400,8 +421,13 @@ static void setup_dplls(void)
 			&per_dpll_params_1536mhz[sysclk_ind], DPLL_LOCK);
 	debug("PER DPLL locked\n");
 
+	printf("%s: mpu freq before any changes:\n", __func__);
+	print_current_freq(&prcm->cm_clkmode_dpll_mpu);
+
+#ifndef CONFIG_SKIP_CONFIGURE_MPU_DPLL
 	/* MPU dpll */
 	configure_mpu_dpll();
+#endif
 }
 
 static void setup_non_essential_dplls(void)
@@ -618,7 +644,7 @@ static inline void wait_for_clk_enable(u32 *clkctrl_addr)
 			 MODULE_CLKCTRL_IDLEST_SHIFT;
 		if (--bound == 0) {
 			printf("Clock enable failed for 0x%p idlest 0x%x\n",
-				clkctrl_addr, clkctrl);
+			       clkctrl_addr, idlest);
 			return;
 		}
 	}
@@ -806,7 +832,6 @@ static void enable_non_essential_clocks(void)
 	/* Enable all optional functional clocks of DSS */
 	setbits_le32(&prcm->cm_dss_dss_clkctrl, DSS_CLKCTRL_OPTFCLKEN_MASK);
 
-
 	/* Put the clock domains in SW_WKUP mode */
 	for (i = 0; (i < max) && clk_domains_non_essential[i]; i++) {
 		enable_clock_domain(clk_domains_non_essential[i],
@@ -932,7 +957,9 @@ void prcm_init(void)
 		scale_vcores();
 		setup_dplls();
 		setup_non_essential_dplls();
+#ifndef CONFIG_SKIP_NON_ESSENTIAL_CLOCKS
 		enable_non_essential_clocks();
+#endif
 		break;
 	default:
 		break;
