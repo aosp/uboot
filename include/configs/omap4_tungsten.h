@@ -137,6 +137,13 @@
 */
 #define CONFIG_SKIP_CONFIGURE_MPU_DPLL 1
 
+/* Make sure that the ABE is clocked off the sysclk and not the 32KHz clock.
+ * Timers used for remote synchronization as well as the external fref fed to
+ * the TAS5713 can only source from sysclk, and must be phase locked with the
+ * McBSP output (which is fed from the ABE)
+ */
+#define CONFIG_SYS_OMAP4_ABE_SYSCK 1
+
 /* Fastboot settings
  */
 /* Another macro may also be used or instead used to take care of the case
