@@ -97,10 +97,24 @@ struct fbt_partition {
 	unsigned size_kb;
 };
 
+/* For the 16GB eMMC part used in Tungsten, the erase group size is 512KB.
+ * So every partition should be at least 512KB to make it possible to use
+ * the mmc erase operation when doing 'fastboot erase'.
+ * However, the xloader is an exception because in order for the OMAP4 ROM
+ * bootloader to find it, it must be at offset 0KB, 128KB, 256KB, or 384KB.
+ * Since the partition table is at 0KB, we choose 128KB.  Special care
+ * must be kept to prevent erase the partition table when/if the xloader
+ * partition is being erased.
+ */
 struct fbt_partition fbt_partitions[] = {
-	{ "--pad", 128 },
-	{ "xloader", 128 },
-	{ "bootloader", 256 },
+	{ "--ptbl+pad", 128 },  /* partition table is sector 0-34,
+				 * rest is padding to make the xloader
+				 * start at the next sector that the ROM
+				 * bootloader will look, which is at
+				 * offset 128KB into the eMMC.
+				 */
+	{ "xloader", 384 },	/* pad out to fill whole erase group */
+	{ "bootloader", 512 },  /* u-boot, one erase group in size */
 	{ "device_info", 512 }, /* device specific info like MAC addresses.
 				 * read-only once it has been written to.
 				 * bootloader parses this at boot and sends
