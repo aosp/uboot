@@ -265,11 +265,6 @@ extern int do_switch_ecc(cmd_tbl_t *cmdtp, int flag, int argc,
 			 char *const argv[]);
 extern int do_nand(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
 
-#else
-
-extern int do_mmcops(cmd_tbl_t *cmdtp, int flag, int argc,
-		     char *const argv[]);
-
 #endif
 
 /* To support the Android-style naming of flash */
@@ -1504,28 +1499,70 @@ static int fbt_handle_erase(char *cmdbuf)
 			sprintf(priv.response, "OKAY");
 		}
 #else
-		/* MMC doesn't have a real erase function.
-		 * Just simulate by writing all 0xffffffff to the partition.
-		 */
-		char *mmc_erase[4]  = {"mmc", "erase", NULL, NULL};
-		char start_lba_hex[32], blk_cnt_hex[32];
+		struct mmc *mmc = find_mmc_device(FASTBOOT_MMC_DEVICE_ID);
 		u64 blk_cnt = DIV_ROUND_UP(ptn->length, priv.dev_desc->blksz);
+		if (mmc == NULL) {
+			printf("error finding mmc device %d\n",
+			       FASTBOOT_MMC_DEVICE_ID);
+			return status;
+		}
 
-		mmc_erase[2] = start_lba_hex;
-		mmc_erase[3] = blk_cnt_hex;
+		/* MMC has an erase function, but it operates on
+		 * a erase groups only.  The erase groups can be pretty
+		 * large (e.g. 512KB for a 16GB part) which would not
+		 * work for OMAP eMMC raw booting because the xloader
+		 * TOC must be at either offset 0KB, 128KB, 256KB, or 384KB,
+		 * and the partition table is at 0, so it's not possible
+		 * to have the partition table and the xloader in different
+		 * erase groups in such a device and still allow erasing
+		 * the xloader partitions by erase unit.
+		 *
+		 * We do a check of whether the partition is aligned
+		 * in erase group bounds, and if not, we use mmc write
+		 * all 0xffffffff instead of calling mmc_erase.
+		 */
 
-		sprintf(start_lba_hex, "%llx", ptn->start);
-		sprintf(blk_cnt_hex, "%llx", blk_cnt);
+		if ((ptn->start % mmc->erase_grp_size) ||
+		    (blk_cnt % mmc->erase_grp_size)) {
 
-		printf("Erasing partition '%s', start blk %llu, blk_cnt %llu\n",
-		       ptn->name, ptn->start, blk_cnt);
+			if (ptn->length > priv.transfer_buffer_size) {
+				printf("Unable to erase partition '%s' using"
+				       " block write, ptn->length %llu too"
+				       " large\n", ptn->name, ptn->length);
+				return -1;
 
-		if (do_mmcops(NULL, 0, 4, mmc_erase)) {
-			printf("Erasing '%s' FAILED!\n", ptn->name);
-			sprintf(priv.response, "FAILfailed to erase partition");
+			}
+			printf("Erasing partition '%s', start blk %llu,"
+			       " blk_cnt %llu, by writing 0xFFFFFFFF\n",
+			       ptn->name, ptn->start, blk_cnt);
+
+			memset(priv.transfer_buffer, 0xff, ptn->length);
+			if (mmc->block_dev.block_write(FASTBOOT_MMC_DEVICE_ID,
+						       ptn->start, blk_cnt,
+						       priv.transfer_buffer) !=
+				blk_cnt) {
+				printf("Write all 0xff to '%s' FAILED!\n",
+				       ptn->name);
+				sprintf(priv.response,
+					"FAILfailed to erase partition");
+			} else {
+				printf("Partition '%s' erased\n", ptn->name);
+				sprintf(priv.response, "OKAY");
+			}
 		} else {
-			FBTINFO("partition '%s' erased\n", ptn->name);
-			sprintf(priv.response, "OKAY");
+			printf("Erasing partition '%s', start blk %llu,"
+			       " blk_cnt %llu\n",
+			       ptn->name, ptn->start, blk_cnt);
+
+			if (mmc->block_dev.block_erase(FASTBOOT_MMC_DEVICE_ID,
+						       ptn->start, blk_cnt) !=
+			    blk_cnt) {
+				printf("Erasing '%s' FAILED!\n", ptn->name);
+				sprintf(priv.response, "FAILfailed to erase partition");
+			} else {
+				printf("partition '%s' erased\n", ptn->name);
+				sprintf(priv.response, "OKAY");
+			}
 		}
 #endif
 	}
@@ -1839,23 +1876,25 @@ static void fbt_handle_flash(char *cmdbuf)
 			}
 		} else {
 			/* Normal image: no sparse */
-			char *mmc_write[5] = {"mmc", "write", NULL, NULL, NULL};
-			char source[32], dest[32], blk_cnt[32];
+			struct mmc *mmc;
+			u64 blk_cnt;
 
-			mmc_write[2] = source;
-			mmc_write[3] = dest;
-			mmc_write[4] = blk_cnt;
+			mmc = find_mmc_device(FASTBOOT_MMC_DEVICE_ID);
+			if (mmc == NULL) {
+				printf("error finding mmc device %d\n",
+				       FASTBOOT_MMC_DEVICE_ID);
+				return;
+			}
+			blk_cnt = DIV_ROUND_UP(priv.d_bytes,
+					       priv.dev_desc->blksz);
 
-			sprintf(source, "%p", priv.transfer_buffer);
-			sprintf(dest, "0x%llx", ptn->start);
-			sprintf(blk_cnt, "0x%llx",
-				DIV_ROUND_UP(priv.d_bytes,
-					     priv.dev_desc->blksz));
-
-			printf("Writing '%s', %s blks (%llu bytes)"
-			       "at sector %s\n", ptn->name, blk_cnt,
-			       priv.d_bytes, dest);
-			if (do_mmcops(NULL, 0, 5, mmc_write)) {
+			printf("Writing '%s', %llu blks (%llu bytes) "
+			       "at sector %llu\n", ptn->name, blk_cnt,
+			       priv.d_bytes, ptn->start);
+			if (mmc->block_dev.block_write(FASTBOOT_MMC_DEVICE_ID,
+						       ptn->start, blk_cnt,
+						       priv.transfer_buffer) !=
+			    blk_cnt) {
 				printf("Writing '%s' FAILED!\n", ptn->name);
 				sprintf(priv.response, "FAIL: Write partition");
 			} else {
