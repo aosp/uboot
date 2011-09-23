@@ -750,6 +750,7 @@ static void enable_basic_clocks(void)
 	}
 }
 
+#ifndef CONFIG_SKIP_NON_ESSENTIAL_CLOCKS
 /*
  * Enable non-essential clock domains, modules and
  * do some additional special settings needed
@@ -864,7 +865,7 @@ static void enable_non_essential_clocks(void)
 			CD_CLKCTRL_CLKTRCTRL_NO_SLEEP <<
 			MODULE_CLKCTRL_MODULEMODE_SHIFT);
 }
-
+#endif
 
 void freq_update_core(void)
 {
