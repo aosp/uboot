@@ -63,6 +63,7 @@ unsigned char mmc_board_init(struct mmc *mmc)
 	switch (mmc->block_dev.dev) {
 	case 0:
 		/* Phoenix LDO config */
+		i2c_set_bus_num(0);
 		data = 0x01;
 		i2c_write(0x48, 0x98, 1, &data, 1);
 		data = 0x03;
