@@ -156,6 +156,9 @@ int tungsten_name_to_gpio(const char* name) {
 		{ "hdmi_hpd",		63 },
 		{ "hdmi_cec",		64 },
 		{ "hdmi_ct_cp_hpd",	60 },
+		{ "tas5713_iface_en",	40 },
+		{ "tas5713_reset",   	42 },
+		{ "tas5713_pdn",   	44 },
 	};
 	int i;
 	const char* tmp;

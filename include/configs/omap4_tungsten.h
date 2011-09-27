@@ -207,8 +207,10 @@
  * + Turn on the gpio console commands.
  */
 #define CONFIG_CMD_GPIO
+#define CONFIG_SYS_LONGHELP 1
 #else
 #define CONFIG_BOOTCOMMAND "booti mmc0"
+#undef CONFIG_SYS_LONGHELP	/* undef to save memory */
 #endif
 
 #define name_to_gpio(name) tungsten_name_to_gpio(name)
@@ -227,7 +229,6 @@
  * Miscellaneous configurable options
  */
 
-#undef CONFIG_SYS_LONGHELP	/* undef to save memory */
 #undef CONFIG_SYS_HUSH_PARSER	/* use "hush" command parser */
 #undef CONFIG_SYS_PROMPT_HUSH_PS2
 #define CONFIG_SYS_PROMPT		"Tungsten # "

@@ -43,11 +43,8 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	{GPMC_AD13, (PTD | OFF_EN | OFF_PD | OFF_OUT_PTD | M3)},	/* gpio_37 */
 	{GPMC_AD14, (PTD | OFF_EN | OFF_PD | OFF_OUT_PTD | M3)},	/* gpio_38 */
 	{GPMC_AD15, (PTD | OFF_EN | OFF_PD | OFF_OUT_PTD | M3)},	/* gpio_39 */
-	{GPMC_A16, (M3)},						/* gpio_40 */
 	{GPMC_A17, (PTD | M3)},						/* gpio_41 */
-	{GPMC_A18, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M1)},	/* kpd_row6 */
 	{GPMC_A19, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M1)},	/* kpd_row7 */
-	{GPMC_A20, (IEN | M3)},						/* gpio_44 */
 	{GPMC_A21, (M3)},						/* gpio_45 */
 	{GPMC_A22, (M3)},						/* gpio_46 */
 	{GPMC_A23, (OFF_EN | OFF_PD | OFF_IN | M1)},			/* kpd_col7 */
@@ -207,15 +204,32 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	{HDMI_HPD, (M0)},						/* hdmi_hpd */
 	{HDMI_CEC, (M0)},						/* hdmi_cec */
 	{GPMC_NBE1, (PTD | M3)},					/* gpio_60 */
+	{GPMC_A16, (M3)},						/* gpio_40 */
+	{GPMC_A18, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M1)},	/* kpd_row6 */
+	{GPMC_A20, (IEN | M3)},						/* gpio_44 */
 #else
 	/* during the first stage of manufacturing diagnostics, many pins are
 	 * configured as GPIOs for basic connectivity testing.  This section
 	 * makes sure pins are properly configured as either inputs or outputs
 	 * for diagnostics. */
-	{ABE_MCBSP2_DR, (M3)},						/* gpio_111 - output, no pullup/down */
-	{HDMI_HPD, (IEN | PTD | M3)},					/* gpio_63  - input,  pulldown */
-	{HDMI_CEC, (M3)},						/* gpio_64  - output, no pullup/down */
-	{GPMC_NBE1, (M3)},						/* gpio_60  - output, no pullup/down */
+	{ABE_MCBSP2_DR, (M3)},		/* gpio_111 - output, no pullup/down */
+	{HDMI_HPD, (IEN | PTD | M3)},	/* gpio_63  - input,  pulldown */
+	{HDMI_CEC, (M3)},		/* gpio_64  - output, no pullup/down */
+	{GPMC_NBE1, (M3)},		/* gpio_60  - output, no pullup/down */
+	{GPMC_A16, (M3)},		/* gpio_40  - output, no pullup/down */
+	{GPMC_A18, (M3)},		/* gpio 42  - output, no pullup/down */
+	{GPMC_A20, (M3)},		/* gpio_44  - output, no pullup/down */
+
+	/* during mfg diags, all I2C pins should be set up for I2C. No need to
+	 * set up I2C1 pins.  It's power on reset state is to be I2C and they
+	 * can have no other mode.
+	 */
+	{I2C2_SCL, (IEN | PTU | M0)},
+	{I2C2_SDA, (IEN | PTU | M0)},
+	{I2C3_SCL, (IEN | PTU | M0)},
+	{I2C3_SDA, (IEN | PTU | M0)},
+	{I2C4_SCL, (IEN | PTU | M0)},
+	{I2C4_SDA, (IEN | PTU | M0)},
 #endif
 };
 
