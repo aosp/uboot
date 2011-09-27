@@ -239,7 +239,6 @@ static int do_format(void)
 	}
 	end_ptbl(ptbl);
 
-	fbt_reset_ptn();
 	blocks_to_write = DIV_ROUND_UP(sizeof(struct ptable), dev_desc->blksz);
 	result = dev_desc->block_write(dev_desc->dev, 0, blocks_to_write, ptbl);
 	if (result != blocks_to_write) {
@@ -249,7 +248,7 @@ static int do_format(void)
 
 	printf("\nnew partition table of %lu %lu-byte blocks\n",
 		blocks_to_write, dev_desc->blksz);
-	board_fbt_load_ptbl();
+	fbt_reset_ptn();
 
 	return 0;
 }

@@ -537,11 +537,6 @@ static void fbt_wait_usb_fifo_flush(void)
 /*
  * Android style flash utilties
  */
-void fbt_reset_ptn(void)
-{
-	pcount = 0;
-}
-
 void fbt_add_ptn(fastboot_ptentry *ptn)
 {
 	if (pcount < MAX_PTN) {
@@ -653,6 +648,12 @@ static fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
 		}
 	}
 	return 0;
+}
+
+void fbt_reset_ptn(void)
+{
+	pcount = 0;
+	fbt_load_partition_table();
 }
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -1962,6 +1963,8 @@ static int fbt_handle_reboot(const char *cmdbuf)
 	fbt_handle_response();
 	udelay(1000000); /* 1 sec */
 
+	board_fbt_end();
+
 	do_reset(NULL, 0, 0, NULL);
 
 	return 0;
@@ -2575,12 +2578,58 @@ static int fbt_handle_tx(void)
 #endif /* FASTBOOT_UPLOAD */
 #endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
+/*
+ * default board-specific hooks and defaults
+ */
+static int __def_fbt_oem(const char *cmdbuf)
+{
+	return -1;
+}
+static void __def_fbt_set_reboot_type(enum fbt_reboot_type fre)
+{
+}
+static enum fbt_reboot_type __def_fbt_get_reboot_type(void)
+{
+	return FASTBOOT_REBOOT_NORMAL;
+}
+static int __def_fbt_key_pressed(void)
+{
+	return 0;
+}
+static int __def_fbt_load_ptbl(void)
+{
+	return -1;
+}
+static void __def_fbt_start(void)
+{
+}
+static void __def_fbt_end(void)
+{
+}
+
+int board_fbt_oem(const char *cmdbuf)
+	__attribute__((weak, alias("__def_fbt_oem")));
+void board_fbt_set_reboot_type(enum fbt_reboot_type fre)
+	__attribute__((weak, alias("__def_fbt_set_reboot_type")));
+enum fbt_reboot_type board_fbt_get_reboot_type(void)
+	__attribute__((weak, alias("__def_fbt_get_reboot_type")));
+int board_fbt_key_pressed(void)
+	__attribute__((weak, alias("__def_fbt_key_pressed")));
+int board_fbt_load_ptbl(void)
+	__attribute__((weak, alias("__def_fbt_load_ptbl")));
+void board_fbt_start(void)
+	__attribute__((weak, alias("__def_fbt_start")));
+void board_fbt_end(void)
+	__attribute__((weak, alias("__def_fbt_end")));
+
 /* command */
 int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
 	int ret = -1;
 
 	printf("Starting fastboot protocol\n");
+
+	board_fbt_start();
 
 	ret = fbt_fastboot_init();
 
@@ -2589,7 +2638,7 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	ret = udc_init();
 	if (ret < 0) {
 		FBTERR("%s: MUSB UDC init failure\n", __func__);
-		return ret;
+		goto out;
 	}
 
 	ret = fbt_init_strings();
@@ -2618,6 +2667,8 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		}
 	}
 
+out:
+	board_fbt_end();
 	return ret;
 }
 

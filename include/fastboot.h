@@ -341,12 +341,14 @@ extern void fbt_reset_ptn(void);
 extern void fbt_add_ptn(fastboot_ptentry *ptn);
 extern int fbt_send_info(const char *info);
 
-extern int board_fbt_oem(const char *cmdbuf);
-extern void board_fbt_set_reboot_type(enum fbt_reboot_type frt);
+int board_fbt_oem(const char *cmdbuf);
+void board_fbt_set_reboot_type(enum fbt_reboot_type frt);
 /* gets the reboot type, automatically clearing it for next boot */
-extern enum fbt_reboot_type board_fbt_get_reboot_type(void);
-extern int board_fbt_key_pressed(void);
-extern int board_fbt_load_ptbl(void);
+enum fbt_reboot_type board_fbt_get_reboot_type(void);
+int board_fbt_key_pressed(void);
+int board_fbt_load_ptbl(void);
+void board_fbt_start(void);
+void board_fbt_end(void);
 
 #endif /* CONFIG_FASTBOOT */
 #endif /* FASTBOOT_H */
