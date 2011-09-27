@@ -36,6 +36,9 @@
 #include <malloc.h>
 #include <linux/string.h>
 
+#include "steelhead_avr.h"
+#include "steelhead_avr_regs.h"
+#include "vcnl4000.h"
 #include "tungsten_mux_data.h"
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -89,7 +92,61 @@ int board_mmc_init(bd_t *bis)
 
 int board_fbt_key_pressed(void)
 {
-	return 0;
+	int err;
+	int proximity;
+
+	err = detect_vcnl();
+	if (err) {
+		printf("Error %d returned from detect_vcnl()\n", err);
+		return 0;
+	}
+
+	proximity = vcnl_get_proximity();
+	if (proximity < 0)
+		printf("Error %d returned from vcnl_get_proximity()\n",
+		       proximity);
+	else
+		printf("%s: proximity is %d\n", __func__, proximity);
+
+	/* we don't know the threshold to use yet to for a closed
+	   sphere.  for an open one, a base reading is about 2300.
+	   when a hand is near, it's about 2500 or higher (higher value
+	   is caused by stronger reflection by the closer object).  */
+	if (proximity >= 2500) {
+		printf("Returning key pressed true\n");
+		return 1;
+	} else {
+		printf("Returning key pressed false\n");
+		return 0;
+	}
+}
+
+void board_fbt_start(void)
+{
+	/* get avr out of reset animation because it consumes a lot of power
+	 * and can overheat the device if we're in fastboot mode because
+	 * there is no smartreflex code in the bootloader.
+	 */
+	struct avr_led_set_all_vals vals = {
+		.rgb[0] = 5, .rgb[1] = 5, .rgb[2] = 5
+	};
+	detect_avr();
+	udelay(100);
+	avr_led_set_all_vals(&vals);
+	avr_led_commit_led_state(AVR_LED_COMMMIT_IMMEDIATELY);
+}
+
+void board_fbt_end(void)
+{
+	/* get avr out of reset animation because it consumes a lot of power
+	 * and can overheat the device if we're in fastboot mode because
+	 * there is no smartreflex code in the bootloader.
+	 */
+	struct avr_led_set_all_vals vals = {
+		.rgb[0] = 0, .rgb[1] = 0, .rgb[2] = 0
+	};
+	avr_led_set_all_vals(&vals);
+	avr_led_commit_led_state(AVR_LED_COMMMIT_IMMEDIATELY);
 }
 
 struct fbt_partition {
@@ -137,13 +194,13 @@ int board_late_init(void)
   extern int do_mmcinfo (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
   do_mmcinfo(NULL, 0, 0, NULL);
 #endif
+
 	dieid_num_r();
 
 	fbt_preboot();
 
 	return 0;
 }
-
 
 struct gpio_name_mapping {
 	const char* name;
