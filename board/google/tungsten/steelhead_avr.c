@@ -1,4 +1,4 @@
-/* drivers/misc/steelhead_avr.c
+/* board/google/tungsten/steelhead_avr.c
  *
  * Copyright (C) 2011 Google, Inc.
  *
@@ -34,21 +34,14 @@
 #include <errno.h>
 #include <fastboot.h>
 
+#include "steelhead_avr.h"
 #include "steelhead_avr_regs.h"
 
 #define LED_BYTE_SZ 3
 #define SET_RANGE_OVERHEAD 2
 
-#define AVR_I2C_CLIENT_ID 0x20 /* 7 bit i2c id */
-
-struct avr_led_set_all_vals {
-	u8 rgb[3];
-};
-
-struct avr_led_set_bank_vals {
-	u8 bank_id;
-	u8 rgb[3];
-};
+#define AVR_I2C_CLIENT_ID (0x20) /* 7 bit i2c id */
+#define AVR_I2C_BUS_ID    (0x1)
 
 struct led_bank_state {
 	u8 bank_id;
@@ -177,7 +170,14 @@ static int avr_i2c_read(u8 cmd, u16 len, u8 *buf)
 static int avr_get_firmware_rev(void)
 {
 	u8 buf[2];
-	int rc = avr_i2c_read(AVR_FW_VERSION_REG_ADDR, sizeof(buf), buf);
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+
+	rc = avr_i2c_read(AVR_FW_VERSION_REG_ADDR, sizeof(buf), buf);
 
 	/* Revision will come back little-endian. */
 	state.firmware_rev = ((u16)buf[1] << 8) | (u16)buf[0];
@@ -186,20 +186,35 @@ static int avr_get_firmware_rev(void)
 
 static int avr_get_hardware_type(void)
 {
-	int rc = avr_i2c_read(AVR_HW_TYPE_REG_ADDR, 1, &state.hardware_type);
-	return rc;
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+	return avr_i2c_read(AVR_HW_TYPE_REG_ADDR, 1, &state.hardware_type);
 }
 
 static int avr_get_hardware_rev(void)
 {
-	int rc = avr_i2c_read(AVR_HW_REVISION_REG_ADDR, 1, &state.hardware_rev);
-	return rc;
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+	return avr_i2c_read(AVR_HW_REVISION_REG_ADDR, 1, &state.hardware_rev);
 }
 
-static int avr_led_set_all_vals(struct avr_led_set_all_vals *req)
+int avr_led_set_all_vals(struct avr_led_set_all_vals *req)
 {
-	int rc;
 	u32 i, j;
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
 
 	if (!req)
 		return -EFAULT;
@@ -249,6 +264,13 @@ static int avr_led_set_bank_vals(struct avr_led_set_bank_vals *req)
 	state.bank_scratch[2] = req->rgb[1];
 	state.bank_scratch[3] = req->rgb[2];
 
+	rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+
 	rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_SET_BANK_REG_ADDR, 1,
 		       state.bank_scratch, 4);
 
@@ -273,8 +295,15 @@ static int avr_led_set_bank_vals(struct avr_led_set_bank_vals *req)
 
 static int avr_led_set_mode(u8 mode)
 {
-	int rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_MODE_REG_ADDR,
-			   1, &mode, 1);
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+
+	rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_MODE_REG_ADDR,
+		       1, &mode, 1);
 	/* If the command failed, then skip the update of our internal
 	 * bookkeeping and just get out.
 	 */
@@ -287,30 +316,52 @@ static int avr_led_set_mode(u8 mode)
 
 static int avr_led_set_vol_indicator(u8 vol)
 {
-	int rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_VOLUME_SETTING_REG_ADDR,
-			   1, &vol, 1);
-	return rc;
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+
+	return i2c_write(AVR_I2C_CLIENT_ID, AVR_VOLUME_SETTING_REG_ADDR,
+			 1, &vol, 1);
 }
 
-static int avr_led_commit_led_state(u8 val)
+int avr_led_commit_led_state(u8 val)
 {
-	int rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_COMMIT_REG_ADDR,
-			   1, &val, 1);
-	return rc;
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+
+	return i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_COMMIT_REG_ADDR,
+			 1, &val, 1);
 }
 
 static int avr_led_set_button_ctrl_reg(u8 val)
 {
-	int rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_BUTTON_CONTROL_REG_ADDR,
-			   1, &val, 1);
-	return rc;
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+	return i2c_write(AVR_I2C_CLIENT_ID, AVR_BUTTON_CONTROL_REG_ADDR,
+			 1, &val, 1);
 }
 
 static int avr_led_set_int_reg(u8 val)
 {
-	int rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_BUTTON_INT_REG_ADDR,
-			   1, &val, 1);
-	return rc;
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+	return i2c_write(AVR_I2C_CLIENT_ID, AVR_BUTTON_INT_REG_ADDR,
+			 1, &val, 1);
 }
 
 static int avr_setup_bank_state(void)
@@ -396,40 +447,25 @@ static int avr_setup_bank_state(void)
 
 static int avr_read_event_fifo(u8 *next_event)
 {
-	int rc;
-
 	if (!next_event)
 		return -EFAULT;
 
-	rc = avr_i2c_read(AVR_KEY_EVENT_FIFO_REG_ADDR, 1, next_event);
-	return rc;
+	return avr_i2c_read(AVR_KEY_EVENT_FIFO_REG_ADDR, 1, next_event);
 }
 
-
-static int detect_avr(void)
+int detect_avr(void)
 {
 	int rc;
 	struct avr_led_set_all_vals clear_led_req;
 
 	printf("%s\n", __func__);
 
-	rc = i2c_set_bus_num(1);
+	rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
 	if (rc) {
 		printf("Failed in i2c_set_bus_num(%d), error %d\n",
-		       1, rc);
+		       AVR_I2C_BUS_ID, rc);
 		goto error;
 	}
-
-	/* don't use probe, it puts the AVR into a weird state
-	 */
-#if 0
-	rc = i2c_probe(AVR_I2C_CLIENT_ID);
-	if (rc) {
-		printf("Failed to communicate with AVR on i2c id"
-		       " 0x%x, error %d\n", AVR_I2C_CLIENT_ID, rc);
-		goto error;
-	}
-#endif
 
 	/* Cache the firmware revision (also checks to be sure the AVR is
 	 * actually there and talking to us).
@@ -535,9 +571,15 @@ static int do_avr_get_key(cmd_tbl_t *cmdtp, int flag,
 			 int argc, char * const argv[])
 {
 	int saw_key = 0;
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
 	while (1) {
 		u8 next_event;
-		int rc = avr_read_event_fifo(&next_event);
+		rc = avr_read_event_fifo(&next_event);
 		if (rc) {
 			printf("Failed to read event fifo, err = %d\n", rc);
 			return 1;
