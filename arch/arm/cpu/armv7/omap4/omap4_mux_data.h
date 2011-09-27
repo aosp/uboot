@@ -30,6 +30,7 @@
 
 const struct pad_conf_entry core_padconf_array_essential[] = {
 
+#ifndef CONFIG_TUNGSTEN
 {GPMC_AD0, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M1)}, /* sdmmc2_dat0 */
 {GPMC_AD1, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M1)}, /* sdmmc2_dat1 */
 {GPMC_AD2, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M1)}, /* sdmmc2_dat2 */
@@ -40,6 +41,7 @@ const struct pad_conf_entry core_padconf_array_essential[] = {
 {GPMC_AD7, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M1)}, /* sdmmc2_dat7 */
 {GPMC_NOE, (PTU | IEN | OFF_EN | OFF_OUT_PTD | M1)},	 /* sdmmc2_clk */
 {GPMC_NWE, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M1)}, /* sdmmc2_cmd */
+#endif
 {SDMMC1_CLK, (PTU | OFF_EN | OFF_OUT_PTD | M0)},	 /* sdmmc1_clk */
 {SDMMC1_CMD, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M0)}, /* sdmmc1_cmd */
 {SDMMC1_DAT0, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M0)}, /* sdmmc1_dat0 */
@@ -50,6 +52,7 @@ const struct pad_conf_entry core_padconf_array_essential[] = {
 {SDMMC1_DAT5, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M0)}, /* sdmmc1_dat5 */
 {SDMMC1_DAT6, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M0)}, /* sdmmc1_dat6 */
 {SDMMC1_DAT7, (PTU | IEN | OFF_EN | OFF_PD | OFF_IN | M0)}, /* sdmmc1_dat7 */
+#ifndef CONFIG_TUNGSTEN
 {I2C1_SCL, (PTU | IEN | M0)},				/* i2c1_scl */
 {I2C1_SDA, (PTU | IEN | M0)},				/* i2c1_sda */
 {I2C2_SCL, (PTU | IEN | M0)},				/* i2c2_scl */
@@ -60,6 +63,7 @@ const struct pad_conf_entry core_padconf_array_essential[] = {
 {I2C4_SDA, (PTU | IEN | M0)},				/* i2c4_sda */
 {UART3_CTS_RCTX, (PTU | IEN | M0)},			/* uart3_tx */
 {UART3_RTS_SD, (M0)},					/* uart3_rts_sd */
+#endif
 {UART3_RX_IRRX, (IEN | M0)},				/* uart3_rx */
 {UART3_TX_IRTX, (M0)}					/* uart3_tx */
 
