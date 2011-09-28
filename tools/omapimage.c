@@ -192,7 +192,18 @@ static void omapimage_set_header(void *ptr, struct stat *sbuf, int ifd,
 	toc++;
 	memset(toc, 0xff, sizeof(*toc));
 
+#if 0
 	gph->size = sbuf->st_size - OMAP_FILE_HDR_SIZE;
+#else
+	/* Either the ROM bootloader has a bug, or this
+	 * code has a bug. The ROM bootloader appears
+	 * to expect the GP header size to be a size
+	 * relative to the start of the GP header,
+	 * instead of relative to the start of the
+	 * image after the GP header.
+	 */
+	gph->size = sbuf->st_size - OMAP_FILE_HDR_SIZE + sizeof(struct gp_header);
+#endif
 	gph->load_addr = params->addr;
 }
 
