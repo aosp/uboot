@@ -271,6 +271,7 @@ endif
 # This is used to build a variant for manufacturing.
 ifdef MFG
 CFLAGS += -DCONFIG_MFG
+CPPFLAGS += -DCONFIG_MFG
 endif
 
 #########################################################################
