@@ -97,8 +97,50 @@ block_dev_desc_t *get_dev(char* ifname, int dev)
 	}
 	return NULL;
 }
+/*
+ * Given a devname with a concatenated ifname and an id (e.g. "mmc0"), return
+ * a pointer to the associated block device structure.
+ */
+block_dev_desc_t *get_dev_by_name(char *devname)
+{
+	char *digit_pointer, *ep, c;
+	int devid;
+	for (digit_pointer = devname; (c = *digit_pointer); ) {
+		if ('0' <= c && c <= '9') {
+			/*
+			 * Due to the ambiguity of determining if characters in
+			 * the range of 'a' to 'f' are hex digits or part of
+			 * the device interface, we use base 10.
+			 */
+			devid = (int)simple_strtoul(digit_pointer, &ep, 10);
+			if (*ep != '\0') {
+				/*
+				 * There's non-digits after our digits, keep
+				 * scanning for digits at the end.
+				 */
+				digit_pointer = ep;
+				continue;
+			}
+			/*
+			 * Normally, you would think we would put a '\0' at
+			 * digit_pointer, but we don't want to modify the
+			 * passed devname, and get_dev() uses strncmp() so it
+			 * will match even if there is "junk" after the match.
+			 * In our case, the "junk" is the id that we just
+			 * parsed.  Go ahead and call get_dev().
+			 */
+			return get_dev(devname, devid);
+		}
+		digit_pointer++;
+	}
+	return NULL;
+}
 #else
 block_dev_desc_t *get_dev(char* ifname, int dev)
+{
+	return NULL;
+}
+block_dev_desc_t *get_dev_by_name(char *devname)
 {
 	return NULL;
 }

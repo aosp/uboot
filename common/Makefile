@@ -46,6 +46,7 @@ COBJS-y += cmd_version.o
 
 # environment
 COBJS-y += env_common.o
+COBJS-$(CONFIG_ENV_IS_IN_BLKDEV) += env_blkdev.o
 COBJS-$(CONFIG_ENV_IS_IN_DATAFLASH) += env_dataflash.o
 COBJS-$(CONFIG_ENV_IS_IN_EEPROM) += env_eeprom.o
 XCOBJS-$(CONFIG_ENV_IS_EMBEDDED) += env_embedded.o
