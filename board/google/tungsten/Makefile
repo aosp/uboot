@@ -26,7 +26,7 @@ include $(TOPDIR)/config.mk
 LIB	= $(obj)lib$(BOARD).o
 
 ifndef CONFIG_SPL_BUILD
-COBJS	:= $(BOARD).o steelhead_avr.o vcnl4000.o
+COBJS	:= $(BOARD).o steelhead_avr.o vcnl4000.o pseudorandom_ids.o
 endif
 
 SRCS	:= $(COBJS:.o=.c)

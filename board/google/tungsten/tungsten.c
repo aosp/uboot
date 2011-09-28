@@ -40,12 +40,28 @@
 #include "steelhead_avr_regs.h"
 #include "vcnl4000.h"
 #include "tungsten_mux_data.h"
+#include "pseudorandom_ids.h"
 
 DECLARE_GLOBAL_DATA_PTR;
 
 const struct omap_sysinfo sysinfo = {
 	"Board: OMAP4 Tungsten\n"
 };
+
+struct mac_generator {
+	const u32 salt;
+	const char* name;
+};
+
+#define MAKE_SALT(a, b, c, d) (((u32)a << 24) | ((u32)b << 16) | \
+			      ((u32)c <<  8) | ((u32)d))
+static const struct mac_generator mac_defaults[] = {
+	{ MAKE_SALT('W','i','F','i'), "androidboot.wifi_macaddr" },
+	{ MAKE_SALT('W','i','r','e'), "smsc95xx.mac_addr" },
+	{ MAKE_SALT('B','l','u','T'), "androidboot.bt_addr" },
+};
+static const u32 serial_no_salt = MAKE_SALT('S','e','r','#');
+#undef MAKE_SALT
 
 /**
  * @brief board_init
@@ -188,14 +204,61 @@ struct fbt_partition fbt_partitions[] = {
 	{ 0, 0 },
 };
 
+void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
+	int used = strlen(args);
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mac_defaults); ++i) {
+		u8 m[6];
+		char mac[18];
+
+		if (strstr(args, mac_defaults[i].name))
+			continue;
+
+		generate_default_mac_addr(mac_defaults[i].salt, m);
+		snprintf(mac, sizeof(mac), "%02x:%02x:%02x:%02x:%02x:%02x",
+				m[5], m[4], m[3], m[2], m[1], m[0]);
+		mac[sizeof(mac) - 1] = 0;
+		used += snprintf(args + used,
+				buf_sz - used,
+				" %s=%s",
+				mac_defaults[i].name,
+				mac);
+	}
+
+	args[buf_sz-1] = 0;
+}
+
 int board_late_init(void)
 {
+	char tmp_buf[17];
+	u64 id_64;
+	int i;
+
 #if 0
   extern int do_mmcinfo (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
   do_mmcinfo(NULL, 0, 0, NULL);
 #endif
 
 	dieid_num_r();
+
+	generate_default_64bit_id(serial_no_salt, &id_64);
+	snprintf(tmp_buf, sizeof(tmp_buf), "%016llx", id_64);
+	tmp_buf[sizeof(tmp_buf)-1] = 0;
+	setenv("fbt_id#", tmp_buf);
+
+#ifdef CONFIG_MFG
+	for (i = 0; i < ARRAY_SIZE(mac_defaults); ++i) {
+		u8 m[6];
+		generate_default_mac_addr(mac_defaults[i].salt, m);
+		printf("default %24s :: %02x:%02x:%02x:%02x:%02x:%02x\n",
+			mac_defaults[i].name,
+			m[5], m[4], m[3], m[2], m[1], m[0]);
+	}
+
+	printf("default %24s :: %s\n",
+			"androidboot.serialno", getenv("fbt_id#"));
+#endif
 
 	fbt_preboot();
 
@@ -226,8 +289,7 @@ int tungsten_name_to_gpio(const char* name) {
 	}
 
 	for (tmp = name; *tmp; ++tmp)
-		if ((*tmp < '0') || (*tmp >
-							'9'))
+		if ((*tmp < '0') || (*tmp > '9'))
 			return -1;
 
 	return simple_strtoul(name, NULL, 10);
