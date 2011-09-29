@@ -37,6 +37,28 @@
 #include <asm/utils.h>
 #include <asm/omap_gpio.h>
 
+#ifndef CONFIG_OMAP_TPS_MPU_MV
+#define CONFIG_OMAP_TPS_MPU_MV 1430
+#endif
+
+#ifndef CONFIG_OMAP4430_ES1_0_MPU_DPLL
+#define CONFIG_OMAP4430_ES1_0_MPU_DPLL mpu_dpll_params_1200mhz
+#endif
+#ifndef CONFIG_OMAP4430_non_ES1_0_MPU_DPLL
+#define CONFIG_OMAP4430_non_ES1_0_MPU_DPLL mpu_dpll_params_1584mhz
+#endif
+#ifndef CONFIG_OMAP4460_MPU_DPLL
+#define CONFIG_OMAP4460_MPU_DPLL mpu_dpll_params_1840mhz
+#endif
+
+#define str(s) #s
+#define xstr(s) str(s)
+#define SET_MPU_DPLL_PARAMS(params, table, index)	\
+	do { \
+		printf("Setting MPU DPLL using " xstr(table) "\n");	\
+		(params) = &(table)[index]; \
+	} while(0)
+
 #ifndef CONFIG_SPL_BUILD
 /*
  * printing to console doesn't work unless
@@ -76,6 +98,18 @@ static const struct dpll_params mpu_dpll_params_1840mhz[NUM_SYS_CLKS] = {
 	{460, 12, 1, -1, -1, -1, -1, -1},	/* 26 MHz   */
 	{920, 26, 1, -1, -1, -1, -1, -1},	/* 27 MHz   */
 	{575, 23, 1, -1, -1, -1, -1, -1}	/* 38.4 MHz */
+};
+
+/* dpll locked at 350 MHz MPU clk at 175 MHz(OPP50 4460) - DCC OFF */
+static const struct dpll_params mpu_dpll_params_350mhz[NUM_SYS_CLKS] = {
+	{175, 11, 1, -1, -1, -1, -1, -1},	/* 12 MHz   */
+	{175, 12, 1, -1, -1, -1, -1, -1},	/* 13 MHz   */
+	{124, 11, 1, -1, -1, -1, -1, -1},	/* 16.8 MHz */
+	{875, 95, 1, -1, -1, -1, -1, -1},	/* 19.2 MHz */
+	{175, 25, 1, -1, -1, -1, -1, -1},	/* 26 MHz   */
+	{175, 26, 1, -1, -1, -1, -1, -1},	/* 27 MHz   */
+	/* 349.6MHz is closest we can get with M and N */
+	{437, 95, 1, -1, -1, -1, -1, -1}	/* 38.4 MHz */
 };
 
 /* dpll locked at 1584 MHz - MPU clk at 792 MHz(OPP Turbo 4430) */
@@ -214,7 +248,7 @@ static inline void do_bypass_dpll(u32 *const base)
 
 	clrsetbits_le32(&dpll_regs->cm_clkmode_dpll,
 			CM_CLKMODE_DPLL_DPLL_EN_MASK,
-			DPLL_EN_FAST_RELOCK_BYPASS <<
+			DPLL_EN_MN_BYPASS <<
 			CM_CLKMODE_DPLL_EN_SHIFT);
 }
 
@@ -367,11 +401,14 @@ void configure_mpu_dpll(void)
 	sysclk_ind = get_sys_clk_index();
 
 	if (omap4_rev == OMAP4430_ES1_0)
-		params = &mpu_dpll_params_1200mhz[sysclk_ind];
+		SET_MPU_DPLL_PARAMS(params, CONFIG_OMAP4430_ES1_0_MPU_DPLL,
+				    sysclk_ind);
 	else if (omap4_rev < OMAP4460_ES1_0)
-		params = &mpu_dpll_params_1584mhz[sysclk_ind];
+		SET_MPU_DPLL_PARAMS(params, CONFIG_OMAP4430_non_ES1_0_MPU_DPLL,
+				    sysclk_ind);
 	else
-		params = &mpu_dpll_params_1840mhz[sysclk_ind];
+		SET_MPU_DPLL_PARAMS(params, CONFIG_OMAP4460_MPU_DPLL,
+				    sysclk_ind);
 
 	/* DCC and clock divider settings for 4460 */
 	if (omap4_rev >= OMAP4460_ES1_0) {
@@ -421,13 +458,8 @@ static void setup_dplls(void)
 			&per_dpll_params_1536mhz[sysclk_ind], DPLL_LOCK);
 	debug("PER DPLL locked\n");
 
-	printf("%s: mpu freq before any changes:\n", __func__);
-	print_current_freq(&prcm->cm_clkmode_dpll_mpu);
-
-#ifndef CONFIG_SKIP_CONFIGURE_MPU_DPLL
 	/* MPU dpll */
 	configure_mpu_dpll();
-#endif
 }
 
 static void setup_non_essential_dplls(void)
@@ -586,7 +618,8 @@ static void scale_vcores(void)
 	omap4_rev = omap_revision();
 	/* TPS - supplies vdd_mpu on 4460 */
 	if (omap4_rev >= OMAP4460_ES1_0) {
-		volt = 1430;
+		volt = CONFIG_OMAP_TPS_MPU_MV;
+		printf("Setting TPS to %dmV\n", volt);
 		do_scale_tps62361(TPS62361_REG_ADDR_SET1, volt);
 	}
 
