@@ -48,13 +48,25 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	 * configured as GPIOs for basic connectivity testing.  This section
 	 * makes sure pins are properly configured as either inputs or outputs
 	 * for diagnostics. */
-	{ABE_MCBSP2_DR, (M3)},		/* gpio_111 - output, no pullup/down */
-	{HDMI_HPD, (IEN | PTD | M3)},	/* gpio_63  - input,  pulldown */
-	{HDMI_CEC, (M3)},		/* gpio_64  - output, no pullup/down */
-	{GPMC_NBE1, (M3)},		/* gpio_60  - output, no pullup/down */
-	{GPMC_A16, (M3)},		/* gpio_40  - output, no pullup/down */
-	{GPMC_A18, (M3)},		/* gpio 42  - output, no pullup/down */
-	{GPMC_A20, (M3)},		/* gpio_44  - output, no pullup/down */
+	{GPMC_A16,		(PTD | M3)},		/* gpio_40  - aud_intfc_en    */
+	{GPMC_A17,		(PTD | M3)},		/* gpio_41  - hdmi_ls_oe      */
+	{GPMC_A18,		(PTD | M3)},		/* gpio_42  - aud_rstn        */
+	{GPMC_A19,		(PTD | M3)},		/* gpio_43  - wlan_en         */
+	{GPMC_A20,		(PTD | M3)},		/* gpio_44  - aud_pdn         */
+	{GPMC_A21,		(PTD | M3)},		/* gpio_45  - bt_host_wake_bt */
+	{GPMC_A22,		(PTD | M3)},		/* gpio_46  - bt_en           */
+	{GPMC_A23,		(IEN | PTD | M3)},	/* gpio_47  - bt_wakeup_host  */
+	{GPMC_A24,		(PTD | M3)},		/* gpio_48  - ui_avr_rst_n_a  */
+	{GPMC_A25,		(IEN | PTU | M3)},	/* gpio_49  - ui_avr_int_n    */
+	{GPMC_NCS2,		(PTD | M3)},		/* gpio_52  - bt_rst_n        */
+	{GPMC_NCS3,		(IEN | PTU | M3)},	/* gpio_53  - wlan_irq_n      */
+	{GPMC_NBE1,		(PTD | M3)},		/* gpio_60  - hdmi_ct_cp_hpd  */
+	{HDMI_HPD,		(IEN | PTD | M3)},	/* gpio_63  - hdmi_hpd        */
+	{HDMI_CEC,		(IEN | PTU | M3)},	/* gpio_64  - hdmi_cec        */
+	{ABE_MCBSP2_DR,		(PTD | M3)},		/* gpio_111 - spdif           */
+	{USBB2_ULPITLL_DAT1,	(PTD | M3)},		/* gpio_162 - nfc_dl_mode     */
+	{USBB2_ULPITLL_DAT2,	(PTD | M3)},		/* gpio_163 - nfc_en          */
+	{USBB2_ULPITLL_DAT3,	(PTD | M3)},		/* gpio_164 - nfc_irq         */
 
 	/* during mfg diags, all I2C pins should be set up for I2C. No need to
 	 * set up I2C1 pins.  It's power on reset state is to be I2C and they

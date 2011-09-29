@@ -270,15 +270,27 @@ struct gpio_name_mapping {
 	int num;
 };
 
-int tungsten_name_to_gpio(const char* name) {
+int name_to_gpio(const char* name) {
 	static const struct gpio_name_mapping map[] = {
-		{ "spdif",		111 },
+		{ "aud_intfc_en",	40 },
+		{ "hdmi_ls_oe",		41 },
+		{ "aud_rstn",		42 },
+		{ "wlan_en",		43 },
+		{ "aud_pdn",		44 },
+		{ "bt_host_wake_bt",	45 },
+		{ "bt_en",		46 },
+		{ "bt_wakeup_host",	47 },
+		{ "ui_avr_rst_n_a",	48 },
+		{ "ui_avr_int_n",	49 },
+		{ "bt_rst_n",		52 },
+		{ "wlan_irq_n",		53 },
+		{ "hdmi_ct_cp_hpd",	60 },
 		{ "hdmi_hpd",		63 },
 		{ "hdmi_cec",		64 },
-		{ "hdmi_ct_cp_hpd",	60 },
-		{ "tas5713_iface_en",	40 },
-		{ "tas5713_reset",   	42 },
-		{ "tas5713_pdn",   	44 },
+		{ "spdif",		111 },
+		{ "nfc_dl_mode",	162 },
+		{ "nfc_en",		163 },
+		{ "nfc_irq",		164 },
 	};
 	int i;
 	const char* tmp;

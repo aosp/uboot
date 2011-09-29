@@ -213,7 +213,8 @@
 #undef CONFIG_SYS_LONGHELP	/* undef to save memory */
 #endif
 
-#define name_to_gpio(name) tungsten_name_to_gpio(name)
+/* overloaded in board/google/tungsten/tungsten.c */
+#define name_to_gpio(name) name_to_gpio(name)
 
 #define CONFIG_ENV_OVERWRITE
 
