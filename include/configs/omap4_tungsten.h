@@ -130,12 +130,12 @@
  */
 #define CONFIG_SKIP_NON_ESSENTIAL_CLOCKS 1
 
-/* Don't change the MPU dpll.  Leave it as the ROM bootloader set it.
-   This reduces power consumption in the bootloader.  We run slower
-   but we're fast enough for now and allows us to stay running
-   in the bootloader longer.
-*/
-#define CONFIG_SKIP_CONFIGURE_MPU_DPLL 1
+/* Specify a lower voltage (and resulting MPU DPLL freq) to
+ * reduce power consumption and heat in the bootloader or else
+ * it's way unstable with TI's default settings.
+ */
+#define CONFIG_OMAP_TPS_MPU_MV 1025
+#define CONFIG_OMAP4460_MPU_DPLL mpu_dpll_params_350mhz
 
 /* Make sure that the ABE is clocked off the sysclk and not the 32KHz clock.
  * Timers used for remote synchronization as well as the external fref fed to
