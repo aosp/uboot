@@ -349,6 +349,7 @@ int board_fbt_key_pressed(void);
 int board_fbt_load_ptbl(void);
 void board_fbt_start(void);
 void board_fbt_end(void);
+void board_fbt_finalize_bootargs(char* args, size_t buf_sz);
 
 #endif /* CONFIG_FASTBOOT */
 #endif /* FASTBOOT_H */

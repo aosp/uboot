@@ -1408,7 +1408,11 @@ static int fbt_add_partitions_from_environment(void)
 
 static void set_serial_number(void)
 {
-	char *dieid = getenv("dieid#");
+	char *dieid = getenv("fbt_id#");
+
+	if (dieid == NULL)
+		dieid = getenv("dieid#");
+
 	if (dieid == NULL) {
 		priv.serial_no = "00123";
 	} else {
@@ -1462,12 +1466,15 @@ static int fbt_handle_erase(char *cmdbuf)
 		return 0;
 	}
 
-	/* don't allow erasing a valid device info partition */
+#ifndef CONFIG_MFG
+	/* don't allow erasing a valid device info partition in a production
+	 * u-boot */
 	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO) &&
 	    (!priv.dev_info_uninitialized)) {
 		printf("Not allowed to erase %s partition\n", ptn->name);
 		return 0;
 	}
+#endif
 
 	{
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -2606,6 +2613,10 @@ static void __def_fbt_start(void)
 static void __def_fbt_end(void)
 {
 }
+static void __def_board_fbt_finalize_bootargs(char* args, size_t buf_sz)
+{
+	return;
+}
 
 int board_fbt_oem(const char *cmdbuf)
 	__attribute__((weak, alias("__def_fbt_oem")));
@@ -2621,6 +2632,8 @@ void board_fbt_start(void)
 	__attribute__((weak, alias("__def_fbt_start")));
 void board_fbt_end(void)
 	__attribute__((weak, alias("__def_fbt_end")));
+void board_fbt_finalize_bootargs(char* args, size_t buf_sz)
+	__attribute__((weak, alias("__def_board_fbt_finalize_bootargs")));
 
 /* command */
 int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
@@ -2823,8 +2836,9 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	setenv("hdr_cmdline", (char *)hdr->cmdline);
 #else
 	{
-		char command_line[255];
-		int i;
+		/* static just to be safe when it comes to the stack */
+		static char command_line[1024];
+		int i, amt;
 
 		/* Use the command line in the bootimg header instead of
 		 * any hardcoded into u-boot.  Also, Android wants the
@@ -2834,16 +2848,23 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		 * do_bootm_linux() will use the bootargs environment variable
 		 * to pass it to the kernel.
 		 */
-		sprintf(command_line, "%s androidboot.serialno=%s",
-			hdr->cmdline, priv.serial_no);
+		amt = snprintf(command_line,
+				sizeof(command_line),
+				"%s androidboot.serialno=%s",
+				hdr->cmdline, priv.serial_no);
 
 		for (i = 0; i < priv.num_device_info; i++) {
 			/* Append special device specific information like
 			 * MAC addresses */
-			sprintf(command_line, "%s %s=%s",
-				command_line, priv.dev_info[i].name,
-				priv.dev_info[i].value);
+			amt += snprintf(command_line + amt,
+					sizeof(command_line) - amt,
+					" %s=%s",
+					priv.dev_info[i].name,
+					priv.dev_info[i].value);
 		}
+
+		command_line[sizeof(command_line) - 1] = 0;
+		board_fbt_finalize_bootargs(command_line, sizeof(command_line));
 
 		setenv("bootargs", command_line);
 	}
