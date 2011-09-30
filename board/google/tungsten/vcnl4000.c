@@ -146,7 +146,7 @@ static int do_vcnl_set_led_current(cmd_tbl_t *cmdtp, int flag,
 		printf("usage: vcnl set led_current led_current_value\n");
 		return 1;
 	}
-	raw = simple_strtol(argv[3], NULL, 10);
+	raw = simple_strtol(argv[1], NULL, 10);
 	if ((raw < 0) || (raw > 200)) {
 		printf("invalid ir_led_current %ld, must be between 0-200\n",
 		       raw);
