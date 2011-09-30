@@ -40,6 +40,10 @@
 static struct list_head mmc_devices;
 static int cur_dev_num = -1;
 
+/* Prototype to avoid code shuffle. */
+static ulong mmc_write_blocks(struct mmc *mmc, ulong start, lbaint_t blkcnt,
+							const void *src);
+
 int __board_mmc_getcd(u8 *cd, struct mmc *mmc) {
 	return -1;
 }
@@ -227,36 +231,123 @@ err_out:
 	return err;
 }
 
+static ulong mmc_writeFF(struct mmc *mmc, lbaint_t start, lbaint_t blkcnt)
+{
+#ifdef CONFIG_SPL_BUILD
+	/*
+	 * SPL doesn't have enough memory for the all_ones buffer, nor
+	 * does it need it.
+	 */
+	return UNUSABLE_ERR;
+#else
+	static void *all_ones;
+	static uint all_ones_len;
+	int err = 0;
+
+	/*
+	 * We need a buffer filled with all ones that needs to be able to
+	 * write block sized chunks repeatedly up to mmc->erase_grp_size
+	 * times.  It will be large, so use the heap instead of stack.  I keep
+	 * a pointer to what is allocated in a static pointer instead of doing
+	 * malloc/memset/free on every call to this function.  I assume there
+	 * is a (small) chance that different MMCs will have different block
+	 * sizes, so that case is handled.
+	 */
+	uint blk_len = mmc->write_bl_len;
+
+	if (all_ones_len < blk_len) {
+		if (all_ones_len)
+			free(all_ones);
+		all_ones = malloc(blk_len);
+		if (!all_ones) {
+			all_ones_len = 0;
+			err = -1;
+			puts("mmc write ones failed to get memory\n");
+			goto exit;
+		}
+		all_ones_len = blk_len;
+		memset(all_ones, 0xFF, all_ones_len);
+	}
+
+	if (mmc_set_blocklen(mmc, blk_len)) {
+		puts("mmc write ones failed to set write length\n");
+		goto exit;
+	}
+	while (blkcnt--) {
+		if (mmc_write_blocks(mmc, start++, 1, all_ones) != 1) {
+			err = UNUSABLE_ERR;
+			puts("mmc write ones failed to write\n");
+			goto exit;
+		}
+	}
+
+exit:
+#ifdef CONFIG_MMC_FREE_ALL_ONES
+	/* Option to the memory freed just in case someone wants it. */
+	free(all_ones);
+	all_ones_len = 0;
+#endif
+	return err;
+#endif /* ! CONFIG_SPL_BUILD */
+}
+
 static unsigned long
 mmc_berase(int dev_num, lbaint_t start, lbaint_t blkcnt)
 {
 	int err = 0;
 	struct mmc *mmc = find_mmc_device(dev_num);
-	lbaint_t blk = 0, blk_r = 0;
+	lbaint_t next = start, blks_left = blkcnt, blk_r;
 
 	if (!mmc)
 		return -1;
 
-	if ((start % mmc->erase_grp_size) || (blkcnt % mmc->erase_grp_size))
-		printf("\n\nCaution! Your devices Erase group is 0x%x\n"
-			"The erase range would be change to 0x%lx~0x%lx\n\n",
-		       mmc->erase_grp_size, start & ~(mmc->erase_grp_size - 1),
-		       ((start + blkcnt + mmc->erase_grp_size)
-		       & ~(mmc->erase_grp_size - 1)) - 1);
-
-	while (blk < blkcnt) {
-		blk_r = ((blkcnt - blk) > mmc->erase_grp_size) ?
-			mmc->erase_grp_size : (blkcnt - blk);
-		err = mmc_erase_t(mmc, start + blk, blk_r);
-		printf("mmc_erase_t(), start %lu, blk_cnt %lu, returned %d\n",
-		       start+blk, blk_r, err);
+	/*
+	 * Figure out how many blocks are before an erase_grp_size
+	 * boundary. We do that by figuring out where the next
+	 * erase_grp_size boundary is and then subtracting start.
+	 */
+	blk_r = roundup(start, mmc->erase_grp_size) - start;
+	if (blk_r > blkcnt)
+		blk_r = blkcnt;
+	if (blk_r) {
+		err = mmc_writeFF(mmc, next, blk_r);
+		printf("mmc_writeFF(), start %lu, blk_cnt %lu, returned %d\n",
+							next, blk_r, err);
 		if (err)
-			break;
-
-		blk += blk_r;
+			goto exit;
+		blks_left -= blk_r;
+		next += blk_r;
 	}
 
-	return blk;
+	/*
+	 * Now loop erasing erase_grp_size blocks each time.  At first I tried
+	 * to do an erase for the whole thing at once, but timeouts ensued, so
+	 * I went back to the former approach.
+	 */
+	while (blks_left > mmc->erase_grp_size) {
+		err = mmc_erase_t(mmc, next, mmc->erase_grp_size);
+		printf("mmc_erase_t(), start %lu, blk_cnt %u, returned %d\n",
+						next, mmc->erase_grp_size, err);
+		if (err)
+			goto exit;
+		blks_left -= mmc->erase_grp_size;
+		next += mmc->erase_grp_size;
+	}
+
+	/*
+	 * Take care of any blocks after the erase_grp_size boundary.
+	 */
+	if (blks_left) {
+		/* Area to erase does not end on an erase group boundary. */
+		err = mmc_writeFF(mmc, next, blks_left);
+		printf("mmc_writeFF(), start %lu, blk_cnt %lu, returned %d\n",
+							next, blks_left, err);
+		if (err)
+			goto exit;
+		blks_left = 0;
+	}
+exit:
+	return blkcnt - blks_left;	/* Return number of blocks erased. */
 }
 
 static ulong
