@@ -153,7 +153,7 @@
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(OMAP44XX_DRAM_ADDR_SPACE_START + SZ_16M)
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_512M - SZ_16M)
 /* Fastboot product name */
-#define	FASTBOOT_PRODUCT_NAME	"tungsten"
+#define	FASTBOOT_PRODUCT_NAME	"steelhead"
 /* Fastboot reboot paramenter address, it's currently put at
  * PUBLIC_SAR_RAM1_FREE
  */
