@@ -212,6 +212,10 @@ int test_part_efi(block_dev_desc_t * dev_desc)
 {
 	legacy_mbr legacymbr;
 
+	/* Ensure that we won't try to read too much. */
+	if (dev_desc->blksz != sizeof(legacymbr))
+		return -1;
+
 	/* Read legacy MBR from block 0 and validate it */
 	if ((dev_desc->block_read(dev_desc->dev, 0, 1, (ulong *) & legacymbr) != 1)
 		|| (is_pmbr_valid(&legacymbr) != 1)) {
