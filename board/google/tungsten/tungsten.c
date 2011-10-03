@@ -229,11 +229,27 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
 	args[buf_sz-1] = 0;
 }
 
+#ifdef CONFIG_MFG
+static void dump_default_magic_numbers() {
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mac_defaults); ++i) {
+		u8 m[6];
+		generate_default_mac_addr(mac_defaults[i].salt, m);
+		printf("default %24s :: %02x:%02x:%02x:%02x:%02x:%02x\n",
+			mac_defaults[i].name,
+			m[5], m[4], m[3], m[2], m[1], m[0]);
+	}
+
+	printf("default %24s :: %s\n",
+			"androidboot.serialno", getenv("fbt_id#"));
+}
+#endif
+
 int board_late_init(void)
 {
 	char tmp_buf[17];
 	u64 id_64;
-	int i;
 
 #if 0
   extern int do_mmcinfo (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
@@ -248,16 +264,7 @@ int board_late_init(void)
 	setenv("fbt_id#", tmp_buf);
 
 #ifdef CONFIG_MFG
-	for (i = 0; i < ARRAY_SIZE(mac_defaults); ++i) {
-		u8 m[6];
-		generate_default_mac_addr(mac_defaults[i].salt, m);
-		printf("default %24s :: %02x:%02x:%02x:%02x:%02x:%02x\n",
-			mac_defaults[i].name,
-			m[5], m[4], m[3], m[2], m[1], m[0]);
-	}
-
-	printf("default %24s :: %s\n",
-			"androidboot.serialno", getenv("fbt_id#"));
+	dump_default_magic_numbers();
 #endif
 
 	fbt_preboot();
