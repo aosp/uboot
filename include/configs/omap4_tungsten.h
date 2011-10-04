@@ -163,9 +163,6 @@
 /* Use HS */
 #define	USB_BCD_VERSION			0x0200
 
-/* use preboot to detect key press for fastboot */
-#define CONFIG_PREBOOT
-
 #define CONFIG_USB_DEVICE		1
 /* Change these to suit your needs */
 #define CONFIG_USBD_VENDORID		0x18d1
@@ -202,13 +199,19 @@
 #ifdef CONFIG_MFG
 /*
  * Manufacturing build:
- * + Force the system into the diagnostic console automatically every time by
- *   deliberately not defining CONFIG_BOOTCOMMAND.
+ * + Force the system into fastboot mode initially, but make sure that fastboot
+ *   will never load a kernel from MMC by deliberately not defining
+ *   CONFIG_BOOTCOMMAND.  The test harness can then force the system into the
+ *   diagnostic console by either executing "fastboot continue" from the host,
+ *   or by sending a CTRL-C via the serial console.
  * + Turn on the gpio console commands.
  */
+#define CONFIG_PREBOOT "fastboot"
 #define CONFIG_CMD_GPIO
 #define CONFIG_SYS_LONGHELP 1
 #else
+/* use preboot to detect key press for fastboot */
+#define CONFIG_PREBOOT
 #define CONFIG_BOOTCOMMAND "booti mmc0"
 #undef CONFIG_SYS_LONGHELP	/* undef to save memory */
 #endif
