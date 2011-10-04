@@ -230,19 +230,19 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
 }
 
 #ifdef CONFIG_MFG
-static void dump_default_magic_numbers() {
+static void set_default_mac_env_vars() {
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(mac_defaults); ++i) {
 		u8 m[6];
+		char tmp_buf[18];
 		generate_default_mac_addr(mac_defaults[i].salt, m);
-		printf("default %24s :: %02x:%02x:%02x:%02x:%02x:%02x\n",
-			mac_defaults[i].name,
+		snprintf(tmp_buf, sizeof(tmp_buf),
+			"%02x:%02x:%02x:%02x:%02x:%02x",
 			m[5], m[4], m[3], m[2], m[1], m[0]);
+		tmp_buf[sizeof(tmp_buf) - 1] = 0;
+		setenv(mac_defaults[i].name, tmp_buf);
 	}
-
-	printf("default %24s :: %s\n",
-			"androidboot.serialno", getenv("fbt_id#"));
 }
 #endif
 
@@ -264,7 +264,7 @@ int board_late_init(void)
 	setenv("fbt_id#", tmp_buf);
 
 #ifdef CONFIG_MFG
-	dump_default_magic_numbers();
+	set_default_mac_env_vars();
 #endif
 
 	fbt_preboot();
