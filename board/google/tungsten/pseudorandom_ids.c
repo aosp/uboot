@@ -88,10 +88,9 @@ void generate_default_mac_addr(u32 salt, u8* mac_out) {
 
 	init_dieid_lfsr(&lfsr_state, salt);
 
-	rand = hash_lfsr_data(&lfsr_state, 0);
-	mac_out[5] = (u8)(rand & 0x7F);
-	mac_out[4] = (u8)((rand >> 8)  & 0xFF);
-	mac_out[3] = (u8)((rand >> 16) & 0xFF);
+	mac_out[5] = 0x00;
+	mac_out[4] = 0x1A;
+	mac_out[3] = 0x11;
 
 	rand = hash_lfsr_data(&lfsr_state, 0);
 	mac_out[2] = (u8)(rand & 0xFF);
