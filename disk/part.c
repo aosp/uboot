@@ -34,13 +34,14 @@
 #define PRINTF(fmt,args...)
 #endif
 
-#if (defined(CONFIG_CMD_IDE) || \
-     defined(CONFIG_CMD_MG_DISK) || \
-     defined(CONFIG_CMD_SATA) || \
-     defined(CONFIG_CMD_SCSI) || \
-     defined(CONFIG_CMD_USB) || \
-     defined(CONFIG_MMC) || \
-     defined(CONFIG_SYSTEMACE) )
+#if	defined(CONFIG_CMD_IDE) || \
+	defined(CONFIG_CMD_MG_DISK) || \
+	defined(CONFIG_CMD_SATA) || \
+	defined(CONFIG_CMD_SCSI) || \
+	defined(CONFIG_CMD_USB) || \
+	defined(CONFIG_MMC) || \
+	defined(CONFIG_SYSTEMACE) || \
+	defined(CONFIG_CMD_NAND)
 
 struct block_drvr {
 	char *name;
@@ -68,6 +69,9 @@ static const struct block_drvr block_drvr[] = {
 #endif
 #if defined(CONFIG_CMD_MG_DISK)
 	{ .name = "mgd", .get_dev = mg_disk_get_dev, },
+#endif
+#if defined(CONFIG_CMD_NAND)
+	{ .name = "nand", .get_dev = nand_get_dev, },
 #endif
 	{ },
 };
@@ -146,13 +150,14 @@ block_dev_desc_t *get_dev_by_name(char *devname)
 }
 #endif
 
-#if (defined(CONFIG_CMD_IDE) || \
-     defined(CONFIG_CMD_MG_DISK) || \
-     defined(CONFIG_CMD_SATA) || \
-     defined(CONFIG_CMD_SCSI) || \
-     defined(CONFIG_CMD_USB) || \
-     defined(CONFIG_MMC) || \
-     defined(CONFIG_SYSTEMACE) )
+#if	defined(CONFIG_CMD_IDE) || \
+	defined(CONFIG_CMD_MG_DISK) || \
+	defined(CONFIG_CMD_SATA) || \
+	defined(CONFIG_CMD_SCSI) || \
+	defined(CONFIG_CMD_USB) || \
+	defined(CONFIG_MMC) || \
+	defined(CONFIG_SYSTEMACE) || \
+	defined(CONFIG_CMD_NAND)
 
 /* ------------------------------------------------------------------------- */
 /*
@@ -215,6 +220,15 @@ void dev_print (block_dev_desc_t *dev_desc)
 	case IF_TYPE_DOC:
 		puts("device type DOC\n");
 		return;
+	case IF_TYPE_MTD_NOR:
+		puts("device type MTD NOR\n");
+		break;
+	case IF_TYPE_MTD_NAND:
+		puts("device type MTD NAND\n");
+		break;
+	case IF_TYPE_MTD_ONENAND:
+		puts("device type MTD ONENAND\n");
+		break;
 	case IF_TYPE_UNKNOWN:
 		puts("device type unknown\n");
 		return;
@@ -282,19 +296,21 @@ void dev_print (block_dev_desc_t *dev_desc)
 }
 #endif
 
-#if (defined(CONFIG_CMD_IDE) || \
-     defined(CONFIG_CMD_MG_DISK) || \
-     defined(CONFIG_CMD_SATA) || \
-     defined(CONFIG_CMD_SCSI) || \
-     defined(CONFIG_CMD_USB) || \
-     defined(CONFIG_MMC)		|| \
-     defined(CONFIG_SYSTEMACE) )
+#if	defined(CONFIG_CMD_IDE) || \
+	defined(CONFIG_CMD_MG_DISK) || \
+	defined(CONFIG_CMD_SATA) || \
+	defined(CONFIG_CMD_SCSI) || \
+	defined(CONFIG_CMD_USB) || \
+	defined(CONFIG_MMC) || \
+	defined(CONFIG_SYSTEMACE) || \
+	defined(CONFIG_CMD_NAND)
 
-#if defined(CONFIG_MAC_PARTITION) || \
-    defined(CONFIG_DOS_PARTITION) || \
-    defined(CONFIG_ISO_PARTITION) || \
-    defined(CONFIG_AMIGA_PARTITION) || \
-    defined(CONFIG_EFI_PARTITION)
+#if	defined(CONFIG_MAC_PARTITION) || \
+	defined(CONFIG_DOS_PARTITION) || \
+	defined(CONFIG_ISO_PARTITION) || \
+	defined(CONFIG_AMIGA_PARTITION) || \
+	defined(CONFIG_EFI_PARTITION) || \
+	defined(CONFIG_CMD_MTDPARTS)
 
 void init_part (block_dev_desc_t * dev_desc)
 {
@@ -331,6 +347,13 @@ void init_part (block_dev_desc_t * dev_desc)
 	if (test_part_amiga(dev_desc) == 0) {
 	    dev_desc->part_type = PART_TYPE_AMIGA;
 	    return;
+	}
+#endif
+
+#ifdef CONFIG_CMD_MTDPARTS
+	if (test_part_mtd(dev_desc) == 0) {
+		dev_desc->part_type = PART_TYPE_MTD;
+		return;
 	}
 #endif
 }
@@ -385,6 +408,15 @@ int get_partition_info (block_dev_desc_t *dev_desc, int part
 		}
 		break;
 #endif
+
+#ifdef CONFIG_CMD_MTDPARTS
+	case PART_TYPE_MTD:
+		if (get_partition_info_mtd(dev_desc, part, info) == 0) {
+			PRINTF("## Valid MTD partition found ##\n");
+			return 0;
+		}
+		break;
+#endif
 	default:
 		break;
 	}
@@ -415,6 +447,15 @@ static void print_part_header (const char *type, block_dev_desc_t * dev_desc)
 		break;
 	case IF_TYPE_MMC:
 		puts ("MMC");
+		break;
+	case IF_TYPE_MTD_NOR:
+		puts("NOR");
+		break;
+	case IF_TYPE_MTD_NAND:
+		puts("NAND");
+		break;
+	case IF_TYPE_MTD_ONENAND:
+		puts("ONENAND");
 		break;
 	default:
 		puts ("UNKNOWN");
@@ -466,15 +507,23 @@ void print_part (block_dev_desc_t * dev_desc)
 		print_part_efi (dev_desc);
 		return;
 #endif
+
+#ifdef CONFIG_CMD_MTDPARTS
+	case PART_TYPE_MTD:
+		PRINTF("## Testing for valid MTD partition ##\n");
+		print_part_header("MTD", dev_desc);
+		print_part_mtd(dev_desc);
+		return;
+#endif
 	}
 	puts ("## Unknown partition table\n");
 }
 
 
-#else	/* neither MAC nor DOS nor ISO nor AMIGA nor EFI partition configured */
+#else	/* No partitions configured */
 # error neither CONFIG_MAC_PARTITION nor CONFIG_DOS_PARTITION
 # error nor CONFIG_ISO_PARTITION nor CONFIG_AMIGA_PARTITION
-# error nor CONFIG_EFI_PARTITION configured!
+# error nor CONFIG_EFI_PARTITION nor CONFIG_CMD_MTDPARTS configured!
 #endif
 
 #endif
