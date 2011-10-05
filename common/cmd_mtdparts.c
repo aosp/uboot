@@ -21,6 +21,9 @@
  *   $Id: cmdlinepart.c,v 1.17 2004/11/26 11:18:47 lavinen Exp $
  *   Copyright 2002 SYSGO Real-Time Solutions GmbH
  *
+ * (C) Copyright 2011 Google, Inc.
+ *   Generic partition interface added.
+ *
  * See file CREDITS for list of people who contributed to this
  * project.
  *
@@ -1866,6 +1869,136 @@ static struct part_info* mtd_part_info(struct mtd_device *dev, unsigned int part
 
 	return NULL;
 }
+
+#if defined(CONFIG_PARTITIONS)
+/***************************************************/
+/* Generic partition interface for MTD		   */
+/***************************************************/
+/**
+ * Return pointer to the struct mtd_device for a requested device.
+ *
+ * @param blk_dev pointer to a block_dev_desc_t
+ * @return pointer to the struct mtd_device if found, NULL otherwise
+ */
+static struct mtd_device *mtd_dev_from_blk_dev(block_dev_desc_t *blk_dev)
+{
+	static const int mtd_type_mask = IF_TYPE_MTD - 1;
+	static const int if_mask = ~mtd_type_mask;
+
+	if (!blk_dev)
+		return NULL;
+
+	if ((blk_dev->if_type & if_mask) != IF_TYPE_MTD)
+		return NULL;
+
+	/* Ensure we are in sync with the environment variables. */
+	if (mtdparts_init())
+		return NULL;
+
+	return device_find(blk_dev->if_type & mtd_type_mask, blk_dev->dev);
+}
+
+/**
+ * Test if a given device is partitioned with MTD.
+ *
+ * @param blk_dev pointer to a block_dev_desc_t
+ * @return zero if blk_dev is partitioned with MTD, else -1
+ */
+int test_part_mtd(block_dev_desc_t *blk_dev)
+{
+	struct mtd_device *mtd_dev;
+
+	mtd_dev = mtd_dev_from_blk_dev(blk_dev);
+	if (!mtd_dev)
+		return -1;
+
+	if (list_empty(&mtd_dev->parts))
+		return -1;
+
+	return 0;
+}
+
+/**
+ * Given a device and a partition number, give information about
+ * the partition.
+ *
+ * @param blk_dev pointer to a block_dev_desc_t
+ * @param part_num The number of the partition to get information about
+ * @param info Points to the disk_partition_t that should be filled out
+ * @return zero if the partition was found and info was set, else -1
+ */
+int get_partition_info_mtd(block_dev_desc_t *blk_dev, int part_num,
+				disk_partition_t *info)
+{
+	struct mtd_device *mtd_dev;
+	struct list_head *pentry;
+	int i;
+
+	if (!info) {
+		printf("%s: Invalid Argument(s)\n", __func__);
+		return -1;
+	}
+
+	mtd_dev = mtd_dev_from_blk_dev(blk_dev);
+	if (!mtd_dev) {
+		printf("%s: The device is not an MTD device\n", __func__);
+		return -1;
+	}
+
+	i = 0;
+	list_for_each(pentry, &mtd_dev->parts) {
+		struct part_info *part;
+
+		if (i++ != part_num)
+			continue;
+
+		part = list_entry(pentry, struct part_info, link);
+		info->start = part->offset / blk_dev->blksz;
+		info->size = part->size / blk_dev->blksz;
+		info->blksz = blk_dev->blksz;
+		strncpy((char *)info->name, part->name, sizeof(info->name) - 1);
+		info->name[sizeof(info->name) - 1] = '\0';
+		info->type[0] = '\0';
+		return 0;
+	}
+	return -1;
+}
+
+/**
+ * Print information about all the MTD partitions on a device.
+ *
+ * @param blk_dev pointer to a block_dev_desc_t
+ */
+void print_part_mtd(block_dev_desc_t *blk_dev)
+{
+	struct mtd_device *mtd_dev;
+	struct list_head *pentry;
+	int part_num;
+
+	mtd_dev = mtd_dev_from_blk_dev(blk_dev);
+	if (!mtd_dev)
+		return;
+
+	printf("Part  Start LBA   End LBA     Size (LBA)       KB  Name\n");
+	part_num = 0;
+	list_for_each(pentry, &mtd_dev->parts) {
+		struct part_info *part;
+		part = list_entry(pentry, struct part_info, link);
+
+		u32 start_lba = part->offset / blk_dev->blksz;
+		u32 size_lba = part->size / blk_dev->blksz;
+		u32 size_kb = DIV_ROUND_UP(part->size, 1024);
+		u32 end_lba = start_lba + size_lba - 1;
+
+		printf("%4d  0x%08X  0x%08X  0x%08X  %7d  %s\n", part_num++,
+			start_lba, end_lba, size_lba, size_kb, part->name);
+	}
+
+	printf("\nLBA size = %lu bytes\n", blk_dev->blksz);
+
+	return;
+}
+#endif /* CONFIG_PARTITIONS */
 
 /***************************************************/
 /* U-boot commands				   */

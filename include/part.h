@@ -24,6 +24,7 @@
 #define _PART_H
 
 #include <ide.h>
+#include <jffs2/load_kernel.h>
 
 typedef struct block_dev_desc {
 	int		if_type;	/* type of the interface */
@@ -65,6 +66,10 @@ typedef struct block_dev_desc {
 #define IF_TYPE_MMC		6
 #define IF_TYPE_SD		7
 #define IF_TYPE_SATA		8
+#define IF_TYPE_MTD		0x100
+#define IF_TYPE_MTD_NOR		(IF_TYPE_MTD | MTD_DEV_TYPE_NOR)
+#define IF_TYPE_MTD_NAND	(IF_TYPE_MTD | MTD_DEV_TYPE_NAND)
+#define IF_TYPE_MTD_ONENAND	(IF_TYPE_MTD | MTD_DEV_TYPE_ONENAND)
 
 /* Part types */
 #define PART_TYPE_UNKNOWN	0x00
@@ -73,6 +78,7 @@ typedef struct block_dev_desc {
 #define PART_TYPE_ISO		0x03
 #define PART_TYPE_AMIGA		0x04
 #define PART_TYPE_EFI		0x05
+#define PART_TYPE_MTD		0x06
 
 /*
  * Type string for U-Boot bootable partitions
@@ -106,6 +112,7 @@ block_dev_desc_t* usb_stor_get_dev(int dev);
 block_dev_desc_t* mmc_get_dev(int dev);
 block_dev_desc_t* systemace_get_dev(int dev);
 block_dev_desc_t* mg_disk_get_dev(int dev);
+block_dev_desc_t *nand_get_dev(int dev);
 
 /* disk/part.c */
 int get_partition_info (block_dev_desc_t * dev_desc, int part, disk_partition_t *info);
@@ -121,6 +128,7 @@ static inline block_dev_desc_t* usb_stor_get_dev(int dev) { return NULL; }
 static inline block_dev_desc_t* mmc_get_dev(int dev) { return NULL; }
 static inline block_dev_desc_t* systemace_get_dev(int dev) { return NULL; }
 static inline block_dev_desc_t* mg_disk_get_dev(int dev) { return NULL; }
+static inline block_dev_desc_t *nand_get_dev(int dev) { return NULL; }
 
 static inline int get_partition_info (block_dev_desc_t * dev_desc, int part,
 	disk_partition_t *info) { return -1; }
@@ -162,6 +170,14 @@ int   test_part_amiga (block_dev_desc_t *dev_desc);
 int get_partition_info_efi (block_dev_desc_t * dev_desc, int part, disk_partition_t *info);
 void print_part_efi (block_dev_desc_t *dev_desc);
 int   test_part_efi (block_dev_desc_t *dev_desc);
+#endif
+
+#ifdef CONFIG_CMD_MTDPARTS
+/* common/cmd_mtdparts.c */
+int get_partition_info_mtd(block_dev_desc_t *dev_desc, int part,
+						disk_partition_t *info);
+void print_part_mtd(block_dev_desc_t *dev_desc);
+int   test_part_mtd(block_dev_desc_t *dev_desc);
 #endif
 
 #endif /* _PART_H */
