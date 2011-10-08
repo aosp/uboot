@@ -40,6 +40,8 @@ struct ctrl_id {
 	u32 die_id_3;		/* 0x210 */
 	u32 prod_id_0;		/* 0x214 */
 	u32 prod_id_1;		/* 0x218 */
+	u8 res2[0xa8];
+	u32 control_status;	/* 0x2c4 */
 };
 #endif /* __ASSEMBLY__ */
 #endif /* __KERNEL_STRICT_NAMES */
@@ -55,9 +57,13 @@ struct ctrl_id {
 #define OMAP4460_ES10	0x0b94e02f
 #define OMAP4460_ES11	0x2b94e02f
 
-/* device_type is bits 7:0 of prod_id_0 */
-#define DEVICE_TYPE_MASK 0x000000ff
-#define DEVICE_TYPE_GP   0xF0
+/* device_type is bits 10:8 of control_status */
+#define DEVICE_TYPE_MASK  0x00000700
+#define DEVICE_TYPE_SHIFT 0x8
+#define TST_DEVICE       0x0
+#define EMU_DEVICE       0x1
+#define HS_DEVICE        0x2
+#define GP_DEVICE        0x3
 
 /* silicon_type (for performance rating) is bits 17:16 of prod_id_1 */
 #define SILICON_TYPE_MASK 0x00030000
