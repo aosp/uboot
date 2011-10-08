@@ -87,7 +87,8 @@ u32 get_silicon_type(void)
 u32 get_device_type(void)
 {
 	struct ctrl_id *ctrl_base = (struct ctrl_id *)CTRL_BASE;
-	return (readl(&ctrl_base->prod_id_0) & DEVICE_TYPE_MASK);
+	return ((readl(&ctrl_base->control_status) & DEVICE_TYPE_MASK) >>
+		DEVICE_TYPE_SHIFT);
 }
 
 #ifdef CONFIG_DISPLAY_CPUINFO
@@ -159,7 +160,16 @@ OMAP4460_type:
 	}
 
 	switch (device_type) {
-	case DEVICE_TYPE_GP:
+	case TST_DEVICE:
+		sec_s = "TST";
+		break;
+	case EMU_DEVICE:
+		sec_s = "EMU";
+		break;
+	case HS_DEVICE:
+		sec_s = "HS";
+		break;
+	case GP_DEVICE:
 		sec_s = "GP";
 		break;
 	default:
