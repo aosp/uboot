@@ -185,6 +185,9 @@ static int mmc_init_setup(struct mmc *mmc)
 }
 
 
+static int last_start_value;
+static int last_end_value;
+
 static int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 			struct mmc_data *data)
 {
@@ -207,6 +210,14 @@ static int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 			return TIMEOUT;
 		}
 	}
+
+	if ((cmd->cmdidx == SD_CMD_ERASE_WR_BLK_START) ||
+	    (cmd->cmdidx == MMC_CMD_ERASE_GROUP_START))
+		last_start_value = cmd->cmdarg;
+	else if ((cmd->cmdidx == SD_CMD_ERASE_WR_BLK_END) ||
+		   (cmd->cmdidx == MMC_CMD_ERASE_GROUP_END))
+		last_end_value = cmd->cmdarg;
+
 	/*
 	 * CMDREG
 	 * CMDIDX[13:8]	: Command index
@@ -298,6 +309,28 @@ static int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 		mmc_write_data(mmc_base, data->src,
 				data->blocksize * data->blocks);
 	}
+
+	/* if this is an erase, wait for it to complete.
+	 * Add additional time to the timeout based on number
+	 * of blocks being erased.  Add 1 second per
+	 * 1000 blocks for now (1000 ms per 1 million blocks).
+	 */
+	if (cmd->cmdidx == MMC_CMD_ERASE) {
+		ulong timeout_ms = MAX_RETRY_MS;
+		ulong erase_blk_cnt = last_end_value - last_start_value + 1;
+		timeout_ms += DIV_ROUND_UP(erase_blk_cnt, 1000);
+		printf("%s: erasing %lu blocks, timeout = %lu seconds\n",
+		       __func__, erase_blk_cnt, timeout_ms / 1000);
+		start = get_timer(0);
+		while ((readl(&mmc_base->pstate) & DATI_MASK) == DATI_CMDDIS) {
+			if (get_timer(0) - start > timeout_ms) {
+				printf("%s: timedout waiting for cmddis"
+				       " after command!\n", __func__);
+				return TIMEOUT;
+			}
+		}
+	}
+
 	return 0;
 }
 

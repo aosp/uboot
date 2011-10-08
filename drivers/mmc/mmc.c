@@ -319,19 +319,16 @@ mmc_berase(int dev_num, lbaint_t start, lbaint_t blkcnt)
 		next += blk_r;
 	}
 
-	/*
-	 * Now loop erasing erase_grp_size blocks each time.  At first I tried
-	 * to do an erase for the whole thing at once, but timeouts ensued, so
-	 * I went back to the former approach.
-	 */
-	while (blks_left > mmc->erase_grp_size) {
-		err = mmc_erase_t(mmc, next, mmc->erase_grp_size);
+	/* Erase contiguouos blocks that are erase_grp_size aligned */
+	blk_r = (blks_left / mmc->erase_grp_size) * mmc->erase_grp_size;
+	if (blk_r) {
+		err = mmc_erase_t(mmc, next, blk_r);
 		printf("mmc_erase_t(), start %lu, blk_cnt %u, returned %d\n",
-						next, mmc->erase_grp_size, err);
+		       next, blk_r, err);
 		if (err)
 			goto exit;
-		blks_left -= mmc->erase_grp_size;
-		next += mmc->erase_grp_size;
+		blks_left -= blk_r;
+		next += blk_r;
 	}
 
 	/*
