@@ -180,13 +180,15 @@ struct fbt_partition {
  * partition is being erased.
  */
 struct fbt_partition fbt_partitions[] = {
-	{ "--ptbl+pad", 128 },  /* partition table is sector 0-34,
-				 * rest is padding to make the xloader
-				 * start at the next sector that the ROM
-				 * bootloader will look, which is at
-				 * offset 128KB into the eMMC.
-				 */
-	{ "xloader", 384 },	/* pad out to fill whole erase group */
+	{ "--ptable",  17},     /* partition table in first 34 sectors */
+	{ "--environment", 111 },  /* partition used to u-boot environment,
+				    * which is also where we store
+				    * oem lock/unlock state.  size
+				    * must match CONFIG_ENV_SIZE.
+				    */
+	{ "xloader", 384 },	/* must start at 128KB offset into eMMC
+				 * for ROM bootloader to find it.
+				 * pad out to fill whole erase group */
 	{ "bootloader", 512 },  /* u-boot, one erase group in size */
 	{ "device_info", 512 }, /* device specific info like MAC addresses.
 				 * read-only once it has been written to.

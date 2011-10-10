@@ -67,11 +67,20 @@
 
 /*
  * Size of malloc() pool
- * Total Size Environment - 256k
- * Malloc - add 256k
+ * Total Size Environment - 111KB - must match partition table
+ * Malloc - add 128KB
  */
-#define CONFIG_ENV_SIZE			(256 << 10)
-#define CONFIG_SYS_MALLOC_LEN		(CONFIG_ENV_SIZE + (256 << 10))
+#define CONFIG_ENV_IS_IN_MMC
+#define CONFIG_SYS_MMC_ENV_DEV		(FASTBOOT_MMC_DEVICE_ID)
+#define CONFIG_ENV_SIZE_KB		(111)
+#define CONFIG_ENV_SIZE			((CONFIG_ENV_SIZE_KB) << 10)
+/* offset into mmc for the environment.  we
+ * put it after the partition table, which is 34
+ * sectors (17KB) in size.
+ */
+#define CONFIG_ENV_OFFSET		(17 * 1024)
+#define CONFIG_MALLOC_SIZE_KB		(128)
+#define CONFIG_SYS_MALLOC_LEN		(CONFIG_ENV_SIZE + ((CONFIG_MALLOC_SIZE_KB) << 10))
 /* Vector Base */
 #define CONFIG_SYS_CA9_VECTOR_BASE	SRAM_ROM_VECT_BASE
 
@@ -90,8 +99,6 @@
 #define CONFIG_SYS_NS16550_CLK		V_NS16550_CLK
 #define CONFIG_CONS_INDEX		3
 #define CONFIG_SYS_NS16550_COM3		UART3_BASE
-
-#define CONFIG_ENV_IS_NOWHERE
 
 /*
  * select serial console configuration
@@ -152,6 +159,7 @@
 #define	CONFIG_CMD_FASTBOOT
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(OMAP44XX_DRAM_ADDR_SPACE_START + SZ_16M)
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_512M - SZ_16M)
+#define CONFIG_FASTBOOT_VERSION_BOOTLOADER "IKD10"
 /* Fastboot product name */
 #define	FASTBOOT_PRODUCT_NAME	"steelhead"
 /* Fastboot reboot paramenter address, it's currently put at
@@ -182,7 +190,6 @@
 #define CONFIG_CMD_ENV		/* Environment support          */
 
 /* Disabled commands */
-#undef CONFIG_CMD_SAVEENV       /* no where to save right now   */
 #undef CONFIG_CMD_EXT2		/* EXT2 Support                 */
 #undef CONFIG_CMD_FAT		/* FAT support                  */
 #undef CONFIG_CMD_NET
@@ -224,8 +231,7 @@
 #define CONFIG_EXTRA_ENV_SETTINGS \
 	"console=ttyS2,115200n8\0" \
 	"usbtty=cdc_acm\0" \
-	"vram=16M\0" \
-	"mmcdev=0\0"
+	"fastboot_unlocked=1\0"
 
 #define CONFIG_AUTO_COMPLETE		1
 
