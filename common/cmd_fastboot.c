@@ -62,6 +62,13 @@
 #include <fastboot.h>
 #include <mmc.h>
 
+#ifndef CONFIG_FASTBOOT_VERSION_BOOTLOADER
+#define CONFIG_FASTBOOT_VERSION_BOOTLOADER FASTBOOT_VERSION
+#endif
+
+#define FASTBOOT_UNLOCKED_ENV_NAME "fastboot_unlocked"
+#define FASTBOOT_UNLOCK_TIMEOUT_SECS 5
+
 #define	ERR
 #define	WARN
 /* #define INFO */
@@ -115,6 +122,10 @@
 #include <usb/pxa27x_udc.h>
 #elif defined(CONFIG_SPEAR3XX) || defined(CONFIG_SPEAR600)
 #include <usb/spr_udc.h>
+#endif
+
+#if defined (CONFIG_OMAP)
+#include <asm/arch/sys_proto.h>
 #endif
 
 #define STR_LANG		0x00
@@ -236,7 +247,6 @@ static struct usb_endpoint_instance endpoint_instance[NUM_ENDPOINTS + 1];
 
 /* FASBOOT specific */
 
-#define	SECURE		"no"
 /* U-boot version */
 extern char version_string[];
 
@@ -1429,8 +1439,26 @@ static void set_serial_number(void)
 	}
 }
 
+static void fbt_set_unlocked(int unlocked)
+{
+	char *unlocked_string;
+
+	printf("Setting device to %s\n",
+	       unlocked ? "unlocked" : "locked");
+	priv.unlocked = unlocked;
+	if (unlocked)
+		unlocked_string = "1";
+	else
+		unlocked_string = "0";
+	setenv(FASTBOOT_UNLOCKED_ENV_NAME, unlocked_string);
+#if defined(CONFIG_CMD_SAVEENV)
+	saveenv();
+#endif
+}
+
 static int fbt_fastboot_init(void)
 {
+	char *fastboot_unlocked_env;
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 	fbt_add_partitions_from_environment();
 #endif
@@ -1440,9 +1468,37 @@ static int fbt_fastboot_init(void)
 	priv.u_size = 0;
 	priv.u_bytes = 0;
 	priv.exit = 0;
+	priv.unlock_pending_start_time = 0;
 
 	priv.product_name = FASTBOOT_PRODUCT_NAME;
 	set_serial_number();
+
+	priv.unlocked = 1;
+	fastboot_unlocked_env = getenv(FASTBOOT_UNLOCKED_ENV_NAME);
+	if (fastboot_unlocked_env) {
+		unsigned long unlocked;
+		if (!strict_strtoul(fastboot_unlocked_env, 10, &unlocked)) {
+			if (unlocked)
+				priv.unlocked = 1;
+			else
+				priv.unlocked = 0;
+		} else {
+			printf("bad env setting %s of %s,"
+			       " initializing to locked\n",
+			       fastboot_unlocked_env,
+			       FASTBOOT_UNLOCKED_ENV_NAME);
+			fbt_set_unlocked(0);
+		}
+	} else {
+		printf("no existing env setting for %s\n",
+		       FASTBOOT_UNLOCKED_ENV_NAME);
+		printf("creating one set to false\n");
+		fbt_set_unlocked(0);
+	}
+	if (priv.unlocked)
+		printf("Device is unlocked\n");
+	else
+		printf("Device is locked\n");
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 	priv.nand_block_size               = FASTBOOT_NAND_BLOCK_SIZE;
@@ -1455,12 +1511,12 @@ static int fbt_fastboot_init(void)
 	return 0;
 }
 
-static int fbt_handle_erase(char *cmdbuf)
+static int fbt_handle_erase(char *partition_name)
 {
 	struct fastboot_ptentry *ptn;
 	int status = 0;
 
-	ptn = fastboot_flash_find_ptn(cmdbuf + 6);
+	ptn = fastboot_flash_find_ptn(partition_name);
 	if (ptn == 0) {
 		sprintf(priv.response, "FAILpartition does not exist");
 		return 0;
@@ -1512,7 +1568,7 @@ static int fbt_handle_erase(char *cmdbuf)
 		if (mmc == NULL) {
 			printf("error finding mmc device %d\n",
 			       FASTBOOT_MMC_DEVICE_ID);
-			return status;
+			return -1;
 		}
 
 		/* MMC has an erase function, but it operates on
@@ -1540,9 +1596,9 @@ static int fbt_handle_erase(char *cmdbuf)
 				return -1;
 
 			}
-			printf("Erasing partition '%s', start blk %llu,"
-			       " blk_cnt %llu, by writing 0xFFFFFFFF\n",
-			       ptn->name, ptn->start, blk_cnt);
+			printf("Erasing partition '%s':\n", ptn->name);
+			printf("\tstart blk %llu, blk_cnt %llu, by writing 0xFFFFFFFF\n",
+			       ptn->start, blk_cnt);
 
 			memset(priv.transfer_buffer, 0xff, ptn->length);
 			if (mmc->block_dev.block_write(FASTBOOT_MMC_DEVICE_ID,
@@ -1553,20 +1609,22 @@ static int fbt_handle_erase(char *cmdbuf)
 				       ptn->name);
 				sprintf(priv.response,
 					"FAILfailed to erase partition");
+				return -1;
 			} else {
 				printf("Partition '%s' erased\n", ptn->name);
 				sprintf(priv.response, "OKAY");
 			}
 		} else {
-			printf("Erasing partition '%s', start blk %llu,"
-			       " blk_cnt %llu\n",
-			       ptn->name, ptn->start, blk_cnt);
+			printf("Erasing partition '%s':\n", ptn->name);
+			printf("\tstart blk %llu, blk_cnt %llu\n",
+			       ptn->start, blk_cnt);
 
 			if (mmc->block_dev.block_erase(FASTBOOT_MMC_DEVICE_ID,
 						       ptn->start, blk_cnt) !=
 			    blk_cnt) {
 				printf("Erasing '%s' FAILED!\n", ptn->name);
 				sprintf(priv.response, "FAILfailed to erase partition");
+				return -1;
 			} else {
 				printf("partition '%s' erased\n", ptn->name);
 				sprintf(priv.response, "OKAY");
@@ -1577,7 +1635,7 @@ static int fbt_handle_erase(char *cmdbuf)
 	return status;
 }
 
-#if !defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING)
+#if !defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING) && !defined(CONFIG_ENV_OFFSET)
 int mmc_get_env_addr(struct mmc *mmc, u32 *env_addr)
 {
 	if (mmc != find_mmc_device(FASTBOOT_MMC_DEVICE_ID))
@@ -1795,6 +1853,11 @@ static void fbt_handle_flash(char *cmdbuf)
 {
 	struct fastboot_ptentry *ptn;
 
+	if (!priv.unlocked) {
+		sprintf(priv.response, "FAILdevice is locked");
+		return;
+	}
+
 	if (!priv.d_bytes) {
 		sprintf(priv.response, "FAILno image downloaded");
 		return;
@@ -1920,11 +1983,38 @@ static int fbt_handle_getvar(char *cmdbuf)
 	char *subcmd = cmdbuf + strlen("getvar:");
 	char *value = NULL;
 	if (!strcmp(subcmd, "version"))
-		value = FASTBOOT_VERSION;
-	else if (!strcmp(subcmd, "version-bootloader"))
 		value = version_string;
-	else if (!strcmp(subcmd, "secure"))
-		value = SECURE;
+	else if (!strcmp(subcmd, "version-baseband"))
+		value = "n/a";
+	else if (!strcmp(subcmd, "version-bootloader"))
+		value = CONFIG_FASTBOOT_VERSION_BOOTLOADER;
+	else if (!strcmp(subcmd, "unlocked"))
+		value = (priv.unlocked ? "yes" : "no");
+	else if (!strcmp(subcmd, "secure")) {
+		/* we use the inverse meaning of unlocked */
+		value = (priv.unlocked ? "no" : "yes");
+	}
+#if defined (CONFIG_OMAP)
+	else if (!strcmp(subcmd, "device_type")) {
+		switch(get_device_type()) {
+		case TST_DEVICE:
+			value = "TST";
+			break;
+		case EMU_DEVICE:
+			value = "EMU";
+			break;
+		case HS_DEVICE:
+			value = "HS";
+			break;
+		case GP_DEVICE:
+			value = "GP";
+			break;
+		default:
+			value = "unknown";
+			break;
+		}
+	}
+#endif
 	else if (!strcmp(subcmd, "product"))
 		value = priv.product_name;
 	else if (!strcmp(subcmd, "serialno"))
@@ -2055,7 +2145,51 @@ static int fbt_handle_oem(const char *cmdbuf)
 	/* %fastboot oem unlock */
 	if (strcmp(cmdbuf, "unlock") == 0) {
 		FBTDBG("oem unlock\n");
-		printf("\nfastboot: oem unlock not implemented yet!!\n");
+		if (priv.unlocked) {
+			printf("oem unlock ignored, device already unlocked\n");
+			strcpy(priv.response, "FAILalready unlocked");
+			return 0;
+		}
+		printf("oem unlock requested:\n");
+		printf("\tUnlocking your device will invalidate\n");
+		printf("\tyour warranty and wipe user data.\n");
+		printf("\tDo 'fastboot oem unlock_accept' to accept\n");
+		printf("\tthese conditions within %d seconds.\n",
+		       FASTBOOT_UNLOCK_TIMEOUT_SECS);
+		priv.unlock_pending_start_time = get_timer(0);
+		strcpy(priv.response, "OKAY");
+		return 0;
+	}
+
+	if (strcmp(cmdbuf, "unlock_accept") == 0) {
+		int err;
+		FBTDBG("oem unlock_accept\n");
+		if (!priv.unlock_pending_start_time) {
+			printf("oem unlock_accept ignored, not pending\n");
+			strcpy(priv.response, "FAILoem unlock not requested");
+			return 0;
+		}
+		priv.unlock_pending_start_time = 0;
+		err = fbt_handle_erase("userdata");
+		if (err) {
+			printf("Erase failed with error %d\n", err);
+			strcpy(priv.response, "FAILErasing userdata failed");
+			return 0;
+		}
+		fbt_set_unlocked(1);
+		strcpy(priv.response, "OKAY");
+		return 0;
+	}
+
+	if (strcmp(cmdbuf, "lock") == 0) {
+		FBTDBG("oem lock\n");
+		if (!priv.unlocked) {
+			printf("oem lock ignored, already locked\n");
+			strcpy(priv.response, "FAILalready locked");
+			return 0;
+		}
+		fbt_set_unlocked(0);
+		strcpy(priv.response, "OKAY");
 		return 0;
 	}
 
@@ -2388,6 +2522,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		/* %fastboot erase <partition_name> */
 		if (memcmp(cmdbuf, "erase:", 6) == 0) {
 			FBTDBG("erase\n");
+			cmdbuf += 6;
 			fbt_handle_erase(cmdbuf);
 		}
 
@@ -2666,6 +2801,14 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		udc_irq();
 		if (priv.configured) {
 			fbt_handle_rx();
+			if (priv.unlock_pending_start_time) {
+				/* check if unlock pending should expire */
+				if (get_timer(priv.unlock_pending_start_time) >
+				    (FASTBOOT_UNLOCK_TIMEOUT_SECS * 1000)) {
+					printf("unlock pending expired\n");
+					priv.unlock_pending_start_time = 0;
+				}
+			}
 			fbt_handle_response();
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
 #ifdef	FASTBOOT_UPLOAD
@@ -2846,12 +2989,15 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		 * tags so append the serial number to the bootimg header
 		 * value and set the bootargs environment variable.
 		 * do_bootm_linux() will use the bootargs environment variable
-		 * to pass it to the kernel.
+		 * to pass it to the kernel.  Add the bootloader
+		 * version too.
 		 */
 		amt = snprintf(command_line,
 				sizeof(command_line),
-				"%s androidboot.serialno=%s",
-				hdr->cmdline, priv.serial_no);
+				"%s androidboot.serialno=%s"
+				" androidboot.bootloader=%s",
+				hdr->cmdline, priv.serial_no,
+				CONFIG_FASTBOOT_VERSION_BOOTLOADER);
 
 		for (i = 0; i < priv.num_device_info; i++) {
 			/* Append special device specific information like
@@ -2895,6 +3041,22 @@ U_BOOT_CMD(
 	"\t'addr' should be the address of boot image which is zImage+ramdisk.img if in memory or the mmc0 or mmc1 to load from 'boot' partition in mmc"
 );
 
+static void fbt_request_start_fastboot(void)
+{
+	char *buf[512];
+	char *old_preboot = getenv("preboot");
+	printf("old preboot env = %s\n", old_preboot);
+
+	if (old_preboot) {
+		snprintf(buf, sizeof(buf),
+			 "setenv preboot %s; fastboot", old_preboot);
+		setenv("preboot", buf);
+	} else
+		setenv("preboot", "setenv preboot; fastboot");
+
+	printf("%s: setting preboot env to %s\n", __func__, getenv("preboot"));
+}
+
 /*
  * Determine if we should
  * enter fastboot mode based on board specific key press or
@@ -2905,7 +3067,7 @@ void fbt_preboot(void)
 	enum fbt_reboot_type frt;
 
 	if (board_fbt_key_pressed()) {
-		setenv("preboot", "fastboot");
+		fbt_request_start_fastboot();
 		return;
 	}
 
@@ -2937,7 +3099,7 @@ void fbt_preboot(void)
 		 */
 		printf("\n%s: starting fastboot because of reboot flag\n",
 		       __func__);
-		setenv("preboot", "fastboot");
+		fbt_request_start_fastboot();
 	} else
 		printf("\n%s: no special reboot flags, doing normal boot\n",
 		       __func__);

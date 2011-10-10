@@ -192,6 +192,9 @@ struct cmd_fastboot_interface {
 
 	unsigned int exit;
 
+	unsigned int unlocked;
+	unsigned long unlock_pending_start_time;
+
 	/* device specific info */
 	unsigned int dev_info_uninitialized;
 	unsigned int num_device_info;
