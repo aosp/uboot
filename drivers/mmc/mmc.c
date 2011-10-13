@@ -319,11 +319,11 @@ mmc_berase(int dev_num, lbaint_t start, lbaint_t blkcnt)
 		next += blk_r;
 	}
 
-	/* Erase contiguouos blocks that are erase_grp_size aligned */
+	/* Erase contiguous blocks that are erase_grp_size aligned */
 	blk_r = (blks_left / mmc->erase_grp_size) * mmc->erase_grp_size;
 	if (blk_r) {
 		err = mmc_erase_t(mmc, next, blk_r);
-		printf("mmc_erase_t(), start %lu, blk_cnt %u, returned %d\n",
+		printf("mmc_erase_t(), start %lu, blk_cnt %lu, returned %d\n",
 		       next, blk_r, err);
 		if (err)
 			goto exit;
