@@ -3043,7 +3043,7 @@ U_BOOT_CMD(
 
 static void fbt_request_start_fastboot(void)
 {
-	char *buf[512];
+	char buf[512];
 	char *old_preboot = getenv("preboot");
 	printf("old preboot env = %s\n", old_preboot);
 
