@@ -73,8 +73,7 @@ static ulong nand_berase(int dev_num, lbaint_t start, lbaint_t blkcnt)
 	if (!nand)
 		return 0;
 
-	struct mtd_info *mtd = (struct mtd_info *)nand;
-	uint32_t blk_size = mtd->writesize;
+	uint32_t blk_size = nand->writesize;
 
 	nand_erase_options_t opts = {
 	    .length = blkcnt * (loff_t)blk_size,
@@ -85,11 +84,13 @@ static ulong nand_berase(int dev_num, lbaint_t start, lbaint_t blkcnt)
 	};
 
 	/*
-	 * If the jffs2 flag needs to be set, it could be done here (perhaps
-	 * via a command or environment variable).
+	 * Note nand_erase_opts will skip over and not fail on bad blocks.
+	 * In addition, it will round up the number of blocks requested to an
+	 * erase block boundary.  This can cause more blocks to be erased
+	 * than requested, but this is much better than too few in the case
+	 * of someone trying to erase blocks so they can subsequently write
+	 * blocks.
 	 */
-
-	/* Note nand_erase_opts will skip over and not fail on bad blocks. */
 	return nand_erase_opts(nand, &opts) ? 0 : blkcnt;
 }
 
@@ -100,24 +101,26 @@ static ulong nand_bwrite(int dev_num, lbaint_t start, lbaint_t blkcnt,
 		return 0;
 
 	nand_info_t *nand = nand_get_info(dev_num);
-	if (!nand)
+	block_dev_desc_t *blkdev = nand_get_dev(dev_num);
+	if (!nand || !blkdev)
 		return 0;
 
-	struct mtd_info *mtd = (struct mtd_info *)nand;
-	uint32_t blk_size = mtd->writesize;
-	loff_t offset = (loff_t)blk_size * start;
-	size_t length = (size_t)blk_size * blkcnt;
+	loff_t offset = (loff_t)nand->writesize * start;
+	size_t length = (size_t)blkdev->blksz * blkcnt;
 	int flags = 0;
 
+#ifdef CONFIG_CMD_NAND_YAFFS
+	if (blkdev->blksz == (nand->writesize + nand->oobsize))
+		flags |= WITH_YAFFS_OOB;
+#endif
 	/*
-	 * If the flags needs to be set (e.g. to include WITH_YAFFS_OOB), it
-	 * could be done here (perhaps via a command or environment variable).
+	 * nand_write_skip_bad will update length with the number of bytes
+	 * written.  By using the length to return the number of blocks
+	 * written, the return value can be ignored.
 	 */
+	(void)nand_write_skip_bad(nand, offset, &length, (u_char *)src, flags);
 
-	if (nand_write_skip_bad(nand, offset, &length, (u_char *)src, flags))
-		return 0;
-
-	return length / blk_size;
+	return length / blkdev->blksz;
 }
 
 static ulong nand_bread(int dev_num, lbaint_t start, lbaint_t blkcnt,
@@ -130,16 +133,52 @@ static ulong nand_bread(int dev_num, lbaint_t start, lbaint_t blkcnt,
 	if (!nand)
 		return 0;
 
-	struct mtd_info *mtd = (struct mtd_info *)nand;
-	uint32_t blk_size = mtd->writesize;
+	uint32_t blk_size = nand->writesize;
 	loff_t offset = (loff_t)blk_size * start;
 	size_t length = (size_t)blk_size * blkcnt;
 
-	if (nand_read_skip_bad(nand, offset, &length, dst))
-		return 0;
+	/*
+	 * nand_read_skip_bad will update length with the number of bytes
+	 * read.  By using the length to return the number of blocks
+	 * read, the return value can be ignored.
+	 */
+	(void)nand_read_skip_bad(nand, offset, &length, dst);
 
 	return length / blk_size;
 }
+
+#ifdef CONFIG_CMD_NAND_YAFFS
+static int do_nandoob(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+{
+	int use_oob, i;
+
+	if (argc != 2)
+		return cmd_usage(cmdtp);
+
+	if (!strcmp(argv[1], "enable"))
+		use_oob = 1;
+	else if (!strcmp(argv[1], "disable"))
+		use_oob = 0;
+	else
+		return cmd_usage(cmdtp);
+
+	for (i = 0; i < CONFIG_SYS_MAX_NAND_DEVICE; i++) {
+		if (use_oob)
+			nand_blkdev[i].blksz = nand_info[i].writesize +
+							nand_info[i].oobsize;
+		else
+			nand_blkdev[i].blksz = nand_info[i].writesize;
+	}
+	printf("Writing to the OOB data is %s.\n",
+					use_oob ? "enabled" : "disabled");
+	return 0;
+}
+U_BOOT_CMD(nandoob, 2,	0, do_nandoob,
+	"enable or disable writing to the OOB data",
+	"(enable|disable)\n"
+	"    - enable or disable writing to the OOB data"
+);
+#endif
 #endif
 
 static void nand_init_chip(struct mtd_info *mtd, struct nand_chip *nand,
