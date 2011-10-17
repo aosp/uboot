@@ -472,7 +472,7 @@ static size_t drop_ffs(const nand_info_t *nand, const u_char *buf,
  *
  * @param nand  	NAND device
  * @param offset	offset in flash
- * @param length	buffer length
+ * @param length	buffer length, on return holds number of bytes written
  * @param buffer        buffer to read from
  * @param flags		flags modifying the behaviour of the write to NAND
  * @return		0 in case of success
@@ -487,8 +487,10 @@ int nand_write_skip_bad(nand_info_t *nand, loff_t offset, size_t *length,
 
 #ifdef CONFIG_CMD_NAND_YAFFS
 	if (flags & WITH_YAFFS_OOB) {
-		if (flags & ~WITH_YAFFS_OOB)
+		if (flags & ~WITH_YAFFS_OOB) {
+			*length = 0;
 			return -EINVAL;
+		}
 
 		int pages;
 		pages = nand->erasesize / nand->writesize;
@@ -496,6 +498,7 @@ int nand_write_skip_bad(nand_info_t *nand, loff_t offset, size_t *length,
 		if (*length % (nand->writesize + nand->oobsize)) {
 			printf ("Attempt to write incomplete page"
 				" in yaffs mode\n");
+			*length = 0;
 			return -EINVAL;
 		}
 	} else
@@ -623,7 +626,7 @@ int nand_write_skip_bad(nand_info_t *nand, loff_t offset, size_t *length,
  *
  * @param nand NAND device
  * @param offset offset in flash
- * @param length buffer length, on return holds remaining bytes to read
+ * @param length buffer length, on return holds number of bytes read
  * @param buffer buffer to write to
  * @return 0 in case of success
  */
