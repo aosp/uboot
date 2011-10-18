@@ -143,6 +143,8 @@
  */
 #define CONFIG_OMAP_TPS_MPU_MV 1025
 #define CONFIG_OMAP4460_MPU_DPLL mpu_dpll_params_350mhz
+#define CONFIG_OMAP4430_ES1_0_MPU_DPLL mpu_dpll_params_350mhz
+#define CONFIG_OMAP4430_non_ES1_0_MPU_DPLL mpu_dpll_params_350mhz
 
 /* Make sure that the ABE is clocked off the sysclk and not the 32KHz clock.
  * Timers used for remote synchronization as well as the external fref fed to
