@@ -104,6 +104,18 @@ static void lpddr2_init(u32 base, const struct emif_regs *regs)
 {
 	struct emif_reg_struct *emif = (struct emif_reg_struct *)base;
 
+	/* in case self refresh was enabled in kernel and we
+	 * did a warm reset into the bootloader, disable it or else
+	 * we hang.
+	 */
+	if (omap_revision() == OMAP4430_ES1_0) {
+		/* ES1 bug EMIF should be in force idle during freq_update */
+		writel(0, &emif->emif_pwr_mgmt_ctrl);
+	} else {
+		writel(EMIF_PWR_MGMT_CTRL, &emif->emif_pwr_mgmt_ctrl);
+		writel(EMIF_PWR_MGMT_CTRL_SHDW, &emif->emif_pwr_mgmt_ctrl_shdw);
+	}
+
 	/* Not NVM */
 	clrbits_le32(&emif->emif_lpddr2_nvm_config, OMAP44XX_REG_CS1NVMEN_MASK);
 
