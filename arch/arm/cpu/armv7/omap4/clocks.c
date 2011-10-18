@@ -587,6 +587,18 @@ static void do_scale_vcore(u32 vcore_reg, u32 volt_mv)
 	}
 }
 
+/* Since this code runs in spl, and spl currently doesn't link
+ * any board files, we use CONFIG check for override.
+ */
+int use_tps62361(void)
+{
+#ifndef CONFIG_FORCE_TPS62361
+	if (omap_revision() < OMAP4460_ES1_0)
+		return 0;
+#endif
+	return 1;
+}
+
 /*
  * Setup the voltages for vdd_mpu, vdd_core, and vdd_iva
  * We set the maximum voltages allowed here because Smart-Reflex is not
@@ -617,7 +629,7 @@ static void scale_vcores(void)
 
 	omap4_rev = omap_revision();
 	/* TPS - supplies vdd_mpu on 4460 */
-	if (omap4_rev >= OMAP4460_ES1_0) {
+	if (use_tps62361()) {
 		volt = CONFIG_OMAP_TPS_MPU_MV;
 		printf("Setting TPS to %dmV\n", volt);
 		do_scale_tps62361(TPS62361_REG_ADDR_SET1, volt);
@@ -634,7 +646,7 @@ static void scale_vcores(void)
 	 *
 	 * 4460 : supplies vdd_core
 	 */
-	if (omap4_rev < OMAP4460_ES1_0) {
+	if (!use_tps62361()) {
 		volt = 1417;
 		do_scale_vcore(SMPS_REG_ADDR_VCORE1, volt);
 	} else {
@@ -651,7 +663,7 @@ static void scale_vcores(void)
 	 * 4430 : supplies vdd_core
 	 * 4460 : not connected
 	 */
-	if (omap4_rev < OMAP4460_ES1_0) {
+	if (!use_tps62361()) {
 		volt = 1200;
 		do_scale_vcore(SMPS_REG_ADDR_VCORE3, volt);
 	}

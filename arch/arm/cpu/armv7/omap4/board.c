@@ -153,7 +153,7 @@ static void set_muxconf_regs_essential(void)
 		   sizeof(struct pad_conf_entry));
 
 	/* gpio_wk7 is used for controlling TPS on 4460 */
-	if (omap_revision() >= OMAP4460_ES1_0)
+	if (use_tps62361())
 		writew(M3, CONTROL_WKUP_PAD1_FREF_CLK4_REQ);
 }
 

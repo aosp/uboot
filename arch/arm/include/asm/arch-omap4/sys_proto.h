@@ -53,6 +53,7 @@ u32 omap4_ddr_clk(void);
 void cancel_out(u32 *num, u32 *den, u32 den_limit);
 void sdram_init(void);
 u32 omap4_sdram_size(void);
+int use_tps62361(void);
 
 void dieid_num_r(void);
 
