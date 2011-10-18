@@ -141,6 +141,8 @@
  * reduce power consumption and heat in the bootloader or else
  * it's way unstable with TI's default settings.
  */
+#define CONFIG_FORCE_TPS62361 /* always use TPS62361, don't do runtime
+				 check of omap4430 vs omap4460 */
 #define CONFIG_OMAP_TPS_MPU_MV 1025
 #define CONFIG_OMAP4460_MPU_DPLL mpu_dpll_params_350mhz
 #define CONFIG_OMAP4430_ES1_0_MPU_DPLL mpu_dpll_params_350mhz
@@ -161,7 +163,7 @@
 #define	CONFIG_CMD_FASTBOOT
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(OMAP44XX_DRAM_ADDR_SPACE_START + SZ_16M)
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_512M - SZ_16M)
-#define CONFIG_FASTBOOT_VERSION_BOOTLOADER "IKD10"
+#define CONFIG_FASTBOOT_VERSION_BOOTLOADER "steelheadAA001"
 /* Fastboot product name */
 #define	FASTBOOT_PRODUCT_NAME	"steelhead"
 /* Fastboot reboot paramenter address, it's currently put at
