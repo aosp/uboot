@@ -341,5 +341,25 @@ struct pad_conf_entry {
 #define CONTROL_SPARE_R		0x0618
 #define CONTROL_SPARE_R_C0		0x061C
 
+/* ES2.0 only */
+#define GPMC_WAIT2			0x008e
+#define GPMC_NCS4			0x0090
+#define GPMC_NCS5			0x0092
+#define GPMC_NCS6			0x0094
+#define GPMC_NCS7			0x0096
+
+#define KPD_COL3			0x017c
+#define KPD_COL4			0x017e
+#define KPD_COL5			0x0180
+#define KPD_COL0			0x0182
+#define KPD_COL1			0x0184
+#define KPD_COL2			0x0186
+#define KPD_ROW3			0x0188
+#define KPD_ROW4			0x018a
+#define KPD_ROW5			0x018c
+#define KPD_ROW0			0x018e
+#define KPD_ROW1			0x0190
+#define KPD_ROW2			0x0192
+
 #define CONTROL_WKUP_PAD1_FREF_CLK4_REQ	0x4A31E05A
 #endif /* _MUX_OMAP4_H_ */
