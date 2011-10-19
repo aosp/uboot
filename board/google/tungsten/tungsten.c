@@ -29,6 +29,7 @@
  * MA 02111-1307 USA
  */
 #include <common.h>
+#include <asm/gpio.h>
 #include <asm/arch/sys_proto.h>
 #include <asm/arch/mmc_host_def.h>
 #include <fastboot.h>
@@ -43,6 +44,24 @@
 #include "pseudorandom_ids.h"
 
 DECLARE_GLOBAL_DATA_PTR;
+
+#define STEELHEAD_REV_ALPHA   0x0
+#define STEELHEAD_REV_EVT     0x1
+#define STEELHEAD_REV_EVT2    0x2
+#define STEELHEAD_REV_DVT     0x3
+
+static const char const *steelhead_hw_name[] = {
+	[STEELHEAD_REV_ALPHA] = "Steelhead ALPHA",
+	[STEELHEAD_REV_EVT]   = "Steelhead EVT",
+	[STEELHEAD_REV_EVT2]  = "Steelhead EVT2",
+	[STEELHEAD_REV_DVT]   = "Steelhead DVT",
+};
+int hwrev_gpios[] = {
+	182, /* board_id_0 */
+	101, /* board_id_1 */
+	171, /* board_id_2 */
+};
+int steelhead_hw_rev;
 
 const struct omap_sysinfo sysinfo = {
 	"Board: OMAP4 Tungsten\n"
@@ -63,6 +82,35 @@ static const struct mac_generator mac_defaults[] = {
 static const u32 serial_no_salt = MAKE_SALT('S','e','r','#');
 #undef MAKE_SALT
 
+static const char *steelhead_hw_rev_name(void)
+{
+	int num = ARRAY_SIZE(steelhead_hw_name);
+
+	if (steelhead_hw_rev >= num ||
+	    !steelhead_hw_name[steelhead_hw_rev])
+		return "Steelhead unknown version";
+
+	return steelhead_hw_name[steelhead_hw_rev];
+}
+
+static void init_hw_rev(void)
+{
+	int i;
+
+	do_set_mux(CONTROL_PADCONF_CORE, core_padconf_array_non_essential,
+		   sizeof(core_padconf_array_non_essential) /
+		   sizeof(struct pad_conf_entry));
+
+	steelhead_hw_rev = 0;
+
+	for (i = 0; i < ARRAY_SIZE(hwrev_gpios); i++)
+		steelhead_hw_rev |= gpio_get_value(hwrev_gpios[i]) << i;
+
+	printf("Steelhead HW revision: %02x (%s)\n", steelhead_hw_rev,
+		steelhead_hw_rev_name());
+
+}
+
 /**
  * @brief board_init
  *
@@ -76,6 +124,7 @@ int board_init(void)
 	gpmc_init();
 	gd->bd->bi_arch_number = MACH_TYPE_STEELHEAD;
 	gd->bd->bi_boot_params = (0x80000000 + 0x100); /* boot param addr */
+	init_hw_rev();
 	return 0;
 }
 
@@ -252,11 +301,6 @@ int board_late_init(void)
 {
 	char tmp_buf[17];
 	u64 id_64;
-
-#if 0
-  extern int do_mmcinfo (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
-  do_mmcinfo(NULL, 0, 0, NULL);
-#endif
 
 	dieid_num_r();
 

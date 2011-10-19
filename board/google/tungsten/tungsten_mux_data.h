@@ -43,6 +43,9 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	{I2C2_SCL, (IEN | PTU | M0)},
 	{I2C2_SDA, (IEN | PTU | M0)},
 	{GPMC_A24, (PTU | M3 | OFF_EN | OFF_PU)},	/* gpio_48, UI_AVR_RST_N */
+	{FREF_CLK2_OUT, (IEN | PTD | M3)},	/* gpio_182 - board_id_0 */
+	{GPMC_NCS4,	(IEN | PTD | M3)},	/* gpio_101 - board_id_1 */
+	{KPD_COL3,	(IEN | PTD | M3)},	/* gpio_171 - board_id_2 */
 #ifdef CONFIG_MFG
 	/* during the first stage of manufacturing diagnostics, many pins are
 	 * configured as GPIOs for basic connectivity testing.  This section
