@@ -62,6 +62,8 @@
 #include <fastboot.h>
 #include <mmc.h>
 
+DECLARE_GLOBAL_DATA_PTR;
+
 #ifndef CONFIG_FASTBOOT_VERSION_BOOTLOADER
 #define CONFIG_FASTBOOT_VERSION_BOOTLOADER FASTBOOT_VERSION
 #endif
@@ -73,6 +75,12 @@
 #define	WARN
 /* #define INFO */
 /* #define DEBUG */
+
+#ifndef CONFIG_FASTBOOT_LOG_SIZE
+#define CONFIG_FASTBOOT_LOG_SIZE 4000
+#endif
+static char log_buffer[CONFIG_FASTBOOT_LOG_SIZE];
+static unsigned long log_position;
 
 #ifdef DEBUG
 #define FBTDBG(fmt, args...)\
@@ -2159,6 +2167,77 @@ static int fbt_handle_oem_setinfo(const char *cmdbuf)
 	return 0;
 }
 
+static int fbt_send_raw_info(const char *info, int bytes_left)
+{
+	int response_max;
+
+	if (!priv.executing_command)
+		return -1;
+
+	/* break up info into response sized chunks */
+	/* remove trailing '\n' */
+	if (info[bytes_left-1] == '\n')
+		bytes_left--;
+
+	/* -4 for the INFO prefix */
+	response_max = sizeof(priv.response) - 4;
+	strcpy(priv.response, "INFO");
+	while (1) {
+		if (bytes_left >= response_max) {
+			strncpy(priv.response + 4, info,
+				response_max);
+
+			/* flush any data set by command */
+			priv.flag |= FASTBOOT_FLAG_RESPONSE;
+			fbt_handle_response();
+			fbt_wait_usb_fifo_flush();
+
+			info += response_max;
+			bytes_left -= response_max;
+		} else {
+			strncpy(priv.response + 4, info,
+				bytes_left);
+
+			/* in case we stripped '\n',
+			   make sure priv.response is
+			   terminated */
+			priv.response[4 + bytes_left] = '\0';
+			break;
+		}
+	}
+
+	priv.flag |= FASTBOOT_FLAG_RESPONSE;
+	fbt_handle_response();
+	fbt_wait_usb_fifo_flush();
+
+	return 0;
+}
+
+static void fbt_dump_log(void)
+{
+	/* the log consists of a bunch of printf output, with
+	 * logs of '\n' interspersed. to make it format a
+	 * bit better when sending it via the INFO
+	 * part of the fastboot protocol, which has a limited
+	 * buffer, break the log into bits that end
+	 * with '\n', like replaying the printfs.
+	 */
+	int bytes_left = log_position;
+	char *line_start = log_buffer;
+	while (bytes_left) {
+		char *next_line  = strchr(line_start, '\n');
+		if (next_line) {
+			int len = next_line - line_start + 1;
+			fbt_send_raw_info(line_start, len);
+			line_start += len;
+			bytes_left -= len;
+		} else {
+			fbt_send_raw_info(line_start, strlen(line_start));
+			break;
+		}
+	}
+}
+
 static int fbt_handle_oem(char *cmdbuf)
 {
 	cmdbuf += 4;
@@ -2255,6 +2334,14 @@ static int fbt_handle_oem(char *cmdbuf)
 		FBTDBG("oem %s\n", cmdbuf);
 		cmdbuf += 6;
 		return fbt_handle_erase(cmdbuf);
+	}
+
+	/* %fastboot oem log */
+	if (strcmp(cmdbuf, "log") == 0) {
+		FBTDBG("oem %s\n", cmdbuf);
+		fbt_dump_log();
+		strcpy(priv.response, "OKAY");
+		return 0;
 	}
 
 	/* %fastboot oem ucmd ... */
@@ -3150,48 +3237,24 @@ void fbt_preboot(void)
 
 int fbt_send_info(const char *info)
 {
-	int bytes_left;
-	int response_max;
+	int len;
+	unsigned long space_in_log = CONFIG_FASTBOOT_LOG_SIZE - log_position;
+	unsigned long bytes_to_log;
 
-	if (!priv.executing_command)
-		return -1;
+	len = strlen(info);
 
-	/* break up info into response sized chunks */
-	bytes_left = strlen(info);
-	/* remove trailing '\n' */
-	if (info[bytes_left-1] == '\n')
-		bytes_left--;
+	/* check if relocation is done before we can use globals */
+	if (gd->flags & GD_FLG_RELOC) {
+		if (len > space_in_log)
+			bytes_to_log = space_in_log;
+		else
+			bytes_to_log = len;
 
-	/* -4 for the INFO prefix */
-	response_max = sizeof(priv.response) - 4;
-	strcpy(priv.response, "INFO");
-	while (1) {
-		if (bytes_left >= response_max) {
-			strncpy(priv.response + 4, info,
-				response_max);
-
-			/* flush any data set by command */
-			priv.flag |= FASTBOOT_FLAG_RESPONSE;
-			fbt_handle_response();
-			fbt_wait_usb_fifo_flush();
-
-			info += response_max;
-			bytes_left -= response_max;
-		} else {
-			strncpy(priv.response + 4, info,
-				bytes_left);
-
-			/* in case we stripped '\n',
-			   make sure priv.response is
-			   terminated */
-			priv.response[4 + bytes_left] = '\0';
-			break;
+		if (bytes_to_log) {
+			strncpy(&log_buffer[log_position], info, bytes_to_log);
+			log_position += bytes_to_log;
 		}
 	}
 
-	priv.flag |= FASTBOOT_FLAG_RESPONSE;
-	fbt_handle_response();
-	fbt_wait_usb_fifo_flush();
-
-	return 0;
+	return fbt_send_raw_info(info, len);
 }
