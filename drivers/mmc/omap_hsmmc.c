@@ -316,7 +316,7 @@ static int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 	 * 1000 blocks for now (1000 ms per 1 million blocks).
 	 */
 	if (cmd->cmdidx == MMC_CMD_ERASE) {
-		ulong timeout_ms = MAX_RETRY_MS;
+		ulong timeout_ms = MAX_RETRY_MS * 5;
 		ulong erase_blk_cnt = last_end_value - last_start_value + 1;
 		timeout_ms += DIV_ROUND_UP(erase_blk_cnt, 1000);
 		printf("%s: erasing %lu blocks, timeout = %lu seconds\n",
