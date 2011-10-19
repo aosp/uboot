@@ -1518,10 +1518,22 @@ static int fbt_fastboot_init(void)
 	return 0;
 }
 
-static int fbt_handle_erase(char *partition_name)
+static int fbt_handle_erase(char *cmdbuf)
 {
 	struct fastboot_ptentry *ptn;
 	int status = 0;
+	char *partition_name = cmdbuf;
+	char *num_blocks_str;
+	unsigned long long num_blocks = ~0ULL; /* MAX ULLONG */
+
+	/* see if there is an optional num_blocks after the partition name */
+	num_blocks_str = strchr(cmdbuf, ' ');
+	if (num_blocks_str) {
+		/* null terminate the partition name */
+		*num_blocks_str = 0;
+		num_blocks_str++;
+		num_blocks = simple_strtoull(num_blocks_str, NULL, 10);
+	}
 
 	ptn = fastboot_flash_find_ptn(partition_name);
 	if (ptn == 0) {
@@ -1624,8 +1636,12 @@ static int fbt_handle_erase(char *partition_name)
 			}
 		} else {
 			printf("Erasing partition '%s':\n", ptn->name);
-			printf("\tstart blk %llu, blk_cnt %llu\n",
-			       ptn->start, blk_cnt);
+
+			printf("\tstart blk %llu, blk_cnt %llu of %llu\n",
+			       ptn->start, num_blocks, blk_cnt);
+
+			if (blk_cnt > num_blocks)
+				blk_cnt = num_blocks;
 
 			if (mmc->block_dev.block_erase(FASTBOOT_MMC_DEVICE_ID,
 						       ptn->start, blk_cnt) !=
@@ -2143,7 +2159,7 @@ static int fbt_handle_oem_setinfo(const char *cmdbuf)
 	return 0;
 }
 
-static int fbt_handle_oem(const char *cmdbuf)
+static int fbt_handle_oem(char *cmdbuf)
 {
 	cmdbuf += 4;
 
@@ -2228,6 +2244,17 @@ static int fbt_handle_oem(const char *cmdbuf)
 			sprintf(priv.response, "OKAY");
 		}
 		return 0;
+	}
+
+	/* %fastboot oem erase partition <numblocks>
+	 * similar to 'fastboot erase' except an optional number
+	 * of blocks can be passed to erase less than the
+	 * full partition, for speed
+	 */
+	if (strncmp(cmdbuf, "erase ", 6) == 0) {
+		FBTDBG("oem %s\n", cmdbuf);
+		cmdbuf += 6;
+		return fbt_handle_erase(cmdbuf);
 	}
 
 	/* %fastboot oem ucmd ... */
