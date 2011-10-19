@@ -547,6 +547,30 @@ static void fbt_wait_usb_fifo_flush(void)
 /*
  * Android style flash utilties
  */
+static void set_serial_number(const char *serial_no)
+{
+	strncpy(serial_number, serial_no, sizeof(serial_number));
+	serial_number[sizeof(serial_number) - 1] = '\0';
+	priv.serial_no = serial_number;
+	printf("fastboot serial_number = %s\n", serial_number);
+}
+
+static void create_serial_number(void)
+{
+	char *dieid = getenv("fbt_id#");
+
+	if (dieid == NULL)
+		dieid = getenv("dieid#");
+
+	if (dieid == NULL) {
+		printf("Setting serial number from constant (no dieid info)\n");
+		set_serial_number("00123");
+	} else {
+		printf("Setting serial number from unique id\n");
+		set_serial_number(dieid);
+	}
+}
+
 void fbt_add_ptn(fastboot_ptentry *ptn)
 {
 	if (pcount < MAX_PTN) {
@@ -628,6 +652,9 @@ static int fbt_load_partition_table(void)
 			priv.dev_info[i].value = strdup(value);
 			printf("\t%s=%s\n", priv.dev_info[i].name,
 			       priv.dev_info[i].value);
+			/* initialize serial number from device info */
+			if (!strcmp(name, FASTBOOT_SERIALNO_BOOTARG))
+				set_serial_number(value);
 			name = next_name;
 		}
 		priv.dev_info_uninitialized = 0;
@@ -636,6 +663,10 @@ no_existing_info:
 		priv.dev_info_uninitialized = 1;
 		printf("No existing device info found.\n");
 	}
+
+	if (priv.serial_no == NULL)
+		create_serial_number();
+
 	return 0;
 }
 
@@ -1416,29 +1447,6 @@ static int fbt_add_partitions_from_environment(void)
 }
 #endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
-static void set_serial_number(void)
-{
-	char *dieid = getenv("fbt_id#");
-
-	if (dieid == NULL)
-		dieid = getenv("dieid#");
-
-	if (dieid == NULL) {
-		priv.serial_no = "00123";
-	} else {
-		int len;
-
-		memset(&serial_number[0], 0, sizeof(serial_number));
-		len = strlen(dieid);
-		if (len > sizeof(serial_number))
-			len = sizeof(serial_number);
-
-		strncpy(&serial_number[0], dieid, len);
-		priv.serial_no = &serial_number[0];
-		printf("fastboot serial_number = %s\n", serial_number);
-	}
-}
-
 static void fbt_set_unlocked(int unlocked)
 {
 	char *unlocked_string;
@@ -1471,7 +1479,6 @@ static int fbt_fastboot_init(void)
 	priv.unlock_pending_start_time = 0;
 
 	priv.product_name = FASTBOOT_PRODUCT_NAME;
-	set_serial_number();
 
 	priv.unlocked = 1;
 	fastboot_unlocked_env = getenv(FASTBOOT_UNLOCKED_ENV_NAME);
@@ -1528,6 +1535,7 @@ static int fbt_handle_erase(char *partition_name)
 	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO) &&
 	    (!priv.dev_info_uninitialized)) {
 		printf("Not allowed to erase %s partition\n", ptn->name);
+		strcpy(priv.response, "FAILnot allowed to erase partition");
 		return 0;
 	}
 #endif
@@ -2127,8 +2135,11 @@ static int fbt_handle_oem_setinfo(const char *cmdbuf)
 	}
 
 	printf("Set device info %s=%s\n", di->name, di->value);
-	strcpy(priv.response, "OKAY");
+	if (!strcmp(di->name, FASTBOOT_SERIALNO_BOOTARG))
+		set_serial_number(di->value);
 	priv.num_device_info++;
+
+	strcpy(priv.response, "OKAY");
 	return 0;
 }
 
@@ -2972,8 +2983,6 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	printf("ramdisk  @ %08x (%d)\n", hdr->ramdisk_addr, hdr->ramdisk_size);
 
 #ifdef CONFIG_CMDLINE_TAG
-	if (priv.serial_no == NULL)
-		set_serial_number();
 
 #ifdef CONFIG_FASTBOOT_PRESERVE_BOOTARGS
 	setenv("hdr_cmdline", (char *)hdr->cmdline);
@@ -2994,19 +3003,26 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		 */
 		amt = snprintf(command_line,
 				sizeof(command_line),
-				"%s androidboot.serialno=%s"
-				" androidboot.bootloader=%s",
-				hdr->cmdline, priv.serial_no,
+				"%s androidboot.bootloader=%s",
+				hdr->cmdline,
 				CONFIG_FASTBOOT_VERSION_BOOTLOADER);
 
 		for (i = 0; i < priv.num_device_info; i++) {
-			/* Append special device specific information like
-			 * MAC addresses */
+			/* Append device specific information like
+			 * MAC addresses and serialno
+			 */
 			amt += snprintf(command_line + amt,
 					sizeof(command_line) - amt,
 					" %s=%s",
 					priv.dev_info[i].name,
 					priv.dev_info[i].value);
+		}
+
+		/* append serial number if it wasn't in device_info already */
+		if (!strstr(command_line, FASTBOOT_SERIALNO_BOOTARG)) {
+			snprintf(command_line + amt, sizeof(command_line) - amt,
+				 " %s=%s", FASTBOOT_SERIALNO_BOOTARG,
+				 priv.serial_no);
 		}
 
 		command_line[sizeof(command_line) - 1] = 0;

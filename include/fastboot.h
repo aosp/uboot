@@ -82,6 +82,7 @@
 #define FASTBOOT_INTERFACE_PROTOCOL  0x03
 
 #define FASTBOOT_VERSION "0.5"
+#define FASTBOOT_SERIALNO_BOOTARG "androidboot.serialno"
 
 /* The fastboot client uses a value of 2048 for the
    page size of it boot.img file format.
