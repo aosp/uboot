@@ -38,49 +38,9 @@ char *env_name_spec = CONFIG_SYS_ENV_BLKDEV;
 
 DECLARE_GLOBAL_DATA_PTR;
 
-#ifndef CONFIG_MIN_PARTITION_NUM
-#define CONFIG_MIN_PARTITION_NUM 0
-#endif
-#ifndef CONFIG_MAX_PARTITION_NUM
-#define CONFIG_MAX_PARTITION_NUM 10
-#endif
 #ifndef CONFIG_ENV_BLK_PARTITION
 #define CONFIG_ENV_BLK_PARTITION "environment"
 #endif
-
-/* local functions */
-static int block_get_env_ptn(block_dev_desc_t *dev,
-				ulong *start, ulong *size, ulong *blksz)
-{
-	disk_partition_t info;
-	int i;
-
-	/*
-	 * I thought about stashing the partition info for the case of
-	 * being called multiple times.  I decided against that.  I
-	 * didn't want to add another level of caching in case the
-	 * user changes the partition table.
-	 */
-	init_part(dev);
-	if (dev->part_type == PART_TYPE_UNKNOWN) {
-		/* Could not determine the type of partition table. */
-		return -1;
-	}
-	for (i = CONFIG_MIN_PARTITION_NUM; i <= CONFIG_MAX_PARTITION_NUM; i++) {
-		if (get_partition_info(dev, i, &info))
-			continue;
-		if (strcmp((char *)info.name, CONFIG_ENV_BLK_PARTITION)) {
-			/* Wrong name, on to next. */
-			continue;
-		}
-		*start = info.start;
-		*size = info.size;
-		*blksz = info.blksz;
-		return 0;
-	}
-	/* Couldn't find the environment partition. */
-	return -1;
-}
 
 /* environment access functions */
 uchar env_get_char_spec(int index)
@@ -106,11 +66,11 @@ int saveenv(void)
 	 * disk partitions are defined in terms of ulongs.
 	 */
 	block_dev_desc_t *dev;
-	ulong start, size, blksz;
+	disk_partition_t ptn;
 	env_t	env_new;
 	char	*res;
-	lbaint_t blocks_to_write;
-	unsigned long blocks_written;
+	loff_t	num_bytes;
+	int err;
 
 	dev = get_dev_by_name(CONFIG_SYS_ENV_BLKDEV);
 	if (!dev) {
@@ -119,13 +79,13 @@ int saveenv(void)
 		return 1;
 	}
 
-	if (block_get_env_ptn(dev, &start, &size, &blksz)) {
+	if (get_partition_by_name(dev, CONFIG_ENV_BLK_PARTITION, &ptn)) {
 		error("Could not find environment partition\n");
 		return 1;
 	}
 
 	res = (char *)&env_new.data;
-	if (CONFIG_ENV_SIZE > (typeof(CONFIG_ENV_SIZE))size * blksz) {
+	if (CONFIG_ENV_SIZE > (typeof(CONFIG_ENV_SIZE))ptn.size * ptn.blksz) {
 		error("environment partition needs to be at least %u bytes.\n",
 							CONFIG_ENV_SIZE);
 		return 1;
@@ -137,16 +97,14 @@ int saveenv(void)
 	env_new.crc = crc32(0, env_new.data, ENV_SIZE);
 	printf("Writing to environment partition on %s... ",
 							CONFIG_SYS_ENV_BLKDEV);
-	blocks_to_write = ALIGN(CONFIG_ENV_SIZE, blksz) / blksz;
-	blocks_written = dev->block_write(dev->dev, start, blocks_to_write,
-							  (u_char *)&env_new);
-	if (blocks_written != blocks_to_write) {
-		puts("failed\n");
-		return 1;
-	}
+	num_bytes = CONFIG_ENV_SIZE;
+	err = partition_write_bytes(dev, &ptn, &num_bytes, &env_new);
+	if (err)
+		printf("failed with error %d\n", err);
+	else
+		puts("done\n");
 
-	puts("done\n");
-	return 0;
+	return err;
 }
 #endif /* CONFIG_CMD_SAVEENV */
 
@@ -163,10 +121,10 @@ void env_relocate_spec(void)
 
 #if !defined(CONFIG_ENV_NO_LOAD)
 	block_dev_desc_t *dev;
-	ulong start, size, blksz;
-	lbaint_t blocks_to_read;
-	unsigned long blocks_read;
-	char buf[CONFIG_ENV_SIZE];
+	disk_partition_t ptn;
+	loff_t num_bytes;
+	char *buf;
+	int err;
 
 	dev = get_dev_by_name(CONFIG_SYS_ENV_BLKDEV);
 	if (!dev) {
@@ -175,20 +133,26 @@ void env_relocate_spec(void)
 		return;
 	}
 
-	if (block_get_env_ptn(dev, &start, &size, &blksz)) {
+	if (get_partition_by_name(dev, CONFIG_ENV_BLK_PARTITION, &ptn)) {
 		error("Could not find environment partition\n");
 		return;
 	}
 
-	blocks_to_read = ALIGN(ARRAY_SIZE(buf), blksz) / blksz;
-	blocks_read = dev->block_read(dev->dev, start, blocks_to_read,
-							  (u_char *)buf);
-	if (blocks_read != blocks_to_read) {
-		error("Could not read environment\n");
+	num_bytes = CONFIG_ENV_SIZE;
+	buf = malloc(num_bytes);
+	if (!buf) {
+		error("Could not allocate memory for environment\n");
+		return;
+	}
+	err = partition_read_bytes(dev, &ptn, &num_bytes, buf);
+	if (err) {
+		error("Could not read environment (error=%d)\n", err);
+		free(buf);
 		return;
 	}
 
 	env_import(buf, 1);
+	free(buf);
 	puts("Imported environment from " CONFIG_SYS_ENV_BLKDEV "\n");
 #endif /* !CONFIG_ENV_NO_LOAD */
 #endif /* !CONFIG_ENV_IS_EMBEDDED */
