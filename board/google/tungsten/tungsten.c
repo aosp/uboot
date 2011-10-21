@@ -157,6 +157,16 @@ int board_mmc_init(bd_t *bis)
 
 int board_fbt_key_pressed(void)
 {
+	/*
+	 * TODO(johngro) : revisit this later.  Right now, using the proximity
+	 * sensor as an absolute trigger to force into fastboot is causing all
+	 * sorts of problem with false positive triggering, particularly in
+	 * non-benchtop tungsten units.  #if 0 this out for now until a final
+	 * decision has been made about what the HW solution will be (cap-sense
+	 * vs. IR prox vs. rotary encoder) and what the SW flow will be as a
+	 * result of this.
+	 */
+#if 0
 	int err;
 	int proximity;
 
@@ -181,7 +191,7 @@ int board_fbt_key_pressed(void)
 		printf("Returning key pressed true\n");
 		return 1;
 	}
-
+#endif
 	/* On a cold boot, the AVR is boots up into a boot animation
 	 * state.  However, during a warm reset, the AVR isn't notified
 	 * of the reset so we need to make sure the AVR is in boot
