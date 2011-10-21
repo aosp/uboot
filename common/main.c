@@ -353,21 +353,25 @@ void main_loop (void)
 	init_cmd_timeout ();
 # endif	/* CONFIG_BOOT_RETRY_TIME */
 
-#ifdef CONFIG_POST
+#ifndef CONFIG_BOOTCOMMAND_FORCE_OVERRIDE
+# ifdef CONFIG_POST
 	if (gd->flags & GD_FLG_POSTFAIL) {
 		s = getenv("failbootcmd");
 	}
 	else
-#endif /* CONFIG_POST */
-#ifdef CONFIG_BOOTCOUNT_LIMIT
+# endif /* CONFIG_POST */
+# ifdef CONFIG_BOOTCOUNT_LIMIT
 	if (bootlimit && (bootcount > bootlimit)) {
 		printf ("Warning: Bootlimit (%u) exceeded. Using altbootcmd.\n",
 		        (unsigned)bootlimit);
 		s = getenv ("altbootcmd");
 	}
 	else
-#endif /* CONFIG_BOOTCOUNT_LIMIT */
+# endif /* CONFIG_BOOTCOUNT_LIMIT */
 		s = getenv ("bootcmd");
+#else	/* CONFIG_BOOTCOMMAND_FORCE_OVERRIDE */
+	s = CONFIG_BOOTCOMMAND_FORCE_OVERRIDE;
+#endif	/* CONFIG_BOOTCOMMAND_FORCE_OVERRIDE */
 
 	debug ("### main_loop: bootcmd=\"%s\"\n", s ? s : "<UNDEFINED>");
 
