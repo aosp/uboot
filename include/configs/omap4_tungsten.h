@@ -207,23 +207,29 @@
  * Environment setup
  */
 #define CONFIG_BOOTDELAY	0
+#define CONFIG_PREBOOT
+#define CONFIG_BOOTCOMMAND "booti mmc0"
 #ifdef CONFIG_MFG
 /*
  * Manufacturing build:
- * + Force the system into fastboot mode initially, but make sure that fastboot
- *   will never load a kernel from MMC by deliberately not defining
- *   CONFIG_BOOTCOMMAND.  The test harness can then force the system into the
- *   diagnostic console by either executing "fastboot continue" from the host,
- *   or by sending a CTRL-C via the serial console.
+ * + Force the system into fastboot mode initially, and make sure that fastboot
+ *   will never load a kernel from MMC.  The test harness can then force the
+ *   system into the diagnostic console by either executing "fastboot continue"
+ *   from the host, or by sending a CTRL-C via the serial console.
+ *
+ *   Note: this was originally being done by manipulating CONFIG_BOOTCOMMAND and
+ *   CONFIG_PREBOOT, but that led to unforseen issues with the MFG bootcmd and
+ *   preboot settings getting saved in the environment.  Rather than attempting
+ *   to layer hack after hack on top of that approach trying to get things to
+ *   behave, we just introduce a new #def which gets obeyed by main.c
+ *
  * + Turn on the gpio console commands.
  */
-#define CONFIG_PREBOOT "fastboot"
+#define CONFIG_BOOTCOMMAND_FORCE_OVERRIDE "fastboot"
 #define CONFIG_CMD_GPIO
 #define CONFIG_SYS_LONGHELP 1
 #else
 /* use preboot to detect key press for fastboot */
-#define CONFIG_PREBOOT
-#define CONFIG_BOOTCOMMAND "booti mmc0"
 #undef CONFIG_SYS_LONGHELP	/* undef to save memory */
 #endif
 
