@@ -119,12 +119,6 @@ struct info_partition_header {
 
 struct cmd_fastboot_interface {
 
-	/* A getvar string for the product name
-	   It can have a maximum of 60 characters
-
-	   Set by board	*/
-	char *product_name;
-
 	/* A getvar string for the serial number
 	   It can have a maximum of 60 characters
 

@@ -1475,8 +1475,6 @@ static int fbt_fastboot_init(void)
 	priv.exit = 0;
 	priv.unlock_pending_start_time = 0;
 
-	priv.product_name = FASTBOOT_PRODUCT_NAME;
-
 	priv.unlocked = 1;
 	fastboot_unlocked_env = getenv(FASTBOOT_UNLOCKED_ENV_NAME);
 	if (fastboot_unlocked_env) {
@@ -2037,7 +2035,7 @@ static void fbt_handle_getvar(char *cmdbuf)
 	}
 #endif
 	else if (!strcmp(subcmd, "product"))
-		value = priv.product_name;
+		value = FASTBOOT_PRODUCT_NAME;
 	else if (!strcmp(subcmd, "serialno"))
 		value = priv.serial_no;
 #ifdef CONFIG_FASTBOOT_UBOOT_GETVAR
