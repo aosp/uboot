@@ -2598,20 +2598,20 @@ static void fbt_rx_process(unsigned char *buffer, int length)
 		}
 
 		/* %fastboot oem <cmd> */
-		if (memcmp(cmdbuf, "oem ", 4) == 0) {
+		else if (memcmp(cmdbuf, "oem ", 4) == 0) {
 			FBTDBG("oem\n");
 			fbt_handle_oem(cmdbuf);
 		}
 
 		/* %fastboot erase <partition_name> */
-		if (memcmp(cmdbuf, "erase:", 6) == 0) {
+		else if (memcmp(cmdbuf, "erase:", 6) == 0) {
 			FBTDBG("erase\n");
 			cmdbuf += 6;
 			fbt_handle_erase(cmdbuf);
 		}
 
 		/* %fastboot flash:<partition_name> */
-		if (memcmp(cmdbuf, "flash:", 6) == 0) {
+		else if (memcmp(cmdbuf, "flash:", 6) == 0) {
 			FBTDBG("flash\n");
 			fbt_handle_flash(cmdbuf);
 		}
@@ -2619,21 +2619,21 @@ static void fbt_rx_process(unsigned char *buffer, int length)
 		/* %fastboot reboot
 		 * %fastboot reboot-bootloader
 		 */
-		if (memcmp(cmdbuf, "reboot", 6) == 0) {
+		else if (memcmp(cmdbuf, "reboot", 6) == 0) {
 			FBTDBG("reboot or reboot-bootloader\n");
 			fbt_handle_reboot(cmdbuf);
 			return;
 		}
 
 		/* %fastboot continue */
-		if (strcmp(cmdbuf, "continue") == 0) {
+		else if (strcmp(cmdbuf, "continue") == 0) {
 			FBTDBG("continue\n");
 			strcpy(priv.response, "OKAY");
 			priv.exit = 1;
 		}
 
 		/* %fastboot boot <kernel> [ <ramdisk> ] */
-		if (memcmp(cmdbuf, "boot", 4) == 0) {
+		else if (memcmp(cmdbuf, "boot", 4) == 0) {
 			FBTDBG("boot\n");
 			fbt_handle_boot(cmdbuf);
 		}
@@ -2642,7 +2642,7 @@ static void fbt_rx_process(unsigned char *buffer, int length)
 		 * This sends the data over with byte count:
 		 * %download:<num_bytes>
 		 */
-		if (memcmp(cmdbuf, "download:", 9) == 0) {
+		else if (memcmp(cmdbuf, "download:", 9) == 0) {
 			FBTDBG("download\n");
 
 			/* XXX: need any check for size & bytes ? */
@@ -2666,7 +2666,7 @@ static void fbt_rx_process(unsigned char *buffer, int length)
 		}
 
 #if defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING) && defined(FASTBOOT_UPLOAD)
-		if ((memcmp(cmdbuf, "upload:", 7) == 0) ||
+		else if ((memcmp(cmdbuf, "upload:", 7) == 0) ||
 		    (memcmp(cmdbuf, "uploadraw", 10) == 0)) {
 			FBTDBG("upload/uploadraw\n");
 			fbt_handle_upload(cmdbuf);
