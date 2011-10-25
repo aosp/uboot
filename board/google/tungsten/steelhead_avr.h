@@ -40,5 +40,6 @@ struct avr_led_set_bank_vals {
 extern int detect_avr(void);
 extern int avr_led_set_all_vals(struct avr_led_set_all_vals *req);
 extern int avr_led_commit_led_state(u8 val);
+extern int avr_led_set_mode(u8 mode);
 
 #endif /* _STEELHEAD_AVR_H_ */

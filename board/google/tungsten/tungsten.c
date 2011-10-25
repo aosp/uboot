@@ -180,38 +180,40 @@ int board_fbt_key_pressed(void)
 	if (proximity >= 2500) {
 		printf("Returning key pressed true\n");
 		return 1;
-	} else {
-		printf("Returning key pressed false\n");
-		return 0;
 	}
+
+	/* On a cold boot, the AVR is boots up into a boot animation
+	 * state.  However, during a warm reset, the AVR isn't notified
+	 * of the reset so we need to make sure the AVR is in boot
+	 * animation state.
+	 */
+	if (detect_avr() == 0)
+		avr_led_set_mode(AVR_LED_MODE_BOOT_ANIMATION);
+
+	printf("Returning key pressed false\n");
+	return 0;
 }
 
 void board_fbt_start(void)
 {
-	/* get avr out of reset animation because it consumes a lot of power
+	/* get avr out of boot animation because it consumes a lot of power
 	 * and can overheat the device if we're in fastboot mode because
 	 * there is no smartreflex code in the bootloader.
 	 */
-	struct avr_led_set_all_vals vals = {
-		.rgb[0] = 5, .rgb[1] = 5, .rgb[2] = 5
-	};
-	detect_avr();
-	udelay(100);
-	avr_led_set_all_vals(&vals);
-	avr_led_commit_led_state(AVR_LED_COMMMIT_IMMEDIATELY);
+	if (detect_avr() == 0) {
+		struct avr_led_set_all_vals vals = {
+			.rgb[0] = 0, .rgb[1] = 5, .rgb[2] = 0
+		};
+		avr_led_set_mode(AVR_LED_MODE_HOST);
+		avr_led_set_all_vals(&vals);
+		avr_led_commit_led_state(AVR_LED_COMMMIT_IMMEDIATELY);
+	}
 }
 
 void board_fbt_end(void)
 {
-	/* get avr out of reset animation because it consumes a lot of power
-	 * and can overheat the device if we're in fastboot mode because
-	 * there is no smartreflex code in the bootloader.
-	 */
-	struct avr_led_set_all_vals vals = {
-		.rgb[0] = 0, .rgb[1] = 0, .rgb[2] = 0
-	};
-	avr_led_set_all_vals(&vals);
-	avr_led_commit_led_state(AVR_LED_COMMMIT_IMMEDIATELY);
+	/* to match spec, put avr back into boot animation mode. */
+	avr_led_set_mode(AVR_LED_MODE_BOOT_ANIMATION);
 }
 
 struct fbt_partition {

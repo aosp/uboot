@@ -293,7 +293,7 @@ static int avr_led_set_bank_vals(struct avr_led_set_bank_vals *req)
 	return rc;
 }
 
-static int avr_led_set_mode(u8 mode)
+int avr_led_set_mode(u8 mode)
 {
 	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
 	if (rc) {
@@ -525,13 +525,6 @@ int detect_avr(void)
 	rc = avr_led_set_button_ctrl_reg(AVR_BUTTON_CONTROL_ENABLE0);
 	if (rc) {
 		printf("Failed to set button control register (rc = %d)\n", rc);
-		goto error;
-	}
-
-	/* Switch to host control of the LEDs */
-	rc = avr_led_set_mode(AVR_LED_MODE_HOST);
-	if (rc) {
-		printf("Failed to switch to host control mode (rc = %d)\n", rc);
 		goto error;
 	}
 
