@@ -2845,7 +2845,8 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz)
 	__attribute__((weak, alias("__def_board_fbt_finalize_bootargs")));
 
 /* command */
-int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
+							char * const argv[])
 {
 	int ret;
 
@@ -2913,8 +2914,7 @@ U_BOOT_CMD(fastboot, 2,	1, do_fastboot,
  * Refer:
  * http://android.git.kernel.org/?p=platform/system/core.git;a=blob;f=mkbootimg/bootimg.h
  */
-void
-bootimg_print_image_hdr(struct fastboot_boot_img_hdr *hdr)
+static void bootimg_print_image_hdr(struct fastboot_boot_img_hdr *hdr)
 {
 #ifdef DEBUG
 	int i;
