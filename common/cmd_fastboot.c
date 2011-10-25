@@ -65,8 +65,18 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
+/* If a BUILD_TAG was passed as an argument to make, use it
+ * for the fastboot version.  Otherwise, see if a board file
+ * defined a CONFIG_FASTBOOT_VERSION_BOOTLOADER and if so, use
+ * that.  Otherwise, use the FASTBOOT_VERSION protocol id.
+ */
+#ifdef BUILD_TAG
+#undef CONFIG_FASTBOOT_VERSION_BOOTLOADER
+#define CONFIG_FASTBOOT_VERSION_BOOTLOADER BUILD_TAG
+#else
 #ifndef CONFIG_FASTBOOT_VERSION_BOOTLOADER
 #define CONFIG_FASTBOOT_VERSION_BOOTLOADER FASTBOOT_VERSION
+#endif
 #endif
 
 #define FASTBOOT_RUN_RECOVERY_ENV_NAME "fastboot_run_recovery"
