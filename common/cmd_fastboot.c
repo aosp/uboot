@@ -681,13 +681,9 @@ static fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
 		}
 	}
 
-	for (n = 0; n < pcount; n++) {
-		/* Make sure a substring is not accepted */
-		if (strlen(name) == strlen(ptable[n].name)) {
-			if (0 == strcmp(ptable[n].name, name))
-				return ptable + n;
-		}
-	}
+	for (n = 0; n < pcount; n++)
+		if (!strcmp(ptable[n].name, name))
+			return ptable + n;
 	return NULL;
 }
 
