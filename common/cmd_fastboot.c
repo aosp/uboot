@@ -2338,42 +2338,13 @@ static void fbt_handle_oem(char *cmdbuf)
 
 	/* %fastboot oem ucmd ... */
 	if (strncmp(cmdbuf, "ucmd ", 5) == 0) {
-		int rcode;
-		int argc;
-		char *argv[CONFIG_SYS_MAXARGS + 1];
-		cmd_tbl_t *cmdtp;
-
 		FBTDBG("oem %s\n", cmdbuf);
 		cmdbuf += 5;
 
-		/* copy to tmp_buf which will be modified by make_argv() */
-		strcpy(tmp_buf, cmdbuf);
-
-		/* separate into argv */
-		argc = make_argv(tmp_buf, ARRAY_SIZE(argv), argv);
-
-		if (argc >= 1) {
-			/* find command */
-			cmdtp = find_cmd(argv[0]);
-			if (cmdtp) {
-				/* run command */
-				rcode = (cmdtp->cmd)(cmdtp, 0, argc, argv);
-				if (rcode) {
-					strcpy(priv.response,
-					       "FAILcommand returned error");
-					return;
-				} else {
-					strcpy(priv.response, "OKAY");
-					return;
-				}
-			} else {
-				printf("unknown command %s\n",
-				       argv[0]);
-			}
-		} else {
-			printf("needs more arguments\n");
-		}
-		strcpy(priv.response, "FAILinvalid command");
+		if (run_command(cmdbuf, 0) < 0)
+			strcpy(priv.response, "FAILcommand failed");
+		else
+			strcpy(priv.response, "OKAY");
 		return;
 	}
 
