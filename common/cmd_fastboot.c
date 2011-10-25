@@ -165,7 +165,7 @@ struct _fbt_config_desc {
 	struct usb_endpoint_descriptor endpoint_desc[NUM_ENDPOINTS];
 };
 
-static int fbt_handle_response(void);
+static void fbt_handle_response(void);
 static fastboot_ptentry *fastboot_flash_find_ptn(const char *name);
 
 /* defined and used by gadget/ep0.c */
@@ -265,7 +265,7 @@ static struct cmd_fastboot_interface priv = {
 	.transfer_buffer_size  = CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE,
 };
 
-static int fbt_init_endpoints(void);
+static void fbt_init_endpoints(void);
 static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
 
 extern int do_reset(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
@@ -311,7 +311,7 @@ static void str2wide(char *str, u16 * wide)
 }
 
 /* fastboot_init has to be called before this fn to get correct serial string */
-static int fbt_init_strings(void)
+static void fbt_init_strings(void)
 {
 	struct usb_string_descriptor *string;
 
@@ -349,8 +349,6 @@ static int fbt_init_strings(void)
 
 	/* Now, initialize the string table for ep0 handling */
 	usb_strings = fbt_string_table;
-
-	return 0;
 }
 
 static void fbt_event_handler (struct usb_device_instance *device,
@@ -374,7 +372,7 @@ static void fbt_event_handler (struct usb_device_instance *device,
 }
 
 /* fastboot_init has to be called before this fn to get correct serial string */
-static int fbt_init_instances(void)
+static void fbt_init_instances(void)
 {
 	int i;
 
@@ -462,21 +460,17 @@ static int fbt_init_instances(void)
 				usbd_alloc_urb(device_instance,
 					       &endpoint_instance[i]);
 	}
-
-	return 0;
 }
 
 /* XXX: ep_descriptor_ptrs can be removed by making better use of
 	fbt_config_desc.endpoint_desc */
-static int fbt_init_endpoint_ptrs(void)
+static void fbt_init_endpoint_ptrs(void)
 {
 	ep_descriptor_ptrs[0] = &fbt_config_desc.endpoint_desc[0];
 	ep_descriptor_ptrs[1] = &fbt_config_desc.endpoint_desc[1];
-
-	return 0;
 }
 
-static int fbt_init_endpoints(void)
+static void fbt_init_endpoints(void)
 {
 	int i;
 
@@ -506,8 +500,6 @@ static int fbt_init_endpoints(void)
 
 		udc_setup_ep(device_instance, i, &endpoint_instance[i]);
 	}
-
-	return 0;
 }
 
 static struct urb *next_urb(struct usb_device_instance *device,
@@ -696,13 +688,14 @@ static fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
 				return ptable + n;
 		}
 	}
-	return 0;
+	return NULL;
 }
 
 void fbt_reset_ptn(void)
 {
 	pcount = 0;
-	fbt_load_partition_table();
+	if (fbt_load_partition_table())
+		FBTERR("Unable to load partition table\n");
 }
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -2009,7 +2002,7 @@ static void fbt_handle_flash(char *cmdbuf)
 #endif
 }
 
-static int fbt_handle_getvar(char *cmdbuf)
+static void fbt_handle_getvar(char *cmdbuf)
 {
 	strcpy(priv.response, "OKAY");
 	char *subcmd = cmdbuf + strlen("getvar:");
@@ -2072,11 +2065,10 @@ static int fbt_handle_getvar(char *cmdbuf)
 		 */
 		strncpy(priv.response + 4, value, (sizeof(priv.response) - 4));
 	}
-	return 0;
 }
 
 
-static int fbt_handle_reboot(const char *cmdbuf)
+static void fbt_handle_reboot(const char *cmdbuf)
 {
 	if (!strcmp(&cmdbuf[6], "-bootloader")) {
 		FBTDBG("%s\n", cmdbuf);
@@ -2095,13 +2087,11 @@ static int fbt_handle_reboot(const char *cmdbuf)
 	board_fbt_end();
 
 	do_reset(NULL, 0, 0, NULL);
-
-	return 0;
 }
 
 static char tmp_buf[CONFIG_SYS_CBSIZE]; /* copy of fastboot cmdbuf */
 
-static int fbt_handle_oem_setinfo(const char *cmdbuf)
+static void fbt_handle_oem_setinfo(const char *cmdbuf)
 {
 	char *name, *value;
 	struct device_info *di;
@@ -2115,14 +2105,14 @@ static int fbt_handle_oem_setinfo(const char *cmdbuf)
 		printf("Not allowed to change device info already in flash\n");
 		strcpy(priv.response, "FAILnot allowed to change"
 		       " device info already in flash");
-		return 0;
+		return;
 	}
 
 	if (priv.num_device_info == FASTBOOT_MAX_NUM_DEVICE_INFO) {
 		printf("Already at maximum number of device info (%d),"
 		       " no more allowed\n", FASTBOOT_MAX_NUM_DEVICE_INFO);
 		strcpy(priv.response, "FAILmax device info reached");
-		return 0;
+		return;
 	}
 
 	/* copy to tmp_buf which will be modified by str_tok() */
@@ -2135,7 +2125,7 @@ static int fbt_handle_oem_setinfo(const char *cmdbuf)
 		printf("Syntax is "
 		       "'fastboot oem setinfo <info_name>=<info_value>\n");
 		strcpy(priv.response, "FAILinvalid device info");
-		return 0;
+		return;
 	}
 
 	/* we enter new value at end so last slot should be free.
@@ -2145,7 +2135,7 @@ static int fbt_handle_oem_setinfo(const char *cmdbuf)
 	if (di->name || di->value) {
 		printf("Error, device info entry not free as expected\n");
 		strcpy(priv.response, "FAILinternal error");
-		return 0;
+		return;
 	}
 
 	di->name = strdup(name);
@@ -2155,7 +2145,7 @@ static int fbt_handle_oem_setinfo(const char *cmdbuf)
 		strcpy(priv.response, "FAILstrdup() failure\n");
 		free(di->name);
 		free(di->value);
-		return 0;
+		return;
 	}
 
 	printf("Set device info %s=%s\n", di->name, di->value);
@@ -2164,7 +2154,6 @@ static int fbt_handle_oem_setinfo(const char *cmdbuf)
 	priv.num_device_info++;
 
 	strcpy(priv.response, "OKAY");
-	return 0;
 }
 
 static int fbt_send_raw_info(const char *info, int bytes_left)
@@ -2238,14 +2227,15 @@ static void fbt_dump_log(void)
 	}
 }
 
-static int fbt_handle_oem(char *cmdbuf)
+static void fbt_handle_oem(char *cmdbuf)
 {
 	cmdbuf += 4;
 
 	/* %fastboot oem recovery */
 	if (strcmp(cmdbuf, "recovery") == 0) {
 		FBTDBG("oem recovery\n");
-		return fbt_handle_reboot("reboot-recovery");
+		fbt_handle_reboot("reboot-recovery");
+		return;
 	}
 
 	/* %fastboot oem unlock */
@@ -2254,7 +2244,7 @@ static int fbt_handle_oem(char *cmdbuf)
 		if (priv.unlocked) {
 			printf("oem unlock ignored, device already unlocked\n");
 			strcpy(priv.response, "FAILalready unlocked");
-			return 0;
+			return;
 		}
 		printf("oem unlock requested:\n");
 		printf("\tUnlocking your device will invalidate\n");
@@ -2264,7 +2254,7 @@ static int fbt_handle_oem(char *cmdbuf)
 		       FASTBOOT_UNLOCK_TIMEOUT_SECS);
 		priv.unlock_pending_start_time = get_timer(0);
 		strcpy(priv.response, "OKAY");
-		return 0;
+		return;
 	}
 
 	if (strcmp(cmdbuf, "unlock_accept") == 0) {
@@ -2273,18 +2263,18 @@ static int fbt_handle_oem(char *cmdbuf)
 		if (!priv.unlock_pending_start_time) {
 			printf("oem unlock_accept ignored, not pending\n");
 			strcpy(priv.response, "FAILoem unlock not requested");
-			return 0;
+			return;
 		}
 		priv.unlock_pending_start_time = 0;
 		err = fbt_handle_erase("userdata");
 		if (err) {
 			printf("Erase failed with error %d\n", err);
 			strcpy(priv.response, "FAILErasing userdata failed");
-			return 0;
+			return;
 		}
 		fbt_set_unlocked(1);
 		strcpy(priv.response, "OKAY");
-		return 0;
+		return;
 	}
 
 	if (strcmp(cmdbuf, "lock") == 0) {
@@ -2292,17 +2282,18 @@ static int fbt_handle_oem(char *cmdbuf)
 		if (!priv.unlocked) {
 			printf("oem lock ignored, already locked\n");
 			strcpy(priv.response, "FAILalready locked");
-			return 0;
+			return;
 		}
 		fbt_set_unlocked(0);
 		strcpy(priv.response, "OKAY");
-		return 0;
+		return;
 	}
 
 	/* %fastboot oem setinfo <info_name>=<info_value> */
 	if (strncmp(cmdbuf, "setinfo ", 8) == 0) {
 		cmdbuf += 8;
-		return fbt_handle_oem_setinfo(cmdbuf);
+		fbt_handle_oem_setinfo(cmdbuf);
+		return;
 	}
 
 	/* %fastboot oem saveinfo */
@@ -2312,7 +2303,7 @@ static int fbt_handle_oem(char *cmdbuf)
 
 		if (info_ptn == NULL) {
 			sprintf(priv.response, "FAILpartition does not exist");
-			return 0;
+			return;
 		}
 		if (fbt_save_info(info_ptn)) {
 			printf("Writing '%s' FAILED!\n", info_ptn->name);
@@ -2322,7 +2313,7 @@ static int fbt_handle_oem(char *cmdbuf)
 			       info_ptn->name);
 			sprintf(priv.response, "OKAY");
 		}
-		return 0;
+		return;
 	}
 
 	/* %fastboot oem erase partition <numblocks>
@@ -2333,7 +2324,8 @@ static int fbt_handle_oem(char *cmdbuf)
 	if (strncmp(cmdbuf, "erase ", 6) == 0) {
 		FBTDBG("oem %s\n", cmdbuf);
 		cmdbuf += 6;
-		return fbt_handle_erase(cmdbuf);
+		fbt_handle_erase(cmdbuf);
+		return;
 	}
 
 	/* %fastboot oem log */
@@ -2341,7 +2333,7 @@ static int fbt_handle_oem(char *cmdbuf)
 		FBTDBG("oem %s\n", cmdbuf);
 		fbt_dump_log();
 		strcpy(priv.response, "OKAY");
-		return 0;
+		return;
 	}
 
 	/* %fastboot oem ucmd ... */
@@ -2369,10 +2361,10 @@ static int fbt_handle_oem(char *cmdbuf)
 				if (rcode) {
 					strcpy(priv.response,
 					       "FAILcommand returned error");
-					return 0;
+					return;
 				} else {
 					strcpy(priv.response, "OKAY");
-					return 0;
+					return;
 				}
 			} else {
 				printf("unknown command %s\n",
@@ -2382,22 +2374,21 @@ static int fbt_handle_oem(char *cmdbuf)
 			printf("needs more arguments\n");
 		}
 		strcpy(priv.response, "FAILinvalid command");
-		return 0;
+		return;
 	}
 
 	/* %fastboot oem [xxx] */
 	FBTDBG("oem %s\n", cmdbuf);
 	if (board_fbt_oem(cmdbuf) >= 0) {
 		strcpy(priv.response, "OKAY");
-		return 0;
+		return;
 	}
 
 	printf("\nfastboot: unsupported oem command %s\n", cmdbuf);
 	strcpy(priv.response, "FAILinvalid command");
-	return 0;
 }
 
-static int fbt_handle_boot(const char *cmdbuf)
+static void fbt_handle_boot(const char *cmdbuf)
 {
 	if ((priv.d_bytes) &&
 		(CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE < priv.d_bytes)) {
@@ -2433,8 +2424,6 @@ static int fbt_handle_boot(const char *cmdbuf)
 		FBTERR("booting failed, reset the board\n");
 	}
 	sprintf(priv.response, "FAILinvalid boot image");
-
-	return 0;
 }
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -2562,13 +2551,13 @@ static int fbt_handle_upload(char *cmdbuf)
 #endif /* FASTBOOT_UPLOAD */
 #endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
-static int fbt_rx_process_download(unsigned char *buffer, int length)
+static void fbt_rx_process_download(unsigned char *buffer, int length)
 {
 	unsigned int xfr_size;
 
 	if (length == 0) {
 		FBTWARN("empty buffer download\n");
-		return 0;
+		return;
 	}
 
 	xfr_size = priv.d_size - priv.d_bytes;
@@ -2614,11 +2603,10 @@ static int fbt_rx_process_download(unsigned char *buffer, int length)
 #endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 		FBTINFO("downloaded %d bytes\n", priv.d_bytes);
 	}
-	return 0;
 }
 
 /* XXX: Replace magic number & strings with macros */
-static int fbt_rx_process(unsigned char *buffer, int length)
+static void fbt_rx_process(unsigned char *buffer, int length)
 {
 	/* Generic failed response */
 	strcpy(priv.response, "FAIL");
@@ -2662,7 +2650,8 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 		 */
 		if (memcmp(cmdbuf, "reboot", 6) == 0) {
 			FBTDBG("reboot or reboot-bootloader\n");
-			return fbt_handle_reboot(cmdbuf);
+			fbt_handle_reboot(cmdbuf);
+			return;
 		}
 
 		/* %fastboot continue */
@@ -2714,13 +2703,13 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 #endif
 		priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		priv.executing_command = 0;
-		return 0;
+		return;
 	}
 
-	return fbt_rx_process_download(buffer, length);
+	fbt_rx_process_download(buffer, length);
 }
 
-static int fbt_handle_rx(void)
+static void fbt_handle_rx(void)
 {
 	struct usb_endpoint_instance *ep = &endpoint_instance[RX_EP_INDEX];
 
@@ -2737,21 +2726,19 @@ static int fbt_handle_rx(void)
 		memset(ep->rcv_urb->buffer, 0, ep->rcv_urb->actual_length);
 		ep->rcv_urb->actual_length = 0;
 	}
-
-	return 0;
 }
 
-static int fbt_response_process(void)
+static void fbt_response_process(void)
 {
 	struct usb_endpoint_instance *ep = &endpoint_instance[TX_EP_INDEX];
 	struct urb *current_urb = NULL;
 	unsigned char *dest = NULL;
-	int n, ret = 0;
+	int n;
 
 	current_urb = next_urb(device_instance, ep);
 	if (!current_urb) {
 		FBTERR("%s: current_urb NULL", __func__);
-		return -1;
+		return;
 	}
 
 	dest = current_urb->buffer + current_urb->actual_length;
@@ -2759,22 +2746,16 @@ static int fbt_response_process(void)
 	memcpy(dest, priv.response, n);
 	current_urb->actual_length += n;
 	FBTDBG("response urb length: %u\n", current_urb->actual_length);
-	if (ep->last == 0) {
-		ret = udc_endpoint_write(ep);
-		return ret;
-	}
-
-	return ret;
+	if (ep->last == 0)
+		udc_endpoint_write(ep);
 }
 
-static int fbt_handle_response(void)
+static void fbt_handle_response(void)
 {
 	if (priv.flag & FASTBOOT_FLAG_RESPONSE) {
 		fbt_response_process();
 		priv.flag &= ~FASTBOOT_FLAG_RESPONSE;
 	}
-
-	return 0;
 }
 
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -2808,7 +2789,7 @@ static int fbt_tx_process(void)
 	return ret;
 }
 
-static int fbt_handle_tx(void)
+static void fbt_handle_tx(void)
 {
 	if (priv.u_size) {
 		int bytes_written = fbt_tx_process();
@@ -2835,12 +2816,9 @@ static int fbt_handle_tx(void)
 				FBTINFO("data upload finished\n");
 		} else {
 			FBTERR("bytes_written: %d\n", bytes_written);
-			return -1;
 		}
 
 	}
-
-	return 0;
 }
 #endif /* FASTBOOT_UPLOAD */
 #endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
@@ -2898,15 +2876,19 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz)
 /* command */
 int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
-	int ret = -1;
+	int ret;
 
 	printf("Starting fastboot protocol\n");
 
 	board_fbt_start();
 
 	ret = fbt_fastboot_init();
+	if (ret) {
+		FBTERR("%s: fastboot initialization failure\n", __func__);
+		goto out;
+	}
 
-	ret = fbt_init_endpoint_ptrs();
+	fbt_init_endpoint_ptrs();
 
 	ret = udc_init();
 	if (ret < 0) {
@@ -2914,8 +2896,8 @@ int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		goto out;
 	}
 
-	ret = fbt_init_strings();
-	ret = fbt_init_instances();
+	fbt_init_strings();
+	fbt_init_instances();
 
 	udc_startup_events(device_instance);
 	udc_connect();
@@ -3017,7 +2999,7 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		struct mmc *mmc = find_mmc_device(mmcc);
 		if (mmc == NULL) {
 			printf("error finding mmc device %d\n", mmcc);
-			return -1;
+			goto fail;
 		}
 		pte = fastboot_flash_find_ptn(ptn);
 		if (!pte) {
@@ -3072,7 +3054,7 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		hdr = malloc(sizeof(*hdr));
 		if (hdr == NULL) {
 			printf("error allocating buffer\n");
-			return -1;
+			goto fail;
 		}
 
 		/* set this aside somewhere safe */
@@ -3081,7 +3063,7 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		if (memcmp(hdr->magic, FASTBOOT_BOOT_MAGIC,
 			   FASTBOOT_BOOT_MAGIC_SIZE)) {
 			printf("booti: bad boot image magic\n");
-			return 1;
+			goto fail;
 		}
 
 		bootimg_print_image_hdr(hdr);
@@ -3160,7 +3142,7 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 fail:
 	/* if booti fails, always start fastboot */
-	free(hdr);
+	free(hdr); /* hdr may be NULL, but that's ok. */
 	return do_fastboot(NULL, 0, 0, NULL);
 }
 
