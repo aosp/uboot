@@ -77,7 +77,7 @@ struct mac_generator {
 static const struct mac_generator mac_defaults[] = {
 	{ MAKE_SALT('W','i','F','i'), "androidboot.wifi_macaddr" },
 	{ MAKE_SALT('W','i','r','e'), "smsc95xx.mac_addr" },
-	{ MAKE_SALT('B','l','u','T'), "androidboot.bt_addr" },
+	{ MAKE_SALT('B','l','u','T'), "board_steelhead_bluetooth.btaddr" },
 };
 static const u32 serial_no_salt = MAKE_SALT('S','e','r','#');
 #undef MAKE_SALT
