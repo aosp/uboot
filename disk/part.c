@@ -149,8 +149,11 @@ int get_partition_by_name(block_dev_desc_t *dev, const char *partition_name,
 		return -ENODEV;
 	if (!partition_name || !partition_info)
 		return -EINVAL;
-	if (dev->part_type == PART_TYPE_UNKNOWN)
-		return -ENOENT;
+	if (dev->part_type == PART_TYPE_UNKNOWN) {
+		init_part(dev); /* Maybe it is just uninitialized. */
+		if (dev->part_type == PART_TYPE_UNKNOWN)
+			return -ENOENT;
+	}
 	for (i = CONFIG_MIN_PARTITION_NUM; i <= CONFIG_MAX_PARTITION_NUM; i++) {
 		if (get_partition_info(dev, i, partition_info))
 			continue;
@@ -658,6 +661,9 @@ void init_part (block_dev_desc_t * dev_desc)
 int get_partition_info (block_dev_desc_t *dev_desc, int part
 					, disk_partition_t *info)
 {
+	if (dev_desc->part_type == PART_TYPE_UNKNOWN)
+		init_part(dev_desc); /* Maybe it is just uninitialized. */
+
 	switch (dev_desc->part_type) {
 #ifdef CONFIG_MAC_PARTITION
 	case PART_TYPE_MAC:
@@ -763,6 +769,8 @@ static void print_part_header (const char *type, block_dev_desc_t * dev_desc)
 
 void print_part (block_dev_desc_t * dev_desc)
 {
+	if (dev_desc->part_type == PART_TYPE_UNKNOWN)
+		init_part(dev_desc); /* Maybe it is just uninitialized. */
 
 		switch (dev_desc->part_type) {
 #ifdef CONFIG_MAC_PARTITION
