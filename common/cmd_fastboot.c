@@ -596,9 +596,6 @@ static int fbt_load_partition_table(void)
 		return 1;
 	}
 
-	priv.transfer_buffer_blocks = (priv.transfer_buffer_size /
-				       priv.dev_desc->blksz);
-
 	/* load device info partition if it exists */
 	info_ptn = fastboot_flash_find_ptn("device_info");
 	if (info_ptn) {
