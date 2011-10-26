@@ -137,7 +137,6 @@ struct cmd_fastboot_interface {
 	unsigned int nand_oob_size;
 #else
 	block_dev_desc_t *dev_desc;
-	unsigned int transfer_buffer_blocks;
 #endif
 
 	/* Transfer buffer, for handling flash updates
