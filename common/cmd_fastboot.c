@@ -1461,7 +1461,7 @@ static void fbt_set_unlocked(int unlocked)
 #endif
 }
 
-static int fbt_fastboot_init(void)
+static void fbt_fastboot_init(void)
 {
 	char *fastboot_unlocked_env;
 #ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
@@ -1507,10 +1507,12 @@ static int fbt_fastboot_init(void)
 	priv.nand_oob_size                 = FASTBOOT_NAND_OOB_SIZE;
 #endif
 
-	if (fbt_load_partition_table())
-		return 1;
-
-	return 0;
+	/*
+	 * We need to be able to run fastboot even if there isn't a partition
+	 * table (so we can use "oem format") and fbt_load_partition_table
+	 * already printed an error, so just ignore the error return.
+	 */
+	(void)fbt_load_partition_table();
 }
 
 static int fbt_handle_erase(char *cmdbuf)
@@ -2848,11 +2850,7 @@ static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
 
 	board_fbt_start();
 
-	ret = fbt_fastboot_init();
-	if (ret) {
-		FBTERR("%s: fastboot initialization failure\n", __func__);
-		goto out;
-	}
+	fbt_fastboot_init();
 
 	fbt_init_endpoint_ptrs();
 
