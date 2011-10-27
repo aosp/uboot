@@ -58,6 +58,7 @@ unsigned char mmc_board_init(struct mmc *mmc)
 
 #if defined(CONFIG_OMAP44XX)
 	unsigned char data;
+	unsigned int reg;
 	t2_t *t2_base = (t2_t *)T2_BASE;
 
 	switch (mmc->block_dev.dev) {
@@ -73,10 +74,37 @@ unsigned char mmc_board_init(struct mmc *mmc)
 		data = 0x15;
 		i2c_write(0x48, 0x9B, 1, &data, 1);
 
-		/* SLOT-0 PBIAS config */
-		writel(readl(&t2_base->pbias_lite) |
-		       MMC1_PBIASLITE_PWRDNZ | MMC1_PWRDNZ,
-		       &t2_base->pbias_lite);
+		/* Wait for the power to stabilize before setting PWRDNZ */
+		udelay(100);
+
+		/* SLOT-0 PBIAS config - 3v IO */
+		reg  = readl(&t2_base->pbias_lite);
+		reg |=  MMC1_PBIASLITE_VMODE |
+			MMC1_PBIASLITE_PWRDNZ |
+			MMC1_PWRDNZ;
+		writel(reg, &t2_base->pbias_lite);
+
+		/* Wait for the the supply detector to tell us if there is a
+		 * mismatch between the PBIAS supply and what we have configured
+		 * IO for
+		 */
+		udelay(100);
+		reg = readl(&t2_base->pbias_lite);
+		if (!(reg & MMC1_PBIASLITE_SUPPLY_HI_OUT)) {
+			printf("Warning: 1.8v PBIAS supply detected after"
+				" configuring for 3v.  Switching to 1.8v"
+				" configuration.\n");
+			reg &= ~(MMC1_PBIASLITE_VMODE |
+				 MMC1_PBIASLITE_PWRDNZ |
+				 MMC1_PWRDNZ);
+			writel(reg, &t2_base->pbias_lite);
+
+			udelay(100);
+			reg = readl(&t2_base->pbias_lite);
+			reg |=  MMC1_PBIASLITE_PWRDNZ |
+				MMC1_PWRDNZ;
+			writel(reg, &t2_base->pbias_lite);
+		}
 
 		writel(readl(&t2_base->control_mmc1) | SDMMC1_DR2_SPEEDCTRL |
 		       SDMMC1_DR1_SPEEDCTRL | SDMMC1_DR0_SPEEDCTRL |
