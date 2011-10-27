@@ -110,9 +110,6 @@ static unsigned long log_position;
 #define FBTERR(fmt, args...) do {} while (0)
 #endif
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-#include <nand.h>
-#endif
 #include <exports.h>
 #include <environment.h>
 
@@ -276,22 +273,10 @@ extern int do_bootm_linux(int flag, int argc, char *argv[],
 extern int do_env_save(cmd_tbl_t *cmdtp, int flag, int argc,
 		       char *const argv[]);
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-/* Use do_env_set and do_env_save to permenantly save data */
-extern int do_env_set(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
-extern int do_switch_ecc(cmd_tbl_t *cmdtp, int flag, int argc,
-			 char *const argv[]);
-extern int do_nand(cmd_tbl_t *cmdtp, int flag, int argc, char *const argv[]);
-
-#endif
-
 /* To support the Android-style naming of flash */
 #define MAX_PTN 16
 static fastboot_ptentry ptable[MAX_PTN];
 static unsigned int pcount;
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-static int static_pcount = -1;
-#endif
 
 /* USB specific */
 
@@ -691,756 +676,6 @@ void fbt_reset_ptn(void)
 		FBTERR("Unable to load partition table\n");
 }
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-static fastboot_ptentry *fastboot_get_ptn(unsigned int n)
-{
-	if (n < pcount)
-		return ptable + n;
-	return 0;
-}
-
-static void save_env(struct fastboot_ptentry *ptn,
-		     char *var, char *val)
-{
-	char ecc_type[5];
-	char *saveenv[2] = { "setenv", NULL, };
-	char *ecc[3]     = { "nandecc", "sw", NULL, };
-
-	setenv(var, val);
-
-	/* Some flashing requires the nand's ecc to be set */
-	ecc[1] = ecc_type;
-	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) &&
-	    (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC))	{
-		/* Both can not be true */
-		FBTWARN("can not do hw and sw ecc for partition '%s'\n",
-			ptn->name);
-		FBTWARN("Ignoring these flags\n");
-	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) {
-		sprintf(ecc_type, "hw");
-		do_switch_ecc(NULL, 0, 2, ecc);
-	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC) {
-		sprintf(ecc_type, "sw");
-		do_switch_ecc(NULL, 0, 2, ecc);
-	}
-	do_env_save(NULL, 0, 1, saveenv);
-}
-
-static void save_block_values(struct fastboot_ptentry *ptn,
-			      unsigned int offset,
-			      unsigned int size)
-{
-	struct fastboot_ptentry *env_ptn;
-
-	char var[64], val[32];
-	char start[32], length[32];
-	char ecc_type[5];
-	char *setenv[4]  = { "setenv", NULL, NULL, NULL, };
-	char *saveenv[2] = { "setenv", NULL, };
-	char *ecc[3]     = { "nandecc", "sw", NULL, };
-
-	setenv[1] = var;
-	setenv[2] = val;
-
-	FBTINFO("saving it..\n");
-
-	if (size == 0) {
-		/* The error case, where the variables are being unset */
-
-		sprintf(var, "%s_nand_offset", ptn->name);
-		do_env_set(NULL, 0, 3, setenv);
-
-		sprintf(var, "%s_nand_size", ptn->name);
-		do_env_set(NULL, 0, 3, setenv);
-	} else {
-		/* Normal case */
-
-		sprintf(var, "%s_nand_offset", ptn->name);
-		sprintf(val, "0x%x", offset);
-
-		FBTINFO("%s %s %s\n", setenv[0], setenv[1], setenv[2]);
-
-		do_env_set(NULL, 0, 3, setenv);
-
-		sprintf(var, "%s_nand_size", ptn->name);
-
-		sprintf(val, "0x%x", size);
-
-		FBTINFO("%s %s %s\n", setenv[0], setenv[1], setenv[2]);
-
-		do_env_set(NULL, 0, 3, setenv);
-	}
-
-
-	/* Warning :
-	   The environment is assumed to be in a partition named 'enviroment'.
-	   It is very possible that your board stores the enviroment
-	   someplace else. */
-	env_ptn = fastboot_flash_find_ptn("environment");
-
-	if (env_ptn) {
-		unsigned int flags = env_ptn->flags;
-
-		/* Some flashing requires the nand's ecc to be set */
-		ecc[1] = ecc_type;
-		if ((flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) &&
-		    (flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC)) {
-			/* Both can not be true */
-			FBTWARN("can not do hw and sw ecc for partition '%s'\n",
-				ptn->name);
-			FBTWARN("Ignoring these flags\n");
-		} else if (flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) {
-			sprintf(ecc_type, "hw");
-			do_switch_ecc(NULL, 0, 2, ecc);
-		} else if (flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC) {
-			sprintf(ecc_type, "sw");
-			do_switch_ecc(NULL, 0, 2, ecc);
-		}
-
-		sprintf(start, "0x%x", env_ptn->start);
-		sprintf(length, "0x%x", env_ptn->length);
-
-	}
-
-	do_env_save(NULL, 0, 1, saveenv);
-}
-
-/* When save = 0, just parse.  The input is unchanged
-   When save = 1, parse and do the save.  The input is changed */
-static int parse_env(void *ptn, char *err_string, int save, int debug)
-{
-	int ret = 1;
-	unsigned int sets = 0;
-	unsigned int comment_start = 0;
-	char *var = NULL;
-	char *var_end = NULL;
-	char *val = NULL;
-	char *val_end = NULL;
-	unsigned int i;
-
-	char *buff = (char *)priv.transfer_buffer;
-	unsigned int size = priv.download_bytes_unpadded;
-
-	/* The input does not have to be null terminated.
-	   This will cause a problem in the corner case
-	   where the last line does not have a new line.
-	   Put a null after the end of the input.
-
-	   WARNING : Input buffer is assumed to be bigger
-	   than the size of the input */
-	if (save)
-		buff[size] = 0;
-
-	for (i = 0; i < size; i++) {
-
-		if (NULL == var) {
-
-			/*
-			 * Check for comments, comment ok only on
-			 * mostly empty lines
-			 */
-			if (buff[i] == '#')
-				comment_start = 1;
-
-			if (comment_start) {
-				if  ((buff[i] == '\r') ||
-				     (buff[i] == '\n')) {
-					comment_start = 0;
-				}
-			} else {
-				if (!((buff[i] == ' ') ||
-				      (buff[i] == '\t') ||
-				      (buff[i] == '\r') ||
-				      (buff[i] == '\n'))) {
-					/*
-					 * Normal whitespace before the
-					 * variable
-					 */
-					var = &buff[i];
-				}
-			}
-
-		} else if (((NULL == var_end) || (NULL == val)) &&
-			   ((buff[i] == '\r') || (buff[i] == '\n'))) {
-
-			/* This is the case when a variable
-			   is unset. */
-
-			if (save) {
-				/* Set the var end to null so the
-				   normal string routines will work
-
-				   WARNING : This changes the input */
-				buff[i] = '\0';
-
-				save_env(ptn, var, val);
-
-				FBTDBG("Unsetting %s\n", var);
-			}
-
-			/* Clear the variable so state is parse is back
-			   to initial. */
-			var = NULL;
-			var_end = NULL;
-			sets++;
-		} else if (NULL == var_end) {
-			if ((buff[i] == ' ') ||
-			    (buff[i] == '\t'))
-				var_end = &buff[i];
-		} else if (NULL == val) {
-			if (!((buff[i] == ' ') ||
-			      (buff[i] == '\t')))
-				val = &buff[i];
-		} else if (NULL == val_end) {
-			if ((buff[i] == '\r') ||
-			    (buff[i] == '\n')) {
-				/* look for escaped cr or ln */
-				if ('\\' == buff[i - 1]) {
-					/* check for dos */
-					if ((buff[i] == '\r') &&
-					    (buff[i+1] == '\n'))
-						buff[i + 1] = ' ';
-					buff[i - 1] = buff[i] = ' ';
-				} else {
-					val_end = &buff[i];
-				}
-			}
-		} else {
-			sprintf(err_string, "Internal Error");
-
-			FBTDBG("Internal error at %s %d\n",
-				       __FILE__, __LINE__);
-			return 1;
-		}
-		/* Check if a var / val pair is ready */
-		if (NULL != val_end) {
-			if (save) {
-				/* Set the end's with nulls so
-				   normal string routines will
-				   work.
-
-				   WARNING : This changes the input */
-				*var_end = '\0';
-				*val_end = '\0';
-
-				save_env(ptn, var, val);
-
-				FBTDBG("Setting %s %s\n", var, val);
-			}
-
-			/* Clear the variable so state is parse is back
-			   to initial. */
-			var = NULL;
-			var_end = NULL;
-			val = NULL;
-			val_end = NULL;
-
-			sets++;
-		}
-	}
-
-	/* Corner case
-	   Check for the case that no newline at end of the input */
-	if ((NULL != var) &&
-	    (NULL == val_end)) {
-		if (save) {
-			/* case of val / val pair */
-			if (var_end)
-				*var_end = '\0';
-			/* else case handled by setting 0 past
-			   the end of buffer.
-			   Similar for val_end being null */
-			save_env(ptn, var, val);
-
-			if (var_end)
-				FBTDBG("Trailing Setting %s %s\n", var, val);
-			else
-				FBTDBG("Trailing Unsetting %s\n", var);
-		}
-		sets++;
-	}
-	/* Did we set anything ? */
-	if (0 == sets)
-		sprintf(err_string, "No variables set");
-	else
-		ret = 0;
-
-	return ret;
-}
-
-static int saveenv_to_ptn(struct fastboot_ptentry *ptn, char *err_string)
-{
-	int ret = 1;
-	int save = 0;
-	int debug = 0;
-
-	/* err_string is only 32 bytes
-	   Initialize with a generic error message. */
-	sprintf(err_string, "%s", "Unknown Error");
-
-	/* Parse the input twice.
-	   Only save to the enviroment if the entire input if correct */
-	save = 0;
-	if (0 == parse_env(ptn, err_string, save, debug)) {
-		save = 1;
-		ret = parse_env(ptn, err_string, save, debug);
-	}
-	return ret;
-}
-
-static void set_ptn_ecc(struct fastboot_ptentry *ptn)
-{
-	char ecc_type[5];
-	char ecc_layout[5];
-	char *ecc[3] = {"nandecc", "sw", NULL, };
-
-	/* Some flashing requires the nand's ecc to be set */
-	ecc[1] = ecc_type;
-	ecc[2] = ecc_layout;
-	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) &&
-	    (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC)) {
-		/* Both can not be true */
-		FBTERR("can not do hw and sw ecc for partition '%s'\n",
-		       ptn->name);
-		FBTERR("Ignoring these flags\n");
-	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC) {
-		sprintf(ecc_type, "hw");
-		if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_2) {
-			sprintf(ecc_layout, "2");
-			do_switch_ecc(NULL, 0, 3, ecc);
-		} else {
-			do_switch_ecc(NULL, 0, 2, ecc);
-		}
-	} else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC) {
-		sprintf(ecc_type, "sw");
-		do_switch_ecc(NULL, 0, 2, ecc);
-	}
-}
-
-static int write_to_ptn(struct fastboot_ptentry *ptn)
-{
-	int ret = 1;
-	char start[32], length[32];
-	char wstart[32], wlength[32], addr[32];
-	char write_type[32];
-	int repeat, repeat_max;
-
-	char *write[6]  = { "nand", "write",  NULL, NULL, NULL, NULL, };
-	char *erase[5]  = { "nand", "erase",  NULL, NULL, NULL, };
-
-	erase[2] = start;
-	erase[3] = length;
-
-	write[1] = write_type;
-	write[2] = addr;
-	write[3] = wstart;
-	write[4] = wlength;
-
-	FBTINFO("flashing '%s'\n", ptn->name);
-
-	/* Which flavor of write to use */
-	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_I)
-		sprintf(write_type, "write.i");
-	else if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2)
-		sprintf(write_type, "write.jffs2");
-	else
-		sprintf(write_type, "write");
-
-	/* Some flashing requires writing the same data in multiple,
-	   consecutive flash partitions */
-	repeat_max = 1;
-	repeat = FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(ptn->flags);
-	if (repeat) {
-		if (ptn->flags &
-		    FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK) {
-			FBTWARN("can not do both 'contiguous block'"
-				" and 'repeat' writes for for"
-				" partition '%s'\n", ptn->name);
-			FBTWARN("Ignoring repeat flag\n");
-		} else
-			repeat_max = repeat;
-	}
-
-	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_NEXT_GOOD_BLOCK) &&
-	    (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK)) {
-		/* Both can not be true */
-		FBTWARN("can not do 'next good block' and"
-			" 'contiguous block' for partition '%s'\n",
-			ptn->name);
-		FBTWARN("Ignoring write request\n");
-		return -1;
-	}
-
-	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_NEXT_GOOD_BLOCK) ||
-	    (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK)) {
-		if (priv.nand_block_size == 0) {
-			FBTWARN("nand block size can not be 0 when using"
-				" 'next good block' or 'contiguous block' for"
-				" partition '%s'\n", ptn->name);
-			FBTWARN("Ignoring write request\n");
-			return -1;
-		}
-	}
-	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK) {
-		if (0 != nand_curr_device) {
-			FBTERR("only handling 1 NAND per board when using"
-			       " 'contiguous block' for partition '%s'\n",
-			       ptn->name);
-			FBTERR("Ignoring write request\n");
-			return -1;
-		}
-	}
-
-	sprintf(length, "0x%x", ptn->length);
-
-	for (repeat = 0; repeat < repeat_max; repeat++) {
-
-		set_ptn_ecc(ptn);
-
-		sprintf(start, "0x%x", ptn->start + (repeat * ptn->length));
-
-		do_nand(NULL, 0, 4, erase);
-
-		if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_NEXT_GOOD_BLOCK) {
-			/* Keep writing until you get a good block
-			   transfer_buffer should already be aligned */
-			unsigned int blocks;
-			unsigned int i = 0;
-			unsigned int offset = 0;
-
-			blocks = priv.d_bytes / priv.nand_block_size;
-
-			sprintf(wlength, "0x%x", priv.nand_block_size);
-			while (i < blocks) {
-				/* Check for overflow */
-				if (offset >= ptn->length)
-					break;
-
-				/* download's address only advance
-				   if last write was successful */
-				sprintf(addr, "%p",
-					priv.transfer_buffer +
-					(i * priv.nand_block_size));
-
-				/* nand's address always advances */
-				sprintf(wstart, "0x%x",
-					ptn->start +
-					(repeat * ptn->length) + offset);
-
-				ret = do_nand(NULL, 0, 5, write);
-				if (ret)
-					break;
-				else
-					i++;
-
-				/* Go to next nand block */
-				offset += priv.nand_block_size;
-			}
-		} else if (ptn->flags &
-			 FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK) {
-			/* Keep writing until you get a good block
-			   transfer_buffer should already be aligned */
-			nand_info_t *nand;
-			unsigned long off;
-			unsigned int ok_start;
-
-			nand = &nand_info[nand_curr_device];
-
-			FBTINFO("\nDevice %d bad blocks:\n", nand_curr_device);
-
-			/* Initialize the ok_start to the start of the
-			   partition. Then try to find a block large
-			   enough for the download */
-			ok_start = ptn->start;
-
-			/* It is assumed that the start and
-			   length are multiples of block size */
-			for (off = ptn->start;
-			     off < ptn->start + ptn->length;
-			     off += nand->erasesize) {
-				if (nand_block_isbad(nand, off)) {
-					/* Reset the ok_start
-					   to the next block */
-					ok_start = off + nand->erasesize;
-				}
-
-				/* Check if we have enough
-				   blocks */
-				if ((ok_start - off) >= priv.d_bytes)
-					break;
-			}
-
-			/* Check if there is enough space */
-			if (ok_start + priv.d_bytes <=
-			    ptn->start + ptn->length) {
-				sprintf(addr,    "%p", priv.transfer_buffer);
-				sprintf(wstart,  "0x%x", ok_start);
-				sprintf(wlength, "0x%x", priv.d_bytes);
-
-				ret = do_nand(NULL, 0, 5, write);
-
-				/* Save the results into an environment
-				   variable on the format
-				   ptn_name + 'offset'
-				   ptn_name + 'size'  */
-				if (ret) {
-					/* failed */
-					save_block_values(ptn, 0, 0);
-				} else {
-					/* success */
-					save_block_values(ptn, ok_start,
-							  priv.d_bytes);
-				}
-			} else {
-				FBTERR("could not find enough"
-				       " contiguous space in"
-				       " partition '%s'\n",
-				       ptn->name);
-				FBTERR("Ignoring write request\n");
-			}
-		} else {
-			/* Normal case */
-			sprintf(addr,    "%p", priv.transfer_buffer);
-			sprintf(wstart,  "0x%x", ptn->start +
-				(repeat * ptn->length));
-			sprintf(wlength, "0x%x", priv.d_bytes);
-			if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2)
-				sprintf(wlength, "0x%x",
-					priv.download_bytes_unpadded);
-
-			ret = do_nand(NULL, 0, 5, write);
-
-			if (0 == repeat) {
-				if (ret) /* failed */
-					save_block_values(ptn, 0, 0);
-				else     /* success */
-					save_block_values(ptn, ptn->start,
-							  priv.d_bytes);
-			}
-		}
-
-		if (ret)
-			break;
-	}
-
-	return ret;
-}
-
-static int check_against_static_partition(struct fastboot_ptentry *ptn)
-{
-	int ret = 0;
-	struct fastboot_ptentry *c;
-	int i;
-
-	for (i = 0; i < static_pcount; i++) {
-		c = fastboot_get_ptn((unsigned int) i);
-
-		if (0 == ptn->length)
-			break;
-
-		if ((ptn->start >= c->start) &&
-		    (ptn->start < c->start + c->length))
-			break;
-
-		if ((ptn->start + ptn->length > c->start) &&
-		    (ptn->start + ptn->length <= c->start + c->length))
-			break;
-
-		if ((0 == strcmp(ptn->name, c->name)) &&
-		    (0 == strcmp(c->name, ptn->name)))
-			break;
-	}
-
-	if (i >= static_pcount)
-		ret = 1;
-	return ret;
-}
-
-static unsigned long long memparse(char *ptr, char **retptr)
-{
-	char *endptr;	/* local pointer to end of parsed string */
-
-	unsigned long ret = simple_strtoul(ptr, &endptr, 0);
-
-	switch (*endptr) {
-	case 'M':
-	case 'm':
-		ret <<= 10;
-	case 'K':
-	case 'k':
-		ret <<= 10;
-		endptr++;
-	default:
-		break;
-	}
-
-	if (retptr)
-		*retptr = endptr;
-
-	return ret;
-}
-
-static int add_partition_from_environment(char *s, char **retptr)
-{
-	unsigned long size;
-	unsigned long offset = 0;
-	char *name;
-	int name_len;
-	int delim;
-	unsigned int flags;
-	struct fastboot_ptentry part;
-
-	size = memparse(s, &s);
-	if (0 == size) {
-		FBTERR("size of parition is 0\n");
-		return 1;
-	}
-
-	/* fetch partition name and flags */
-	flags = 0; /* this is going to be a regular partition */
-	delim = 0;
-	/* check for offset */
-	if (*s == '@') {
-		s++;
-		offset = memparse(s, &s);
-	} else {
-		FBTERR("offset of parition is not given\n");
-		return 1;
-	}
-
-	/* now look for name */
-	if (*s == '(')
-		delim = ')';
-
-	if (delim) {
-		char *p;
-
-		name = ++s;
-		p = strchr((const char *)name, delim);
-		if (!p) {
-			FBTERR("no closing %c found in partition name\n",
-			       delim);
-			return 1;
-		}
-		name_len = p - name;
-		s = p + 1;
-	} else {
-		FBTERR("no partition name for \'%s\'\n", s);
-		return 1;
-	}
-
-	/* test for options */
-	while (1) {
-		if (strncmp(s, "i", 1) == 0) {
-			flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_I;
-			s += 1;
-		} else if (strncmp(s, "jffs2", 5) == 0) {
-			/* yaffs */
-			flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2;
-			s += 5;
-		} else if (strncmp(s, "swecc", 5) == 0) {
-			/* swecc */
-			flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC;
-			s += 5;
-		} else if (strncmp(s, "hwecc", 5) == 0) {
-			/* hwecc */
-			flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC;
-			s += 5;
-		} else {
-			break;
-		}
-		if (strncmp(s, "|", 1) == 0)
-			s += 1;
-	}
-
-	/* enter this partition (offset will be calculated later if
-	 * it is zero at this point) */
-	part.length = size;
-	part.start = offset;
-	part.flags = flags;
-
-	if (name) {
-		if (name_len >= sizeof(part.name)) {
-			FBTERR("partition name is too long\n");
-			return 1;
-		}
-		strncpy(&part.name[0], name, name_len);
-		/* name is not null terminated */
-		part.name[name_len] = '\0';
-	} else {
-		FBTERR("no name\n");
-		return 1;
-	}
-
-	/* Check if this overlaps a static partition */
-	if (check_against_static_partition(&part)) {
-		FBTINFO("Adding: %s, offset 0x%8.8x, size 0x%8.8x,"
-			" flags 0x%8.8x\n",
-		       part.name, part.start, part.length, part.flags);
-		fastboot_flash_add_ptn(&part);
-	}
-
-	/* return (updated) pointer command line string */
-	*retptr = s;
-
-	/* return partition table */
-	return 0;
-}
-
-static int fbt_add_partitions_from_environment(void)
-{
-	char fbparts[4096], *env;
-
-	/*
-	 * Place the runtime partitions at the end of the
-	 * static paritions.  First save the start off so
-	 * it can be saved from run to run.
-	 */
-	if (static_pcount >= 0) {
-		/* Reset */
-		pcount = static_pcount;
-	} else {
-		/* Save */
-		static_pcount = pcount;
-	}
-	env = getenv("fbparts");
-	if (env) {
-		unsigned int len;
-		len = strlen(env);
-		if (len && len < 4096) {
-			char *s, *e;
-
-			memcpy(&fbparts[0], env, len + 1);
-			FBTINFO("Adding partitions from environment\n");
-			s = &fbparts[0];
-			e = s + len;
-			while (s < e) {
-				if (add_partition_from_environment(s, &s)) {
-					FBTERR("Abort adding partitions\n");
-					/* reset back to static */
-					pcount = static_pcount;
-					break;
-				}
-				/* Skip a bunch of delimiters */
-				while (s < e) {
-					if ((' ' == *s) ||
-					    ('\t' == *s) ||
-					    ('\n' == *s) ||
-					    ('\r' == *s) ||
-					    (',' == *s)) {
-						s++;
-					} else {
-						break;
-					}
-				}
-			}
-		}
-	}
-
-	return 0;
-}
-#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
-
 static void fbt_set_unlocked(int unlocked)
 {
 	char *unlocked_string;
@@ -1461,9 +696,6 @@ static void fbt_set_unlocked(int unlocked)
 static void fbt_fastboot_init(void)
 {
 	char *fastboot_unlocked_env;
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-	fbt_add_partitions_from_environment();
-#endif
 	priv.flag = 0;
 	priv.d_size = 0;
 	priv.d_bytes = 0;
@@ -1499,11 +731,6 @@ static void fbt_fastboot_init(void)
 	else
 		printf("Device is locked\n");
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-	priv.nand_block_size               = FASTBOOT_NAND_BLOCK_SIZE;
-	priv.nand_oob_size                 = FASTBOOT_NAND_OOB_SIZE;
-#endif
-
 	/*
 	 * We need to be able to run fastboot even if there isn't a partition
 	 * table (so we can use "oem format") and fbt_load_partition_table
@@ -1519,6 +746,8 @@ static int fbt_handle_erase(char *cmdbuf)
 	char *partition_name = cmdbuf;
 	char *num_blocks_str;
 	unsigned long long num_blocks = ~0ULL; /* MAX ULLONG */
+	struct mmc *mmc;
+	u64 blk_cnt;
 
 	/* see if there is an optional num_blocks after the partition name */
 	num_blocks_str = strchr(cmdbuf, ' ');
@@ -1546,114 +775,81 @@ static int fbt_handle_erase(char *cmdbuf)
 	}
 #endif
 
-	{
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-		char start[32], length[32];
-		int status, repeat, repeat_max;
-		char *erase[5]  = { "nand", "erase",  NULL, NULL, NULL, };
+	mmc = find_mmc_device(FASTBOOT_MMC_DEVICE_ID);
+	blk_cnt = DIV_ROUND_UP(ptn->length, priv.dev_desc->blksz);
+	if (mmc == NULL) {
+		printf("error finding mmc device %d\n",
+		       FASTBOOT_MMC_DEVICE_ID);
+		return -1;
+	}
 
-		FBTINFO("erasing '%s'\n", ptn->name);
+	/* MMC has an erase function, but it operates on
+	 * a erase groups only.  The erase groups can be pretty
+	 * large (e.g. 512KB for a 16GB part) which would not
+	 * work for OMAP eMMC raw booting because the xloader
+	 * TOC must be at either offset 0KB, 128KB, 256KB, or 384KB,
+	 * and the partition table is at 0, so it's not possible
+	 * to have the partition table and the xloader in different
+	 * erase groups in such a device and still allow erasing
+	 * the xloader partitions by erase unit.
+	 *
+	 * We do a check of whether the partition is aligned
+	 * in erase group bounds, and if not, we use mmc write
+	 * all 0xffffffff instead of calling mmc_erase.
+	 */
 
-		erase[2] = start;
-		erase[3] = length;
+	if ((ptn->start % mmc->erase_grp_size) ||
+	    (blk_cnt % mmc->erase_grp_size)) {
 
-		repeat_max = FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(ptn->flags);
-		if (repeat_max == 0)
-			repeat_max = 1;
+		if (ptn->length > priv.transfer_buffer_size) {
+			printf("Unable to erase partition '%s' using"
+			       " block write, ptn->length %llu too"
+			       " large\n", ptn->name, ptn->length);
+			return -1;
 
-		sprintf(length, "0x%x", ptn->length);
-		for (repeat = 0; repeat < repeat_max; repeat++) {
-			sprintf(start, "0x%x",
-				ptn->start + (repeat * ptn->length));
-			status = do_nand(NULL, 0, 4, erase);
-			if (status)
-				break;
 		}
+		printf("Erasing partition '%s':\n", ptn->name);
+		printf("\tstart blk %llu, blk_cnt %llu, by writing 0xFFFFFFFF\n",
+		       ptn->start, blk_cnt);
 
-		if (status) {
-			sprintf(priv.response, "FAILfailed to erase partition");
+		memset(priv.transfer_buffer, 0xff, ptn->length);
+		if (mmc->block_dev.block_write(FASTBOOT_MMC_DEVICE_ID,
+					       ptn->start, blk_cnt,
+					       priv.transfer_buffer) !=
+			blk_cnt) {
+			printf("Write all 0xff to '%s' FAILED!\n",
+			       ptn->name);
+			sprintf(priv.response,
+				"FAILfailed to erase partition");
+			return -1;
 		} else {
-			FBTINFO("partition '%s' erased\n", ptn->name);
+			printf("Partition '%s' erased\n", ptn->name);
 			sprintf(priv.response, "OKAY");
 		}
-#else
-		struct mmc *mmc = find_mmc_device(FASTBOOT_MMC_DEVICE_ID);
-		u64 blk_cnt = DIV_ROUND_UP(ptn->length, priv.dev_desc->blksz);
-		if (mmc == NULL) {
-			printf("error finding mmc device %d\n",
-			       FASTBOOT_MMC_DEVICE_ID);
+	} else {
+		printf("Erasing partition '%s':\n", ptn->name);
+
+		printf("\tstart blk %llu, blk_cnt %llu of %llu\n",
+		       ptn->start, num_blocks, blk_cnt);
+
+		if (blk_cnt > num_blocks)
+			blk_cnt = num_blocks;
+
+		if (mmc->block_dev.block_erase(FASTBOOT_MMC_DEVICE_ID,
+					       ptn->start, blk_cnt) !=
+		    blk_cnt) {
+			printf("Erasing '%s' FAILED!\n", ptn->name);
+			sprintf(priv.response, "FAILfailed to erase partition");
 			return -1;
-		}
-
-		/* MMC has an erase function, but it operates on
-		 * a erase groups only.  The erase groups can be pretty
-		 * large (e.g. 512KB for a 16GB part) which would not
-		 * work for OMAP eMMC raw booting because the xloader
-		 * TOC must be at either offset 0KB, 128KB, 256KB, or 384KB,
-		 * and the partition table is at 0, so it's not possible
-		 * to have the partition table and the xloader in different
-		 * erase groups in such a device and still allow erasing
-		 * the xloader partitions by erase unit.
-		 *
-		 * We do a check of whether the partition is aligned
-		 * in erase group bounds, and if not, we use mmc write
-		 * all 0xffffffff instead of calling mmc_erase.
-		 */
-
-		if ((ptn->start % mmc->erase_grp_size) ||
-		    (blk_cnt % mmc->erase_grp_size)) {
-
-			if (ptn->length > priv.transfer_buffer_size) {
-				printf("Unable to erase partition '%s' using"
-				       " block write, ptn->length %llu too"
-				       " large\n", ptn->name, ptn->length);
-				return -1;
-
-			}
-			printf("Erasing partition '%s':\n", ptn->name);
-			printf("\tstart blk %llu, blk_cnt %llu, by writing 0xFFFFFFFF\n",
-			       ptn->start, blk_cnt);
-
-			memset(priv.transfer_buffer, 0xff, ptn->length);
-			if (mmc->block_dev.block_write(FASTBOOT_MMC_DEVICE_ID,
-						       ptn->start, blk_cnt,
-						       priv.transfer_buffer) !=
-				blk_cnt) {
-				printf("Write all 0xff to '%s' FAILED!\n",
-				       ptn->name);
-				sprintf(priv.response,
-					"FAILfailed to erase partition");
-				return -1;
-			} else {
-				printf("Partition '%s' erased\n", ptn->name);
-				sprintf(priv.response, "OKAY");
-			}
 		} else {
-			printf("Erasing partition '%s':\n", ptn->name);
-
-			printf("\tstart blk %llu, blk_cnt %llu of %llu\n",
-			       ptn->start, num_blocks, blk_cnt);
-
-			if (blk_cnt > num_blocks)
-				blk_cnt = num_blocks;
-
-			if (mmc->block_dev.block_erase(FASTBOOT_MMC_DEVICE_ID,
-						       ptn->start, blk_cnt) !=
-			    blk_cnt) {
-				printf("Erasing '%s' FAILED!\n", ptn->name);
-				sprintf(priv.response, "FAILfailed to erase partition");
-				return -1;
-			} else {
-				printf("partition '%s' erased\n", ptn->name);
-				sprintf(priv.response, "OKAY");
-			}
+			printf("partition '%s' erased\n", ptn->name);
+			sprintf(priv.response, "OKAY");
 		}
-#endif
 	}
 	return status;
 }
 
-#if !defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING) && !defined(CONFIG_ENV_OFFSET)
+#if !defined(CONFIG_ENV_OFFSET)
 int mmc_get_env_addr(struct mmc *mmc, u32 *env_addr)
 {
 	if (mmc != find_mmc_device(FASTBOOT_MMC_DEVICE_ID))
@@ -1667,7 +863,7 @@ int mmc_get_env_addr(struct mmc *mmc, u32 *env_addr)
 
 	return 0;
 }
-#endif /* ! FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
+#endif /* ! CONFIG_ENV_OFFSET */
 
 #define SPARSE_HEADER_MAJOR_VER 1
 
@@ -1899,32 +1095,6 @@ static void fbt_handle_flash(char *cmdbuf)
 		sprintf(priv.response, "FAILimage too large for partition");
 		return;
 	}
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-	/* Check if this is not really a flash write but rather a saveenv */
-	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
-		/* Since the response can only be 64 bytes,
-		   there is no point in having a large error message. */
-		char err_string[32];
-
-		if (saveenv_to_ptn(ptn, &err_string[0])) {
-			FBTINFO("savenv '%s' failed : %s\n",
-				ptn->name, err_string);
-			sprintf(priv.response, "FAIL%s", err_string);
-		} else {
-			FBTINFO("partition '%s' saveenv-ed\n", ptn->name);
-			sprintf(priv.response, "OKAY");
-		}
-	} else {
-		/* Normal case */
-		if (write_to_ptn(ptn)) {
-			FBTINFO("flashing '%s' failed\n", ptn->name);
-			sprintf(priv.response, "FAILfailed to flash partition");
-		} else {
-			FBTINFO("partition '%s' flashed\n", ptn->name);
-			sprintf(priv.response, "OKAY");
-		}
-	}
-#else
 	/* Check if this is not really a flash write but rather a saveenv */
 	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
 		if (!himport_r(&env_htab,
@@ -1992,7 +1162,6 @@ static void fbt_handle_flash(char *cmdbuf)
 			}
 		}
 	} /* Normal Case */
-#endif
 }
 
 static void fbt_handle_getvar(char *cmdbuf)
@@ -2390,131 +1559,6 @@ static void fbt_handle_boot(const char *cmdbuf)
 	sprintf(priv.response, "FAILinvalid boot image");
 }
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-#ifdef	FASTBOOT_UPLOAD
-static int fbt_handle_upload(char *cmdbuf)
-{
-	unsigned int adv, delim_index, len;
-	struct fastboot_ptentry *ptn;
-	unsigned int is_raw = 0;
-
-	/* Is this a raw read ? */
-	if (memcmp(cmdbuf, "uploadraw:", 10) == 0) {
-		is_raw = 1;
-		adv = 10;
-	} else {
-		adv = 7;
-	}
-
-	/* Scan to the next ':' to find when the size starts */
-	len = strlen(cmdbuf);
-	for (delim_index = adv;	delim_index < len; delim_index++) {
-		if (cmdbuf[delim_index] == ':') {
-			/* WARNING, cmdbuf is being modified. */
-			*((char *) &cmdbuf[delim_index]) = 0;
-			break;
-		}
-	}
-
-	ptn = fastboot_flash_find_ptn(cmdbuf + adv);
-	if (ptn == 0) {
-		sprintf(priv.response, "FAILpartition does not exist");
-	} else {
-		/* This is how much the user is expecting */
-		unsigned int user_size;
-		/*
-		 * This is the maximum size needed for
-		 * this partition
-		 */
-		unsigned int size;
-		/* This is the length of the data */
-		unsigned int length;
-		/*
-		 * Used to check previous write of
-		 * the parition
-		 */
-		char env_ptn_length_var[128];
-		char *env_ptn_length_val;
-
-		user_size = 0;
-		if (delim_index < len)
-			user_size = simple_strtoul(cmdbuf + delim_index +
-				1, NULL, 16);
-		/* Make sure output is padded to block size */
-		length = ptn->length;
-		sprintf(env_ptn_length_var, "%s_nand_size", ptn->name);
-		env_ptn_length_val = getenv(env_ptn_length_var);
-		if (env_ptn_length_val) {
-			length = simple_strtoul(env_ptn_length_val, NULL, 16);
-			/* Catch possible problems */
-			if (!length)
-				length = ptn->length;
-		}
-		size = length / priv.nand_block_size;
-		size *= priv.nand_block_size;
-		if (length % priv.nand_block_size)
-			size += priv.nand_block_size;
-		if (is_raw)
-			size += (size / priv.nand_block_size) *
-				priv.nand_oob_size;
-		if (size > priv.transfer_buffer_size) {
-			sprintf(priv.response, "FAILdata too large");
-		} else if (user_size == 0) {
-			/* Send the data response */
-			sprintf(priv.response, "DATA%08x", size);
-		} else if (user_size != size) {
-			/* This is the wrong size */
-			sprintf(priv.response, "FAIL");
-		} else {
-			/*
-			 * This is where the transfer
-			 * buffer is populated
-			 */
-			unsigned char *buf = priv.transfer_buffer;
-			char start[32], length[32], type[32], addr[32];
-			char *read[6] = { "nand", NULL, NULL,
-				NULL, NULL, NULL, };
-			/*
-			 * Setting upload_size causes
-			 * transfer to happen in main loop
-			 */
-			priv.u_size = size;
-			priv.u_bytes = 0;
-
-			/*
-			 * Poison the transfer buffer, 0xff
-			 * is erase value of nand
-			 */
-			memset(buf, 0xff, priv.u_size);
-			/* Which flavor of read to use */
-			if (is_raw)
-				sprintf(type, "read.raw");
-			else
-				sprintf(type, "read.i");
-
-			sprintf(addr, "0x%x", priv.transfer_buffer);
-			sprintf(start, "0x%x", ptn->start);
-			sprintf(length, "0x%x", priv.u_size);
-
-			read[1] = type;
-			read[2] = addr;
-			read[3] = start;
-			read[4] = length;
-
-			set_ptn_ecc(ptn);
-
-			do_nand(NULL, 0, 5, read);
-
-			/* Send the data response */
-			sprintf(priv.response, "DATA%08x", size);
-		}
-	}
-
-	return 0;
-}
-#endif /* FASTBOOT_UPLOAD */
-#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
-
 static void fbt_rx_process_download(unsigned char *buffer, int length)
 {
 	unsigned int xfr_size;
@@ -2530,13 +1574,6 @@ static void fbt_rx_process_download(unsigned char *buffer, int length)
 	memcpy(priv.transfer_buffer + priv.d_bytes, buffer, xfr_size);
 	priv.d_bytes += xfr_size;
 
-#if defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING) && defined(INFO)
-	/* Inform via prompt that download is happening */
-	if (!(priv.d_bytes % (16 * priv.nand_block_size)))
-		printf(".");
-	if (!(priv.d_bytes % (80 * 16 * priv.nand_block_size)))
-		printf("\n");
-#endif
 	if (priv.d_bytes >= priv.d_size) {
 		priv.d_size = 0;
 		strcpy(priv.response, "OKAY");
@@ -2545,26 +1582,6 @@ static void fbt_rx_process_download(unsigned char *buffer, int length)
 		printf(".\n");
 #endif
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-		priv.download_bytes_unpadded = priv.d_size;
-		/* XXX: Revisit padding handling */
-		if (priv.nand_block_size &&
-		    (priv.d_bytes % priv.nand_block_size)) {
-			unsigned int pad;
-			unsigned int i;
-
-			pad = (priv.nand_block_size -
-			       (priv.d_bytes % priv.nand_block_size));
-
-			for (i = 0; i < pad; i++) {
-				if (priv.d_bytes >= priv.transfer_buffer_size)
-					break;
-
-				priv.transfer_buffer[priv.d_bytes] = 0;
-				priv.d_bytes++;
-			}
-		}
-#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 		FBTINFO("downloaded %d bytes\n", priv.d_bytes);
 	}
 }
@@ -2658,13 +1675,6 @@ static void fbt_rx_process(unsigned char *buffer, int length)
 			}
 		}
 
-#if defined(FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING) && defined(FASTBOOT_UPLOAD)
-		else if ((memcmp(cmdbuf, "upload:", 7) == 0) ||
-		    (memcmp(cmdbuf, "uploadraw", 10) == 0)) {
-			FBTDBG("upload/uploadraw\n");
-			fbt_handle_upload(cmdbuf);
-		}
-#endif
 		priv.flag |= FASTBOOT_FLAG_RESPONSE;
 		priv.executing_command = 0;
 		return;
@@ -2721,71 +1731,6 @@ static void fbt_handle_response(void)
 		priv.flag &= ~FASTBOOT_FLAG_RESPONSE;
 	}
 }
-
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-#ifdef	FASTBOOT_UPLOAD
-static int fbt_tx_process(void)
-{
-	struct usb_endpoint_instance *ep = &endpoint_instance[TX_EP_INDEX];
-	struct urb *current_urb = NULL;
-	unsigned char *dest = NULL;
-	int n = 0, ret = 0;
-
-	current_urb = next_urb(device_instance, ep);
-	if (!current_urb) {
-		FBTERR("%s: current_urb NULL", __func__);
-		return -1;
-	}
-
-	dest = current_urb->buffer + current_urb->actual_length;
-	n = MIN(64, priv.u_size - priv.u_bytes);
-	memcpy(dest, priv.transfer_buffer + priv.u_bytes, n);
-	current_urb->actual_length += n;
-	if (ep->last == 0) {
-		ret = udc_endpoint_write(ep);
-		/* XXX: "ret = n" should be done iff n bytes has been
-		 * transmitted, "udc_endpoint_write" to be changed for it,
-		 * now it always return 0.
-		 */
-		return n;
-	}
-
-	return ret;
-}
-
-static void fbt_handle_tx(void)
-{
-	if (priv.u_size) {
-		int bytes_written = fbt_tx_process();
-
-		if (bytes_written > 0) {
-			/* XXX: is this the right way to update priv.u_bytes ?,
-			 * may be "udc_endpoint_write()" can be modified to
-			 * return number of bytes transmitted or error and
-			 * update based on hence obtained value
-			 */
-			priv.u_bytes += bytes_written;
-#ifdef	INFO
-			/* Inform via prompt that upload is happening */
-			if (!(priv.d_bytes % (16 * priv.nand_block_size)))
-				printf(".");
-			if (!(priv.d_bytes % (80 * 16 * priv.nand_block_size)))
-				printf("\n");
-#endif
-			if (priv.u_bytes >= priv.u_size)
-#ifdef	INFO
-				printf(".\n");
-#endif
-				priv.u_size = priv.u_bytes = 0;
-				FBTINFO("data upload finished\n");
-		} else {
-			FBTERR("bytes_written: %d\n", bytes_written);
-		}
-
-	}
-}
-#endif /* FASTBOOT_UPLOAD */
-#endif /* FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING */
 
 /*
  * default board-specific hooks and defaults
@@ -2878,11 +1823,6 @@ static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
 				}
 			}
 			fbt_handle_response();
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-#ifdef	FASTBOOT_UPLOAD
-			fbt_handle_tx();
-#endif
-#endif
 		}
 		priv.exit |= ctrlc();
 		if (priv.exit) {
