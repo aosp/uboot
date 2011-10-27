@@ -99,11 +99,6 @@
 #define	FASTBOOT_FLAG_RESPONSE	1
 #define	FASTBOOT_FLAG_DOWNLOAD	1
 
-/* To change design of memory handling (SD/MMC, NAND) faster, if required */
-// #define FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-/* To activate-deactivate fastboot upload command (not part of OmapZoom) */
-// #define	FASTBOOT_UPLOAD
-
 #define FASTBOOT_MAX_INFO_NAMELEN    32
 #define FASTBOOT_MAX_NUM_DEVICE_INFO 32
 
@@ -125,22 +120,10 @@ struct cmd_fastboot_interface {
 	   Set by board */
 	char *serial_no;
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-	/* Nand block size
-	   Supports the write option WRITE_NEXT_GOOD_BLOCK
-
-	   Set by board */
-	unsigned int nand_block_size;
-
-	/* Nand oob size
-	   Set by board */
-	unsigned int nand_oob_size;
-#else
 	block_dev_desc_t *dev_desc;
-#endif
 
 	/* Transfer buffer, for handling flash updates
-	   Should be multiple of the nand_block_size
+	   Should be multiple of the block size
 	   Care should be take so it does not overrun bootloader memory
 	   Controlled by the configure variable CONFIG_FASTBOOT_TRANSFER_BUFFER
 
@@ -180,10 +163,6 @@ struct cmd_fastboot_interface {
 	/* processing a command */
 	unsigned int executing_command;
 
-#ifdef	FASTBOOT_PORT_OMAPZOOM_NAND_FLASHING
-	unsigned int download_bytes_unpadded;
-#endif
-
 	unsigned int exit;
 
 	unsigned int unlocked;
@@ -214,45 +193,9 @@ struct fastboot_ptentry {
 	unsigned int flags;
 };
 
-/* Lower byte shows if the read/write/erase operation in
-   repeated.  The base address is incremented.
-   Either 0 or 1 is ok for a default */
-
-#define	FASTBOOT_PTENTRY_FLAGS_REPEAT_MASK(n)	(n & 0x0f)
-#define	FASTBOOT_PTENTRY_FLAGS_REPEAT_4		0x00000004
-
-/* Writes happen a block at a time.
-   If the write fails, go to next block
-   NEXT_GOOD_BLOCK and CONTIGOUS_BLOCK can not both be set */
-#define FASTBOOT_PTENTRY_FLAGS_WRITE_NEXT_GOOD_BLOCK  0x00000010
-
-/* Find a contiguous block big enough for a the whole file
-   NEXT_GOOD_BLOCK and CONTIGOUS_BLOCK can not both be set */
-#define FASTBOOT_PTENTRY_FLAGS_WRITE_CONTIGUOUS_BLOCK 0x00000020
-
-/* Sets the ECC to hardware before writing
-   HW and SW ECC should not both be set. */
-#define FASTBOOT_PTENTRY_FLAGS_WRITE_HW_ECC           0x00000040
-
-/* Sets the ECC to software before writing
-   HW and SW ECC should not both be set. */
-#define FASTBOOT_PTENTRY_FLAGS_WRITE_SW_ECC           0x00000080
-
-/* Write the file with write.i */
-#define FASTBOOT_PTENTRY_FLAGS_WRITE_I                0x00000100
-
-/* Write the file with write.jffs2 */
-#define FASTBOOT_PTENTRY_FLAGS_WRITE_JFFS2	0x00000200
-
 /* Write the file as a series of variable/value pairs
    using the setenv and saveenv commands */
 #define FASTBOOT_PTENTRY_FLAGS_WRITE_ENV              0x00000400
-
-/* Sets the NANDECC to use Kernel/FS layout for writing */
-#define FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_1        0x00000800
-
-/* Sets the NANDECC to use X-loader/U-boot layout for writing */
-#define FASTBOOT_PTENTRY_FLAGS_HW_ECC_LAYOUT_2        0x00001000
 
 /* Write the partition as a series of variable/value pairs.
    It is also a read only partition (if already written to
