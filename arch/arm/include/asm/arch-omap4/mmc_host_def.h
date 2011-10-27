@@ -35,8 +35,11 @@ typedef struct t2 {
 	unsigned int control_mmc1;	/* 0x628 */
 } t2_t;
 
+#define MMC1_PBIASLITE_VMODE		(1 << 21)
 #define MMC1_PBIASLITE_PWRDNZ		(1 << 22)
+#define MMC1_PBIASLITE_SUPPLY_HI_OUT	(1 << 24)
 #define MMC1_PWRDNZ			(1 << 26)
+
 
 #define SDMMC1_DR2_SPEEDCTRL		(1 << 25)
 #define SDMMC1_DR1_SPEEDCTRL		(1 << 26)
