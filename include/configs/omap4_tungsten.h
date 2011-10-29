@@ -207,6 +207,7 @@
  * Environment setup
  */
 #define CONFIG_BOOTDELAY	0
+/* use preboot to detect key press for fastboot */
 #define CONFIG_PREBOOT
 #define CONFIG_BOOTCOMMAND "booti mmc0"
 #ifdef CONFIG_MFG
@@ -229,7 +230,6 @@
 #define CONFIG_CMD_GPIO
 #define CONFIG_SYS_LONGHELP 1
 #else
-/* use preboot to detect key press for fastboot */
 #undef CONFIG_SYS_LONGHELP	/* undef to save memory */
 #endif
 
