@@ -42,7 +42,7 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	 */
 	{I2C2_SCL, (IEN | PTU | M0)},
 	{I2C2_SDA, (IEN | PTU | M0)},
-	{GPMC_A24, (PTU | M3 | OFF_EN | OFF_PU)},	/* gpio_48, UI_AVR_RST_N */
+	{GPMC_A24, (M3)},			/* gpio_48  - UI_AVR_RST_N_A */
 	{FREF_CLK2_OUT, (IEN | PTD | M3)},	/* gpio_182 - board_id_0 */
 	{GPMC_NCS4,	(IEN | PTD | M3)},	/* gpio_101 - board_id_1 */
 	{KPD_COL3,	(IEN | PTD | M3)},	/* gpio_171 - board_id_2 */
@@ -59,7 +59,7 @@ static const struct pad_conf_entry core_padconf_array_non_essential[] = {
 	{GPMC_A21,		(PTD | M3)},		/* gpio_45  - bt_host_wake_bt */
 	{GPMC_A22,		(PTD | M3)},		/* gpio_46  - bt_en           */
 	{GPMC_A23,		(IEN | PTD | M3)},	/* gpio_47  - bt_wakeup_host  */
-	{GPMC_A24,		(PTD | M3)},		/* gpio_48  - ui_avr_rst_n_a  */
+	{GPMC_A24,		(M3)},			/* gpio_48  - ui_avr_rst_n_a  */
 	{GPMC_A25,		(IEN | PTU | M3)},	/* gpio_49  - ui_avr_int_n    */
 	{GPMC_NCS2,		(PTD | M3)},		/* gpio_52  - bt_rst_n        */
 	{GPMC_NCS3,		(IEN | PTU | M3)},	/* gpio_53  - wlan_irq_n      */
