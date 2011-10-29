@@ -30,6 +30,7 @@
 #include <environment.h>
 #include <search.h>
 #include <errno.h>
+#include <malloc.h>
 
 /* references to names in env_common.c */
 extern uchar default_environment[];
