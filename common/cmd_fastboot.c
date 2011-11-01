@@ -79,8 +79,8 @@ DECLARE_GLOBAL_DATA_PTR;
 
 #define	ERR
 #define	WARN
-/* #define INFO */
-/* #define DEBUG */
+#undef	INFO
+#undef	DEBUG
 
 #ifndef CONFIG_FASTBOOT_LOG_SIZE
 #define CONFIG_FASTBOOT_LOG_SIZE 4000
@@ -856,11 +856,9 @@ static int _unsparse(unsigned char *source,
 				return 1;
 			}
 			blkcnt = clen / blksz;
-#ifdef DEBUG
-			printf("sparse: RAW blk=%d bsz=%d:"
+			FBTDBG("sparse: RAW blk=%d bsz=%d:"
 			       " write(sector=%lu,clen=%llu)\n",
 			       chunk->chunk_sz, header->blk_sz, sector, clen);
-#endif
 			if (priv.dev_desc->block_write(priv.dev_desc->dev,
 						       sector, blkcnt, source)
 						!= blkcnt) {
@@ -880,11 +878,9 @@ static int _unsparse(unsigned char *source,
 				return 1;
 			}
 			clen = chunk->chunk_sz * header->blk_sz;
-#ifdef DEBUG
-			printf("sparse: DONT_CARE blk=%d bsz=%d:"
+			FBTDBG("sparse: DONT_CARE blk=%d bsz=%d:"
 			       " skip(sector=%lu,clen=%llu)\n",
 			       chunk->chunk_sz, header->blk_sz, sector, clen);
-#endif
 
 			outlen += clen;
 			if (outlen > section_size) {
@@ -1468,11 +1464,8 @@ static void fbt_rx_process_download(unsigned char *buffer, int length)
 		priv.d_size = 0;
 		strcpy(priv.response, "OKAY");
 		priv.flag |= FASTBOOT_FLAG_RESPONSE;
-#ifdef	INFO
-		printf(".\n");
-#endif
 
-		FBTINFO("downloaded %d bytes\n", priv.d_bytes);
+		FBTINFO("downloaded %llu bytes\n", priv.d_bytes);
 	}
 }
 
@@ -1549,7 +1542,7 @@ static void fbt_rx_process(unsigned char *buffer, int length)
 				simple_strtoul (cmdbuf + 9, NULL, 16);
 			priv.d_bytes = 0;
 
-			FBTINFO("starting download of %d bytes\n",
+			FBTINFO("starting download of %llu bytes\n",
 				priv.d_size);
 
 			if (priv.d_size == 0) {
@@ -1608,7 +1601,11 @@ static void fbt_response_process(void)
 	n = MIN(64, strlen(priv.response));
 	memcpy(dest, priv.response, n);
 	current_urb->actual_length += n;
+	/*
+	 * This FBTDBG appears to break communication when DEBUG
+	 * is on, so comment it out.
 	FBTDBG("response urb length: %u\n", current_urb->actual_length);
+	 */
 	if (ep->last == 0)
 		udc_endpoint_write(ep);
 }
@@ -1847,6 +1844,8 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 			printf("booti: bad boot image magic\n");
 			goto fail;
 		}
+
+		bootimg_print_image_hdr(hdr);
 
 		sector = ptn->start + (hdr->page_size / blksz);
 		blocks = DIV_ROUND_UP(hdr->kernel_size, blksz);
