@@ -150,7 +150,22 @@ void set_muxconf_regs_non_essential(void)
 #ifdef CONFIG_GENERIC_MMC
 int board_mmc_init(bd_t *bis)
 {
-	omap_mmc_init(FASTBOOT_MMC_DEVICE_ID);
+	struct mmc *mmc;
+	int err;
+
+	omap_mmc_init(CONFIG_MMC_DEV);
+
+	mmc = find_mmc_device(CONFIG_MMC_DEV);
+	if (!mmc) {
+		printf("mmc device not found!!\n");
+		/* Having mmc_initialize() invoke cpu_mmc_init() won't help. */
+		return 0;
+	}
+
+	err = mmc_init(mmc);
+	if (err)
+		printf("mmc init failed: err - %d\n", err);
+
 	return 0;
 }
 #endif

@@ -70,8 +70,8 @@
  * Total Size Environment - 111KB - must match partition table
  * Malloc - add 128KB
  */
-#define CONFIG_ENV_IS_IN_MMC
-#define CONFIG_SYS_MMC_ENV_DEV		(FASTBOOT_MMC_DEVICE_ID)
+#define CONFIG_ENV_IS_IN_BLKDEV
+#define CONFIG_SYS_ENV_BLKDEV		"mmc0"
 #define CONFIG_ENV_SIZE_KB		(111)
 #define CONFIG_ENV_SIZE			((CONFIG_ENV_SIZE_KB) << 10)
 /* offset into mmc for the environment.  we
@@ -124,8 +124,9 @@
 #define CONFIG_GENERIC_MMC		1
 #define CONFIG_MMC			1
 #define CONFIG_OMAP_HSMMC		1
-#define CONFIG_SYS_MMC_SET_DEV		1
 #define CONFIG_EFI_PARTITION		1
+#define CONFIG_MIN_PARTITION_NUM	1
+#define CONFIG_MMC_DEV			0
 
 /* USB */
 #define CONFIG_MUSB_UDC			1
@@ -170,8 +171,8 @@
  * PUBLIC_SAR_RAM1_FREE
  */
 #define FASTBOOT_REBOOT_PARAMETER_ADDR (0x4a326000 + 0xA0C)
-/* mmc device to use */
-#define FASTBOOT_MMC_DEVICE_ID         (0)
+/* device to use */
+#define FASTBOOT_BLKDEV                 "mmc0"
 /* Use HS */
 #define	USB_BCD_VERSION			0x0200
 
@@ -209,7 +210,7 @@
 #define CONFIG_BOOTDELAY	0
 /* use preboot to detect key press for fastboot */
 #define CONFIG_PREBOOT
-#define CONFIG_BOOTCOMMAND "booti mmc0"
+#define CONFIG_BOOTCOMMAND "booti"
 #ifdef CONFIG_MFG
 /*
  * Manufacturing build:
