@@ -810,6 +810,17 @@ static int _unsparse(unsigned char *source,
 	unsigned long blksz = priv.dev_desc->blksz;
 	u64 section_size = (u64)num_blks * blksz;
 
+	FBTINFO("sparse_header:\n");
+	FBTINFO("\t         magic=0x%08X\n", header->magic);
+	FBTINFO("\t       version=%u.%u\n", header->major_version,
+						header->minor_version);
+	FBTINFO("\t file_hdr_size=%u\n", header->file_hdr_sz);
+	FBTINFO("\tchunk_hdr_size=%u\n", header->chunk_hdr_sz);
+	FBTINFO("\t        blk_sz=%u\n", header->blk_sz);
+	FBTINFO("\t    total_blks=%u\n", header->total_blks);
+	FBTINFO("\t  total_chunks=%u\n", header->total_chunks);
+	FBTINFO("\timage_checksum=%u\n", header->image_checksum);
+
 	if (header->magic != SPARSE_HEADER_MAGIC) {
 		printf("sparse: bad magic\n");
 		return 1;
@@ -836,12 +847,19 @@ static int _unsparse(unsigned char *source,
 		lbaint_t blkcnt;
 		chunk_header_t *chunk = (void *) source;
 
+		FBTINFO("chunk_header:\n");
+		FBTINFO("\t    chunk_type=%u\n", chunk->chunk_type);
+		FBTINFO("\t      chunk_sz=%u\n", chunk->chunk_sz);
+		FBTINFO("\t      total_sz=%u\n", chunk->total_sz);
 		/* move to next chunk */
 		source += sizeof(chunk_header_t);
 
 		switch (chunk->chunk_type) {
 		case CHUNK_TYPE_RAW:
 			clen = (u64)chunk->chunk_sz * header->blk_sz;
+			FBTINFO("sparse: RAW blk=%d bsz=%d:"
+			       " write(sector=%lu,clen=%llu)\n",
+			       chunk->chunk_sz, header->blk_sz, sector, clen);
 
 			if (chunk->total_sz != (clen + sizeof(chunk_header_t))) {
 				printf("sparse: bad chunk size for"
