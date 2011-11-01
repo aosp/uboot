@@ -31,6 +31,7 @@
 #include <mmc.h>
 #include <asm/io.h>
 
+#if !defined(CONFIG_FASTBOOT_NO_FORMAT)
 static struct ptable the_ptable;
 
 /* in a board specific file */
@@ -259,6 +260,7 @@ int board_fbt_oem(const char *cmdbuf)
 		return do_format();
 	return -1;
 }
+#endif /* !CONFIG_FASTBOOT_NO_FORMAT */
 
 void board_fbt_set_reboot_type(enum fbt_reboot_type frt)
 {
