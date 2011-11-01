@@ -1430,8 +1430,8 @@ static void fbt_handle_boot(const char *cmdbuf)
 	if ((priv.d_bytes) &&
 		(CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE < priv.d_bytes)) {
 		char start[32];
-		char *booti[3] = { "booti", NULL, NULL, };
-		char *go[3]    = { "go",    NULL, NULL, };
+		char *booti[] = { "booti", start };
+		char *go[]    = { "go",    start };
 
 		/*
 		 * Use this later to determine if a command line was passed
@@ -1440,8 +1440,6 @@ static void fbt_handle_boot(const char *cmdbuf)
 		struct fastboot_boot_img_hdr *fb_hdr =
 			(struct fastboot_boot_img_hdr *) priv.transfer_buffer;
 
-
-		booti[1] = go[1] = start;
 		sprintf(start, "%p", fb_hdr);
 
 		/* Execution should jump to kernel so send the response
@@ -1451,12 +1449,12 @@ static void fbt_handle_boot(const char *cmdbuf)
 		fbt_handle_response();
 		udelay(1000000); /* 1 sec */
 
-		do_booti(NULL, 0, 2, booti);
+		do_booti(NULL, 0, ARRAY_SIZE(booti), booti);
 
 		printf("do_booti() returned, trying go..\n");
 
 		FBTINFO("Booting raw image..\n");
-		do_go(NULL, 0, 2, go);
+		do_go(NULL, 0, ARRAY_SIZE(go), go);
 
 		FBTERR("booting failed, reset the board\n");
 	}
