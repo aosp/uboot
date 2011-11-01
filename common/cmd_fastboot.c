@@ -60,7 +60,6 @@
 #include <command.h>
 #include <malloc.h>
 #include <fastboot.h>
-#include <mmc.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -70,6 +69,13 @@ DECLARE_GLOBAL_DATA_PTR;
 
 #define FASTBOOT_UNLOCKED_ENV_NAME "fastboot_unlocked"
 #define FASTBOOT_UNLOCK_TIMEOUT_SECS 5
+
+#ifndef CONFIG_ENV_BLK_PARTITION
+#define CONFIG_ENV_BLK_PARTITION "environment"
+#endif
+#ifndef CONFIG_INFO_PARTITION
+#define CONFIG_INFO_PARTITION "device_info"
+#endif
 
 #define	ERR
 #define	WARN
@@ -163,7 +169,7 @@ struct _fbt_config_desc {
 };
 
 static void fbt_handle_response(void);
-static fastboot_ptentry *fastboot_flash_find_ptn(const char *name);
+static disk_partition_t *fastboot_flash_find_ptn(const char *name);
 
 /* defined and used by gadget/ep0.c */
 extern struct usb_string_descriptor **usb_strings;
@@ -274,8 +280,8 @@ extern int do_env_save(cmd_tbl_t *cmdtp, int flag, int argc,
 		       char *const argv[]);
 
 /* To support the Android-style naming of flash */
-#define MAX_PTN 16
-static fastboot_ptentry ptable[MAX_PTN];
+#define MAX_PTN (CONFIG_MAX_PARTITION_NUM - CONFIG_MIN_PARTITION_NUM + 1)
+static disk_partition_t ptable[MAX_PTN];
 static unsigned int pcount;
 
 /* USB specific */
@@ -556,7 +562,16 @@ static void create_serial_number(void)
 	}
 }
 
-void fbt_add_ptn(fastboot_ptentry *ptn)
+static int is_env_partition(disk_partition_t *ptn)
+{
+	return !strcmp((char *)ptn->name, CONFIG_ENV_BLK_PARTITION);
+}
+static int is_info_partition(disk_partition_t *ptn)
+{
+	return !strcmp((char *)ptn->name, CONFIG_INFO_PARTITION);
+}
+
+void fbt_add_ptn(disk_partition_t *ptn)
 {
 	if (pcount < MAX_PTN) {
 		memcpy(ptable + pcount, ptn, sizeof(*ptn));
@@ -566,7 +581,7 @@ void fbt_add_ptn(fastboot_ptentry *ptn)
 
 static int fbt_load_partition_table(void)
 {
-	struct fastboot_ptentry *info_ptn;
+	disk_partition_t *info_ptn;
 	unsigned int i;
 
 	if (board_fbt_load_ptbl()) {
@@ -574,28 +589,22 @@ static int fbt_load_partition_table(void)
 		return -1;
 	}
 
-	priv.dev_desc = get_dev("mmc", FASTBOOT_MMC_DEVICE_ID);
-	if (priv.dev_desc == NULL) {
-		printf("** mmc device %d not supported\n",
-		       FASTBOOT_MMC_DEVICE_ID);
-		return 1;
-	}
-
 	/* load device info partition if it exists */
-	info_ptn = fastboot_flash_find_ptn("device_info");
+	info_ptn = fastboot_flash_find_ptn(CONFIG_INFO_PARTITION);
 	if (info_ptn) {
 		struct info_partition_header *info_header;
 		char *name, *next_name;
 		char *value;
 
-		if (priv.dev_desc->block_read(priv.dev_desc->dev,
-					      info_ptn->start, 1,
-					      priv.transfer_buffer) != 1) {
-			printf("failed to read info partition\n");
+		lbaint_t num_blks = 1;
+		i = partition_read_blks(priv.dev_desc, info_ptn,
+					&num_blks, priv.transfer_buffer);
+		if (i) {
+			printf("failed to read info partition. error=%d\n", i);
 			goto no_existing_info;
 		}
 
-		/* parse the info partition read from mmc */
+		/* parse the info partition read from the device */
 		info_header =
 			(struct info_partition_header *)priv.transfer_buffer;
 		name = (char *)(info_header + 1);
@@ -652,7 +661,7 @@ no_existing_info:
 	return 0;
 }
 
-static fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
+static disk_partition_t *fastboot_flash_find_ptn(const char *name)
 {
 	unsigned int n;
 
@@ -664,7 +673,7 @@ static fastboot_ptentry *fastboot_flash_find_ptn(const char *name)
 	}
 
 	for (n = 0; n < pcount; n++)
-		if (!strcmp(ptable[n].name, name))
+		if (!strcmp((char *)ptable[n].name, name))
 			return ptable + n;
 	return NULL;
 }
@@ -739,185 +748,69 @@ static void fbt_fastboot_init(void)
 	(void)fbt_load_partition_table();
 }
 
-static int fbt_handle_erase(char *cmdbuf)
+static void fbt_handle_erase(char *cmdbuf)
 {
-	struct fastboot_ptentry *ptn;
-	int status = 0;
-	char *partition_name = cmdbuf;
+	disk_partition_t *ptn;
+	int err;
+	char *partition_name = cmdbuf + 6;
 	char *num_blocks_str;
-	unsigned long long num_blocks = ~0ULL; /* MAX ULLONG */
-	struct mmc *mmc;
-	u64 blk_cnt;
+	lbaint_t num_blocks;
+	lbaint_t *num_blocks_p = NULL;
 
 	/* see if there is an optional num_blocks after the partition name */
-	num_blocks_str = strchr(cmdbuf, ' ');
+	num_blocks_str = strchr(partition_name, ' ');
 	if (num_blocks_str) {
 		/* null terminate the partition name */
 		*num_blocks_str = 0;
 		num_blocks_str++;
 		num_blocks = simple_strtoull(num_blocks_str, NULL, 10);
+		num_blocks_p = &num_blocks;
 	}
 
 	ptn = fastboot_flash_find_ptn(partition_name);
 	if (ptn == 0) {
+		printf("Partition %s does not exist\n", ptn->name);
 		sprintf(priv.response, "FAILpartition does not exist");
-		return 0;
+		return;
 	}
 
 #ifndef CONFIG_MFG
 	/* don't allow erasing a valid device info partition in a production
 	 * u-boot */
-	if ((ptn->flags & FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO) &&
-	    (!priv.dev_info_uninitialized)) {
+	if (is_info_partition(ptn) && (!priv.dev_info_uninitialized)) {
 		printf("Not allowed to erase %s partition\n", ptn->name);
 		strcpy(priv.response, "FAILnot allowed to erase partition");
-		return 0;
+		return;
 	}
 #endif
 
-	mmc = find_mmc_device(FASTBOOT_MMC_DEVICE_ID);
-	blk_cnt = DIV_ROUND_UP(ptn->length, priv.dev_desc->blksz);
-	if (mmc == NULL) {
-		printf("error finding mmc device %d\n",
-		       FASTBOOT_MMC_DEVICE_ID);
-		return -1;
-	}
+	printf("Erasing partition '%s':\n", ptn->name);
 
-	/* MMC has an erase function, but it operates on
-	 * a erase groups only.  The erase groups can be pretty
-	 * large (e.g. 512KB for a 16GB part) which would not
-	 * work for OMAP eMMC raw booting because the xloader
-	 * TOC must be at either offset 0KB, 128KB, 256KB, or 384KB,
-	 * and the partition table is at 0, so it's not possible
-	 * to have the partition table and the xloader in different
-	 * erase groups in such a device and still allow erasing
-	 * the xloader partitions by erase unit.
-	 *
-	 * We do a check of whether the partition is aligned
-	 * in erase group bounds, and if not, we use mmc write
-	 * all 0xffffffff instead of calling mmc_erase.
-	 */
+	printf("\tstart blk %lu, blk_cnt %lu of %lu\n", ptn->start,
+			num_blocks_p ? num_blocks : ptn->size, ptn->size);
 
-	if ((ptn->start % mmc->erase_grp_size) ||
-	    (blk_cnt % mmc->erase_grp_size)) {
-
-		if (ptn->length > priv.transfer_buffer_size) {
-			printf("Unable to erase partition '%s' using"
-			       " block write, ptn->length %llu too"
-			       " large\n", ptn->name, ptn->length);
-			return -1;
-
-		}
-		printf("Erasing partition '%s':\n", ptn->name);
-		printf("\tstart blk %llu, blk_cnt %llu, by writing 0xFFFFFFFF\n",
-		       ptn->start, blk_cnt);
-
-		memset(priv.transfer_buffer, 0xff, ptn->length);
-		if (mmc->block_dev.block_write(FASTBOOT_MMC_DEVICE_ID,
-					       ptn->start, blk_cnt,
-					       priv.transfer_buffer) !=
-			blk_cnt) {
-			printf("Write all 0xff to '%s' FAILED!\n",
-			       ptn->name);
-			sprintf(priv.response,
-				"FAILfailed to erase partition");
-			return -1;
-		} else {
-			printf("Partition '%s' erased\n", ptn->name);
-			sprintf(priv.response, "OKAY");
-		}
+	err = partition_erase_blks(priv.dev_desc, ptn, num_blocks_p);
+	if (err) {
+		printf("Erasing '%s' FAILED! error=%d\n", ptn->name, err);
+		sprintf(priv.response,
+				"FAILfailed to erase partition (%d)", err);
 	} else {
-		printf("Erasing partition '%s':\n", ptn->name);
-
-		printf("\tstart blk %llu, blk_cnt %llu of %llu\n",
-		       ptn->start, num_blocks, blk_cnt);
-
-		if (blk_cnt > num_blocks)
-			blk_cnt = num_blocks;
-
-		if (mmc->block_dev.block_erase(FASTBOOT_MMC_DEVICE_ID,
-					       ptn->start, blk_cnt) !=
-		    blk_cnt) {
-			printf("Erasing '%s' FAILED!\n", ptn->name);
-			sprintf(priv.response, "FAILfailed to erase partition");
-			return -1;
-		} else {
-			printf("partition '%s' erased\n", ptn->name);
-			sprintf(priv.response, "OKAY");
-		}
+		printf("partition '%s' erased\n", ptn->name);
+		sprintf(priv.response, "OKAY");
 	}
-	return status;
 }
-
-#if !defined(CONFIG_ENV_OFFSET)
-int mmc_get_env_addr(struct mmc *mmc, u32 *env_addr)
-{
-	if (mmc != find_mmc_device(FASTBOOT_MMC_DEVICE_ID))
-		return -1;
-
-	fastboot_ptentry *ptn = fastboot_flash_find_ptn("environment");
-	if (!ptn)
-		return -1;
-
-	*env_addr = ptn->start * mmc->write_bl_len;
-
-	return 0;
-}
-#endif /* ! CONFIG_ENV_OFFSET */
 
 #define SPARSE_HEADER_MAJOR_VER 1
 
-static int mmc_write(unsigned char *src, u64 sector, u64 len)
-{
-	lbaint_t blkcnt = len/priv.dev_desc->blksz;
-	if (priv.dev_desc->block_write(priv.dev_desc->dev,
-				       sector, blkcnt, src) != blkcnt) {
-		printf("mmc write to sector %llu of %llu bytes"
-		       " (%ld blkcnt) failed\n", sector, len, blkcnt);
-		return -1;
-	}
-	return 0;
-}
-
-#ifdef DEBUG
-static int mmc_compare(unsigned char *src, u64 sector, u64 len)
-{
-	u8 *data = malloc(priv.dev_desc->blksz);
-	int result = -1;
-	if (data == NULL) {
-		printf("malloc failed for blksz %lu buffer\n",
-		       priv.dev_desc->blksz);
-		return -1;
-	}
-
-	while (len > 0) {
-		if (priv.dev_desc->block_read(priv.dev_desc->dev,
-					      sector, 1, data) != 1) {
-			printf("mmc read error sector %llu\n", sector);
-			goto out;
-		}
-		if (memcmp(data, src, priv.dev_desc->blksz)) {
-			printf("mmc data mismatch sector %llu\n", sector);
-			goto out;
-		}
-		len -= priv.dev_desc->blksz;
-		sector++;
-		src += priv.dev_desc->blksz;
-	}
-	result = 0;
-out:
-	free(data);
-	return result;
-}
-#endif
-
-static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
-		     int (*func)(unsigned char *src, u64 sector, u64 len))
+static int _unsparse(unsigned char *source,
+					lbaint_t sector, lbaint_t num_blks)
 {
 	sparse_header_t *header = (void *) source;
 	u32 i, outlen = 0;
+	unsigned long blksz = priv.dev_desc->blksz;
+	u64 section_size = (u64)num_blks * blksz;
 
-	if ((header->total_blks * header->blk_sz) > section_size) {
+	if (((u64)header->total_blks * header->blk_sz) > section_size) {
 		printf("sparse: section size %llu MB limit: exceeded\n",
 				section_size/(1024*1024));
 		return 1;
@@ -940,7 +833,7 @@ static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
 
 	for (i = 0; i < header->total_chunks; i++) {
 		u64 clen = 0;
-		int r;
+		lbaint_t blkcnt;
 		chunk_header_t *chunk = (void *) source;
 
 		/* move to next chunk */
@@ -962,18 +855,22 @@ static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
 				       " exceeded\n", section_size/(1024*1024));
 				return 1;
 			}
+			blkcnt = clen / blksz;
 #ifdef DEBUG
 			printf("sparse: RAW blk=%d bsz=%d:"
-			       " write(sector=%llu,clen=%llu)\n",
+			       " write(sector=%lu,clen=%llu)\n",
 			       chunk->chunk_sz, header->blk_sz, sector, clen);
 #endif
-			r = func(source, sector, clen);
-			if (r < 0) {
-				printf("sparse: mmc func failed\n");
+			if (priv.dev_desc->block_write(priv.dev_desc->dev,
+						       sector, blkcnt, source)
+						!= blkcnt) {
+				printf("sparse: block write to sector %lu"
+					" of %llu bytes (%ld blkcnt) failed\n",
+					sector, clen, blkcnt);
 				return 1;
 			}
 
-			sector += (clen / 512);
+			sector += (clen / blksz);
 			source += clen;
 			break;
 
@@ -985,7 +882,7 @@ static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
 			clen = chunk->chunk_sz * header->blk_sz;
 #ifdef DEBUG
 			printf("sparse: DONT_CARE blk=%d bsz=%d:"
-			       " skip(sector=%llu,clen=%llu)\n",
+			       " skip(sector=%lu,clen=%llu)\n",
 			       chunk->chunk_sz, header->blk_sz, sector, clen);
 #endif
 
@@ -995,7 +892,7 @@ static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
 				       " exceeded\n", section_size/(1024*1024));
 				return 1;
 			}
-			sector += (clen / 512);
+			sector += (clen / blksz);
 			break;
 
 		default:
@@ -1009,20 +906,22 @@ static int _unsparse(unsigned char *source, u64 sector, u64 section_size,
 	return 0;
 }
 
-static u8 do_unsparse(unsigned char *source, u64 sector, u64 section_size)
+static int do_unsparse(disk_partition_t *ptn, unsigned char *source,
+					lbaint_t sector, lbaint_t num_blks)
 {
-	if (_unsparse(source, sector, section_size, mmc_write))
+	int rtn;
+	if (partition_write_pre(ptn))
 		return 1;
-#ifdef DEBUG
-	printf("sparse: compare mmc slot[%d] @ sector %llu\n",
-	       FASTBOOT_MMC_DEVICE_ID, sector);
-	if (_unsparse(source, sector, section_size, mmc_compare))
+
+	rtn = _unsparse(source, sector, num_blks);
+
+	if (partition_write_post(ptn))
 		return 1;
-#endif
-	return 0;
+
+	return rtn;
 }
 
-static int fbt_save_info(struct fastboot_ptentry *info_ptn)
+static int fbt_save_info(disk_partition_t *info_ptn)
 {
 	struct info_partition_header *info_header;
 	char *name;
@@ -1054,9 +953,12 @@ static int fbt_save_info(struct fastboot_ptentry *info_ptn)
 			*name++ = '\n';
 		}
 	}
-	if (priv.dev_desc->block_write(priv.dev_desc->dev,
-				       info_ptn->start, 1, info_header) != 1) {
-		printf("mmc write to sector %llu failed", info_ptn->start);
+	lbaint_t num_blks = 1;
+	i = partition_write_blks(priv.dev_desc, info_ptn, &num_blks,
+								info_header);
+	if (i) {
+		printf("block write to sector %lu failed, error=%d",
+							info_ptn->start, i);
 		return -1;
 	}
 	priv.dev_info_uninitialized = 0;
@@ -1065,7 +967,7 @@ static int fbt_save_info(struct fastboot_ptentry *info_ptn)
 
 static void fbt_handle_flash(char *cmdbuf)
 {
-	struct fastboot_ptentry *ptn;
+	disk_partition_t *ptn;
 
 	if (!priv.unlocked) {
 		sprintf(priv.response, "FAILdevice is locked");
@@ -1084,19 +986,14 @@ static void fbt_handle_flash(char *cmdbuf)
 	}
 
 	/* Prevent using flash command to write to device_info partition */
-	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO) {
+	if (is_info_partition(ptn)) {
 		sprintf(priv.response,
 			"FAILpartition not writable using flash command");
 		return;
 	}
 
-	if ((priv.d_bytes > ptn->length) &&
-		!(ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV)) {
-		sprintf(priv.response, "FAILimage too large for partition");
-		return;
-	}
 	/* Check if this is not really a flash write but rather a saveenv */
-	if (ptn->flags & FASTBOOT_PTENTRY_FLAGS_WRITE_ENV) {
+	if (is_env_partition(ptn)) {
 		if (!himport_r(&env_htab,
 			       (const char *)priv.transfer_buffer,
 			       priv.d_bytes, '\n', H_NOCLEAR)) {
@@ -1122,9 +1019,8 @@ static void fbt_handle_flash(char *cmdbuf)
 		if (((sparse_header_t *)priv.transfer_buffer)->magic
 		    == SPARSE_HEADER_MAGIC) {
 			printf("fastboot: %s is in sparse format\n", ptn->name);
-			if (!do_unsparse(priv.transfer_buffer,
-					 ptn->start,
-					 ptn->length)) {
+			if (!do_unsparse(ptn, priv.transfer_buffer,
+					 ptn->start, ptn->size)) {
 				printf("Writing sparsed: '%s' DONE!\n",
 				       ptn->name);
 				sprintf(priv.response, "OKAY");
@@ -1135,27 +1031,18 @@ static void fbt_handle_flash(char *cmdbuf)
 			}
 		} else {
 			/* Normal image: no sparse */
-			struct mmc *mmc;
-			u64 blk_cnt;
+			int err;
+			loff_t num_bytes = priv.d_bytes;
 
-			mmc = find_mmc_device(FASTBOOT_MMC_DEVICE_ID);
-			if (mmc == NULL) {
-				printf("error finding mmc device %d\n",
-				       FASTBOOT_MMC_DEVICE_ID);
-				return;
-			}
-			blk_cnt = DIV_ROUND_UP(priv.d_bytes,
-					       priv.dev_desc->blksz);
-
-			printf("Writing '%s', %llu blks (%llu bytes) "
-			       "at sector %llu\n", ptn->name, blk_cnt,
-			       priv.d_bytes, ptn->start);
-			if (mmc->block_dev.block_write(FASTBOOT_MMC_DEVICE_ID,
-						       ptn->start, blk_cnt,
-						       priv.transfer_buffer) !=
-			    blk_cnt) {
-				printf("Writing '%s' FAILED!\n", ptn->name);
-				sprintf(priv.response, "FAIL: Write partition");
+			printf("Writing %llu bytes to '%s'\n",
+						num_bytes, ptn->name);
+			err = partition_write_bytes(priv.dev_desc, ptn,
+					&num_bytes, priv.transfer_buffer);
+			if (err) {
+				printf("Writing '%s' FAILED! error=%d\n",
+							ptn->name, err);
+				sprintf(priv.response,
+					"FAILWrite partition, error=%d", err);
 			} else {
 				printf("Writing '%s' DONE!\n", ptn->name);
 				sprintf(priv.response, "OKAY");
@@ -1428,12 +1315,16 @@ static void fbt_handle_oem(char *cmdbuf)
 			return;
 		}
 		priv.unlock_pending_start_time = 0;
-		err = fbt_handle_erase("userdata");
+		printf("Erasing userdata partition\n");
+		err = partition_erase_blks(priv.dev_desc,
+					fastboot_flash_find_ptn("userdata"),
+					NULL);
 		if (err) {
 			printf("Erase failed with error %d\n", err);
 			strcpy(priv.response, "FAILErasing userdata failed");
 			return;
 		}
+		printf("Erasing succeeded\n");
 		fbt_set_unlocked(1);
 		strcpy(priv.response, "OKAY");
 		return;
@@ -1460,8 +1351,8 @@ static void fbt_handle_oem(char *cmdbuf)
 
 	/* %fastboot oem saveinfo */
 	if (strcmp(cmdbuf, "saveinfo") == 0) {
-		struct fastboot_ptentry *info_ptn;
-		info_ptn = fastboot_flash_find_ptn("device_info");
+		disk_partition_t *info_ptn;
+		info_ptn = fastboot_flash_find_ptn(CONFIG_INFO_PARTITION);
 
 		if (info_ptn == NULL) {
 			sprintf(priv.response, "FAILpartition does not exist");
@@ -1485,7 +1376,6 @@ static void fbt_handle_oem(char *cmdbuf)
 	 */
 	if (strncmp(cmdbuf, "erase ", 6) == 0) {
 		FBTDBG("oem %s\n", cmdbuf);
-		cmdbuf += 6;
 		fbt_handle_erase(cmdbuf);
 		return;
 	}
@@ -1616,7 +1506,6 @@ static void fbt_rx_process(unsigned char *buffer, int length)
 		/* %fastboot erase <partition_name> */
 		else if (memcmp(cmdbuf, "erase:", 6) == 0) {
 			FBTDBG("erase\n");
-			cmdbuf += 6;
 			fbt_handle_erase(cmdbuf);
 		}
 
@@ -1752,7 +1641,44 @@ static int __def_fbt_key_pressed(void)
 }
 static int __def_fbt_load_ptbl(void)
 {
-	return -1;
+	u64 length;
+	disk_partition_t ptn;
+	int n;
+	int res = -1;
+	block_dev_desc_t *blkdev = priv.dev_desc;
+	unsigned long blksz = blkdev->blksz;
+
+	init_part(blkdev);
+	if (blkdev->part_type == PART_TYPE_UNKNOWN) {
+		printf("unknown partition table on %s\n", FASTBOOT_BLKDEV);
+		return -1;
+	}
+
+	printf("lba size = %lu\n", blksz);
+	printf("lba_start      partition_size          name\n");
+	printf("=========  ======================  ==============\n");
+	for (n = CONFIG_MIN_PARTITION_NUM; n <= CONFIG_MAX_PARTITION_NUM; n++) {
+		if (get_partition_info(blkdev, n, &ptn))
+			continue;	/* No partition <n> */
+		if (!ptn.size || !ptn.blksz || !ptn.name[0])
+			continue;	/* Partition <n> is empty (or sick) */
+		fbt_add_ptn(&ptn);
+
+		length = (u64)blksz * ptn.size;
+		if (length > (1024 * 1024))
+			printf(" %8lu  %12llu(%7lluM)  %s\n",
+						ptn.start,
+						length, length/(1024*1024),
+						ptn.name);
+		else
+			printf(" %8lu  %12llu(%7lluK)  %s\n",
+						ptn.start,
+						length, length/1024,
+						ptn.name);
+		res = 0;
+	}
+	printf("=========  ======================  ==============\n");
+	return res;
 }
 static void __def_fbt_start(void)
 {
@@ -1787,6 +1713,11 @@ static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
 							char * const argv[])
 {
 	int ret;
+
+	if (!priv.dev_desc) {
+		printf("fastboot was not successfully initialized\n");
+		return -1;
+	}
 
 	printf("Starting fastboot protocol\n");
 
@@ -1869,56 +1800,46 @@ static void bootimg_print_image_hdr(struct fastboot_boot_img_hdr *hdr)
 #endif
 }
 
-/* booti [<addr> | mmc0 | mmc1] [ <partition> ] */
+/* booti [ <addr> | <partition> ] */
 static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
-	unsigned addr;
-	char *ptn = "boot";
-	int mmcc = -1;
+	char *boot_source = "boot";
+	block_dev_desc_t *blkdev = priv.dev_desc;
+	disk_partition_t *ptn;
 	struct fastboot_boot_img_hdr *hdr = NULL;
 	bootm_headers_t images;
+	int need_post_ran = 0;
 
-	if (argc < 2)
+	if (argc >= 2)
+		boot_source = argv[1];
+
+	if (!blkdev) {
+		printf("fastboot was not successfully initialized\n");
 		return -1;
+	}
 
-	if (!strcmp(argv[1], "mmc0"))
-		mmcc = 0;
-	else if (!strcmp(argv[1], "mmc1"))
-		mmcc = 1;
-	else
-		addr = simple_strtoul(argv[1], NULL, 16);
-
-	if (argc > 2)
-		ptn = argv[2];
-
-	if (mmcc != -1) {
-#if (CONFIG_MMC)
-		struct fastboot_ptentry *pte;
+	ptn = fastboot_flash_find_ptn(boot_source);
+	if (ptn) {
+		unsigned long blksz;
 		unsigned sector;
 		unsigned blocks;
-		struct mmc *mmc = find_mmc_device(mmcc);
-		if (mmc == NULL) {
-			printf("error finding mmc device %d\n", mmcc);
+
+		if (partition_read_pre(ptn)) {
+			printf("pre-read commands for partition '%s' failed\n",
+								ptn->name);
 			goto fail;
 		}
-		pte = fastboot_flash_find_ptn(ptn);
-		if (!pte) {
-			printf("booti: cannot find '%s' partition\n", ptn);
-			goto fail;
-		}
-		if (mmc_init(mmc)) {
-			printf("mmc%d init failed\n", mmcc);
-			goto fail;
-		}
-		hdr = malloc(mmc->block_dev.blksz);
+		need_post_ran = 1;
+
+		blksz = blkdev->blksz;
+		hdr = malloc(blksz);
 		if (hdr == NULL) {
-			printf("error allocating blksz(%lu) buffer\n",
-			       mmc->block_dev.blksz);
+			printf("error allocating blksz(%lu) buffer\n", blksz);
 			goto fail;
 		}
-		if (mmc->block_dev.block_read(mmcc, pte->start,
+		if (blkdev->block_read(blkdev->dev, ptn->start,
 					      1, (void *) hdr) != 1) {
-			printf("booti: mmc failed to read bootimg header\n");
+			printf("booti: failed to read bootimg header\n");
 			goto fail;
 		}
 		if (memcmp(hdr->magic, FASTBOOT_BOOT_MAGIC,
@@ -1927,29 +1848,42 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 			goto fail;
 		}
 
-		sector = pte->start + (hdr->page_size / 512);
-		blocks = DIV_ROUND_UP(hdr->kernel_size, mmc->block_dev.blksz);
-		if (mmc->block_dev.block_read(mmcc, sector, blocks,
+		sector = ptn->start + (hdr->page_size / blksz);
+		blocks = DIV_ROUND_UP(hdr->kernel_size, blksz);
+		if (blkdev->block_read(blkdev->dev, sector, blocks,
 					      (void *) hdr->kernel_addr) !=
 		    blocks) {
 			printf("booti: failed to read kernel\n");
 			goto fail;
 		}
 
-		sector += ALIGN(hdr->kernel_size, hdr->page_size) / 512;
-		blocks = DIV_ROUND_UP(hdr->ramdisk_size, mmc->block_dev.blksz);
-		if (mmc->block_dev.block_read(mmcc, sector, blocks,
+		sector += ALIGN(hdr->kernel_size, hdr->page_size) / blksz;
+		blocks = DIV_ROUND_UP(hdr->ramdisk_size, blksz);
+		if (blkdev->block_read(blkdev->dev, sector, blocks,
 					      (void *) hdr->ramdisk_addr) !=
 		    blocks) {
 			printf("booti: failed to read ramdisk\n");
 			goto fail;
 		}
-#else
-		printf("booti: mmc support not enabled\n");
-		return -1;
-#endif
+		if (need_post_ran) {
+			need_post_ran = 0;
+			if (partition_read_post(ptn)) {
+				printf("post-read commands for partition '%s' "
+							"failed\n", ptn->name);
+				goto fail;
+			}
+		}
 	} else {
+		unsigned addr;
 		void *kaddr, *raddr;
+		char *ep;
+
+		addr = simple_strtoul(boot_source, &ep, 16);
+		if (ep == boot_source || *ep != '\0') {
+			printf("'%s' does not seem to be a partition nor "
+						"an address\n", boot_source);
+			return cmd_usage(cmdtp);
+		}
 
 		hdr = malloc(sizeof(*hdr));
 		if (hdr == NULL) {
@@ -2041,16 +1975,22 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	return 1;
 
 fail:
+	if (need_post_ran && partition_read_post(ptn))
+		printf("post-read commands for partition '%s' failed\n",
+								ptn->name);
 	/* if booti fails, always start fastboot */
 	free(hdr); /* hdr may be NULL, but that's ok. */
 	return do_fastboot(NULL, 0, 0, NULL);
 }
 
 U_BOOT_CMD(
-	booti,	3,	1,	do_booti,
-	"booti   - boot android bootimg",
-	"<addr>\n    - boot application image\n"
-	"\t'addr' should be the address of boot image which is zImage+ramdisk.img if in memory or the mmc0 or mmc1 to load from 'boot' partition in mmc"
+	booti,	2,	1,	do_booti,
+	"boot android bootimg",
+	"[ <addr> | <partition> ]\n    - boot application image\n"
+	"\t'addr' should be the address of the boot image which is\n"
+	"\tzImage+ramdisk.img if in memory.  'partition' is the name\n"
+	"\tof the partition to boot from.  The default is to boot\n"
+	"\tfrom the 'boot' partition.\n"
 );
 
 static void fbt_request_start_fastboot(void)
@@ -2078,6 +2018,13 @@ void fbt_preboot(void)
 {
 	enum fbt_reboot_type frt;
 
+	priv.dev_desc = get_dev_by_name(FASTBOOT_BLKDEV);
+	if (!priv.dev_desc) {
+		FBTERR("%s: fastboot device %s not found\n",
+						__func__, FASTBOOT_BLKDEV);
+		return;
+	}
+
 	if (board_fbt_key_pressed()) {
 		fbt_request_start_fastboot();
 		return;
@@ -2085,17 +2032,12 @@ void fbt_preboot(void)
 
 	frt = board_fbt_get_reboot_type();
 	if (frt == FASTBOOT_REBOOT_RECOVERY) {
-		char *boot_cmd[3] = {"booti", NULL, "recovery"};
-		char boot_device[64];
+		char *const boot_cmd[] = {"booti", "recovery"};
 
 		printf("\n%s: starting recovery img because of reboot flag\n",
 		       __func__);
 
-		/* pass: booti mmci<N> recovery */
-		sprintf(boot_device, "mmc%d", FASTBOOT_MMC_DEVICE_ID);
-		boot_cmd[1] = boot_device;
-
-		do_booti(NULL, 0, 3, boot_cmd);
+		do_booti(NULL, 0, ARRAY_SIZE(boot_cmd), boot_cmd);
 
 		/* returns if recovery.img is bad
 		 * Default to normal boot

@@ -28,7 +28,6 @@
 #include <common.h>
 #include <malloc.h>
 #include <fastboot.h>
-#include <mmc.h>
 #include <asm/io.h>
 
 #if !defined(CONFIG_FASTBOOT_NO_FORMAT)
@@ -199,27 +198,13 @@ static int do_format(void)
 	block_dev_desc_t *dev_desc;
 	unsigned long blocks_to_write, result;
 
-	/*
-	 * Effectively do an "mmc rescan" to handle the case of a card
-	 * being inserted after the system booted.
-	 */
-	struct mmc *mmc = find_mmc_device(FASTBOOT_MMC_DEVICE_ID);
-	if (mmc == NULL) {
-		printf("error finding mmc device %d\n", FASTBOOT_MMC_DEVICE_ID);
-		return -1;
-	}
-	if (mmc_init(mmc)) {
-		printf("error initializing mmc device %d\n", FASTBOOT_MMC_DEVICE_ID);
-		return -1;
-	}
-
-	dev_desc = mmc_get_dev(FASTBOOT_MMC_DEVICE_ID);
+	dev_desc = get_dev_by_name(FASTBOOT_BLKDEV);
 	if (!dev_desc) {
-		printf("error getting mmc device %d\n", FASTBOOT_MMC_DEVICE_ID);
+		printf("error getting device %s\n", FASTBOOT_BLKDEV);
 		return -1;
 	}
 	if (!dev_desc->lba) {
-		printf("mmc device %d has no space\n", FASTBOOT_MMC_DEVICE_ID);
+		printf("device %s has no space\n", FASTBOOT_BLKDEV);
 		return -1;
 	}
 
@@ -292,79 +277,3 @@ enum fbt_reboot_type board_fbt_get_reboot_type(void)
 	writel(0, (void*)FASTBOOT_REBOOT_PARAMETER_ADDR);
 	return frt;
 }
-
-
-
-static void import_efi_partition(struct efi_entry *entry)
-{
-	struct fastboot_ptentry e;
-	int n;
-	if (memcmp(entry->type_uuid, partition_type, sizeof(entry->type_uuid)))
-		return;
-	for (n = 0; n < (sizeof(e.name)-1); n++)
-		e.name[n] = entry->name[n];
-	e.name[n] = 0;
-	e.start = entry->first_lba;
-	e.length = (entry->last_lba - entry->first_lba + 1) * 512;
-	e.flags = 0;
-
-	if (!strcmp(e.name,"environment"))
-		e.flags |= FASTBOOT_PTENTRY_FLAGS_WRITE_ENV;
-	if (!strcmp(e.name,"device_info"))
-		e.flags |= FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO;
-	fbt_add_ptn(&e);
-
-	if (e.length > 0x100000)
-		printf(" %8llu  %12llu(%7lluM)  %s\n", e.start, e.length, e.length/0x100000, e.name);
-	else
-		printf(" %8llu  %12llu(%7lluK)  %s\n", e.start, e.length, e.length/0x400, e.name);
-}
-
-int board_fbt_load_ptbl(void)
-{
-	static struct efi_entry *entry;
-	void *data;
-	int n,m;
-	int res = -1;
-	struct mmc *mmc = find_mmc_device(FASTBOOT_MMC_DEVICE_ID);
-	if (mmc == NULL) {
-		printf("error finding mmc device %d\n", FASTBOOT_MMC_DEVICE_ID);
-		return -1;
-	}
-	mmc_init(mmc);
-	data = malloc(mmc->block_dev.blksz);
-	if (data == NULL) {
-		printf("error allocating blksz(%lu) buffer\n", mmc->block_dev.blksz);
-		return -1;
-	}
-	res = mmc->block_dev.block_read(FASTBOOT_MMC_DEVICE_ID, 1, 1, data);
-	if (res != 1) {
-		printf("error reading partition table\n");
-		res = -1;
-		goto out;
-	}
-	if (memcmp(data, "EFI PART", 8)) {
-		printf("efi partition table not found\n");
-		goto out;
-	}
-	entry = data;
-	printf("lba size = %lu\n", mmc->block_dev.blksz);
-	printf("lba_start      partition_size          name\n");
-	printf("=========  ======================  ==============\n");
-	for (n = 0; n < (128/4); n++) {
-		res = mmc->block_dev.block_read(FASTBOOT_MMC_DEVICE_ID, n+1, 1, data);
-		if (res != 1) {
-			printf("partition read failed\n");
-			res = -1;
-			goto out;
-		}
-		for (m = 0; m < 4; m ++)
-			import_efi_partition(entry + m);
-	}
-	printf("=========  ======================  ==============\n");
-	res = 0;
- out:
-	free(data);
-	return res;
-}
-
