@@ -1782,8 +1782,8 @@ out:
 	return ret;
 }
 
-U_BOOT_CMD(fastboot, 2,	1, do_fastboot,
-	"fastboot- use USB Fastboot protocol", NULL);
+U_BOOT_CMD(fastboot, 1,	1, do_fastboot,
+	"use USB Fastboot protocol", NULL);
 
 /* Section for Android bootimage format support
  * Refer:
