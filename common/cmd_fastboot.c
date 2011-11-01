@@ -810,14 +810,14 @@ static int _unsparse(unsigned char *source,
 	unsigned long blksz = priv.dev_desc->blksz;
 	u64 section_size = (u64)num_blks * blksz;
 
-	if (((u64)header->total_blks * header->blk_sz) > section_size) {
-		printf("sparse: section size %llu MB limit: exceeded\n",
-				section_size/(1024*1024));
+	if (header->magic != SPARSE_HEADER_MAGIC) {
+		printf("sparse: bad magic\n");
 		return 1;
 	}
 
-	if (header->magic != SPARSE_HEADER_MAGIC) {
-		printf("sparse: bad magic\n");
+	if (((u64)header->total_blks * header->blk_sz) > section_size) {
+		printf("sparse: section size %llu MB limit: exceeded\n",
+				section_size/(1024*1024));
 		return 1;
 	}
 
