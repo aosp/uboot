@@ -1017,7 +1017,7 @@ static void fbt_handle_flash(char *cmdbuf)
 		}
 
 #if defined(CONFIG_CMD_SAVEENV)
-		if (do_env_save(NULL, 0, 0, NULL)) {
+		if (saveenv()) {
 			printf("Writing '%s' FAILED!\n", ptn->name);
 			sprintf(priv.response, "FAIL: Write partition");
 			return;
