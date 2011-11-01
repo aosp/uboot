@@ -174,36 +174,6 @@ struct cmd_fastboot_interface {
 	struct device_info dev_info[FASTBOOT_MAX_NUM_DEVICE_INFO];
 };
 
-/* Android-style flash naming */
-typedef struct fastboot_ptentry fastboot_ptentry;
-
-/* flash partitions are defined in terms of blocks
-** (flash erase units)
-*/
-struct fastboot_ptentry {
-
-	/* The logical name for this partition, null terminated */
-	char name[16];
-	/* The start wrt the nand part, must be multiple of nand block size */
-	u64 start;
-	/* The length of the partition, must be multiple of nand block size */
-	u64 length;
-	/* Controls the details of how operations are done on the partition
-	   See the FASTBOOT_PTENTRY_FLAGS_*'s defined below */
-	unsigned int flags;
-};
-
-/* Write the file as a series of variable/value pairs
-   using the setenv and saveenv commands */
-#define FASTBOOT_PTENTRY_FLAGS_WRITE_ENV              0x00000400
-
-/* Write the partition as a series of variable/value pairs.
-   It is also a read only partition (if already written to
-   before, do not allow it to be erased or written to again). */
-#define FASTBOOT_PTENTRY_FLAGS_DEVICE_INFO            0x00002000
-
-
-
 /* Status values */
 #define FASTBOOT_OK			0
 #define FASTBOOT_ERROR			-1
@@ -278,7 +248,7 @@ enum fbt_reboot_type {
 };
 extern void fbt_preboot(void);
 extern void fbt_reset_ptn(void);
-extern void fbt_add_ptn(fastboot_ptentry *ptn);
+extern void fbt_add_ptn(disk_partition_t *ptn);
 extern int fbt_send_info(const char *info);
 
 int board_fbt_oem(const char *cmdbuf);
