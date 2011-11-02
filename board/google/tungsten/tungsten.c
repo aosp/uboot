@@ -256,6 +256,10 @@ struct fbt_partition fbt_partitions[] = {
 				 * bootloader parses this at boot and sends
 				 * the contents to the kernel via cmdline args.
 				 */
+	{ "misc", 512 }, 	/* misc partition used by recover for storing
+				 * parameters in the case of a power failure
+				 * during recovery operation.
+				 */
 	{ "recovery", 8*1024 },
 	{ "boot", 8*1024 },
 	{ "system", 1024*1024 },
