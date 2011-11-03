@@ -1,4 +1,6 @@
 /*
+ * Copyright (C) 2011 Google, Inc.
+ *
  * Copyright (C) 2010 Texas Instruments
  *
  * Author : Mohammed Afzal M A <afzal@ti.com>
