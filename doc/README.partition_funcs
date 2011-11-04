@@ -25,6 +25,21 @@ int partition_write_blks(block_dev_desc_t *dev, disk_partition_t *partition,
 int partition_write_bytes(block_dev_desc_t *dev, disk_partition_t *partition,
 				loff_t *bytecnt, const void *buffer);
 
+An important note is that all of these functions round up the sizes that are
+passed to them to the next logical boundary.
+
+    Example 1: If you ask for a single byte to be read from a partition,
+    an entire block of data is going to be placed in the buffer.  The
+    caller must ensure that enough space is available in the buffer to
+    prevent overflow.
+
+    Example 2: For a NAND flash the size of a block for the partition
+    functions is equivalent to the size of the NAND's "write page".  However,
+    the smallest unit that can be erased on a NAND is an "erase block" which
+    is made up of multiple "write pages".  This means that if you use the
+    partition_erase_* functions to erase a single byte or a single block on a
+    NAND, it will round up to erasing an entire "erase block" which will be
+    multiple "write pages".
 
 PRE_ AND POST_ ENVIRONMENT VARIABLES
 ====================================
