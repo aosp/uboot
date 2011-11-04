@@ -20,7 +20,7 @@ fi
 
 FILES_TO_ARCHIVE="u-boot.bin"
 if [ "$BUILD_CONFIG" = "omap4_tungsten_config" ]; then
-FILES_TO_ARCHIVE="$FILES_TO_ARCHIVE MLO spl/u-boot-spl.bin"
+FILES_TO_ARCHIVE="u-boot.img MLO spl/u-boot-spl.bin"
 fi
 
 export ARCH=arm

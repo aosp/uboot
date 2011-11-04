@@ -271,17 +271,18 @@ struct fbt_partition fbt_partitions[] = {
 				 * bootloader parses this at boot and sends
 				 * the contents to the kernel via cmdline args.
 				 */
+	{ "bootloader2", 512 }, /* u-boot, alternate copy */
 	{ "misc", 512 }, 	/* misc partition used by recover for storing
 				 * parameters in the case of a power failure
 				 * during recovery operation.
 				 */
 	{ "recovery", 8*1024 },
 	{ "boot", 8*1024 },
+	{ "efs", 8*1024 },      /* for factory programmed encryption keys,
+				 * minimum size for a ext4 fs is about 8MB
+				 */
 	{ "system", 1024*1024 },
 	{ "cache", 512*1024 },
-	{ "efs", 8*1024 }, /* TBD: possibly for encryption keys,
-			    * minimum size for a ext4 fs is about 8MB
-			    */
 	{ "userdata", 0},
 	{ 0, 0 },
 };

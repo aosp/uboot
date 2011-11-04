@@ -323,8 +323,14 @@
 #define CONFIG_SPL_BSS_START_ADDR	0x80000000
 #define CONFIG_SPL_BSS_MAX_SIZE		0x80000		/* 512 KB */
 
-#define CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR	0x400 /* address 0x80000 */
-#define CONFIG_SYS_U_BOOT_MAX_SIZE_SECTORS	0x200 /* 256 KB */
+#define CONFIG_SPL_VERIFY_IMAGE
+
+/* These values need to match the partition table in tungsten.c */
+/* emmc offset: 0x80000 */
+#define CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR	                0x400
+/* emmc offset: 0x180000 */
+#define CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_ALTERNATE_SECTOR	0xc00
+#define CONFIG_SYS_U_BOOT_MAX_SIZE_SECTORS	0x400 /* 512 KB */
 
 #define CONFIG_SPL_LIBCOMMON_SUPPORT
 #define CONFIG_SPL_LIBDISK_SUPPORT
