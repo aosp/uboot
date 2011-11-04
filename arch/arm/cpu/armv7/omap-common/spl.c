@@ -107,19 +107,66 @@ static void parse_image_header(const struct image_header *header)
 	}
 }
 
+#ifdef CONFIG_SPL_VERIFY_IMAGE
+static int verify_image(unsigned char *ptr, int image_size)
+{
+	uint32_t len;
+	const unsigned char *data;
+	uint32_t crc;
+	image_header_t header;
+	image_header_t *hdr = &header;
+
+	/*
+	 * create copy of header so that we can blank out the
+	 * crc field for checking - this can't be done
+	 * on the PROT_READ mapped data.
+	 */
+	if (image_size < sizeof(image_header_t)) {
+		printf("%s: ERROR: image size too small\n", __func__);
+		return -1;
+	}
+	memcpy (hdr, ptr, sizeof(image_header_t));
+
+	data = (const unsigned char *)hdr;
+	len  = sizeof(image_header_t);
+
+	crc = be32_to_cpu(hdr->ih_hcrc);
+	hdr->ih_hcrc = cpu_to_be32(0);	/* clear for re-calculation */
+
+	if (crc32 (0, data, len) != crc) {
+		printf("%s: ERROR: header crc check failure\n", __func__);
+		return -1;
+	}
+
+	data = (const unsigned char *)ptr + sizeof(image_header_t);
+	len  = image_size - sizeof(image_header_t) ;
+
+	crc = be32_to_cpu(hdr->ih_dcrc);
+	if (crc32 (0, data, len) != crc) {
+		printf ("%s: ERROR: image data crc check failure\n", __func__);
+		return -1;
+	}
+	return 0;
+}
+#endif
+
 static void mmc_load_image_raw(struct mmc *mmc)
 {
 	u32 image_size_sectors, err;
 	const struct image_header *header;
+	lbaint_t start = CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR;
+#ifdef CONFIG_SPL_VERIFY_IMAGE
+	int do_retry = 1;
+#endif
 
 	header = (struct image_header *)(CONFIG_SYS_TEXT_BASE -
 						sizeof(struct image_header));
 
+#ifdef CONFIG_SPL_VERIFY_IMAGE
+retry:
+#endif
 	/* read image header to find the image size & load address */
-	err = mmc->block_dev.block_read(0,
-			CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR, 1,
-			(void *)header);
-
+	err = mmc->block_dev.block_read(0, start, 1, (void *)header);
 	if (err <= 0)
 		goto end;
 
@@ -130,9 +177,27 @@ static void mmc_load_image_raw(struct mmc *mmc)
 				MMCSD_SECTOR_SIZE;
 
 	/* Read the header too to avoid extra memcpy */
-	err = mmc->block_dev.block_read(0,
-			CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_SECTOR,
-			image_size_sectors, (void *)image_load_addr);
+	printf("spl: reading image: %u sector(s) starting at 0x%lx\n",
+	       image_size_sectors, start);
+	err = mmc->block_dev.block_read(0, start, image_size_sectors,
+					(void *)image_load_addr);
+
+#ifdef CONFIG_SPL_VERIFY_IMAGE
+	if (verify_image((void*)image_load_addr, image_size)) {
+#ifdef CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_ALTERNATE_SECTOR
+		if (do_retry) {
+			printf("spl: image verification failed,"
+			       " trying alternate copy\n");
+			start = CONFIG_SYS_MMCSD_RAW_MODE_U_BOOT_ALTERNATE_SECTOR;
+			do_retry = 0;
+			goto retry;
+		}
+#endif
+		printf("spl: image verification failed\n");
+		hang();
+	}
+	printf("spl: image verification succeeded\n");
+#endif
 
 end:
 	if (err <= 0) {
@@ -250,7 +315,7 @@ void board_init_r(gd_t *id, ulong dummy)
 		jump_to_image_no_args();
 		break;
 	default:
-		puts("Unsupported OS image.. Jumping nevertheless..\n");
+		printf("Jumping to '%s' image..\n", image_name);
 		jump_to_image_no_args();
 	}
 }

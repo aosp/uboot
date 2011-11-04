@@ -42,6 +42,17 @@ endif
 SRCS	:= $(SOBJS:.o=.S) $(COBJS:.o=.c)
 OBJS	:= $(addprefix $(obj),$(SOBJS) $(COBJS))
 
+ifdef CONFIG_SPL_BUILD
+EXT_COBJ_FILES-$(CONFIG_SPL_VERIFY_IMAGE) += lib/crc32.o
+SRCS	+= $(addprefix $(SRCTREE)/,$(EXT_COBJ_FILES-y:.o=.c))
+OBJS	+= $(addprefix $(obj),$(notdir $(EXT_COBJ_FILES-y)))
+
+# Rule to build generic library C files
+$(obj)%.o: $(SRCTREE)/lib/%.c
+	$(CC) -g $(CFLAGS) -c -o $@ $<
+
+endif
+
 all:	$(obj).depend $(LIB)
 
 $(LIB):	$(OBJS)
