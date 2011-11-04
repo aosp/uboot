@@ -145,7 +145,7 @@ void dev_print(block_dev_desc_t *dev_desc);
 #define CONFIG_MIN_PARTITION_NUM 0
 #endif
 #ifndef CONFIG_MAX_PARTITION_NUM
-#define CONFIG_MAX_PARTITION_NUM 10
+#define CONFIG_MAX_PARTITION_NUM 16
 #endif
 #else
 static inline block_dev_desc_t* get_dev(char* ifname, int dev) { return NULL; }
