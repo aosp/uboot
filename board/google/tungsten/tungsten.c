@@ -257,11 +257,11 @@ struct fbt_partition {
  */
 struct fbt_partition fbt_partitions[] = {
 	{ "--ptable",  17},     /* partition table in first 34 sectors */
-	{ "--environment", 111 },  /* partition used to u-boot environment,
-				    * which is also where we store
-				    * oem lock/unlock state.  size
-				    * must match CONFIG_ENV_SIZE.
-				    */
+	{ "environment", 111 },  /* partition used to u-boot environment,
+				  * which is also where we store
+				  * oem lock/unlock state.  size
+				  * must match CONFIG_ENV_SIZE.
+				  */
 	{ "xloader", 384 },	/* must start at 128KB offset into eMMC
 				 * for ROM bootloader to find it.
 				 * pad out to fill whole erase group */
@@ -272,7 +272,7 @@ struct fbt_partition fbt_partitions[] = {
 				 * the contents to the kernel via cmdline args.
 				 */
 	{ "bootloader2", 512 }, /* u-boot, alternate copy */
-	{ "misc", 512 }, 	/* misc partition used by recover for storing
+	{ "misc", 512 }, 	/* misc partition used by recovery for storing
 				 * parameters in the case of a power failure
 				 * during recovery operation.
 				 */

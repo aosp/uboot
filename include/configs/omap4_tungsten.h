@@ -74,11 +74,6 @@
 #define CONFIG_SYS_ENV_BLKDEV		"mmc0"
 #define CONFIG_ENV_SIZE_KB		(111)
 #define CONFIG_ENV_SIZE			((CONFIG_ENV_SIZE_KB) << 10)
-/* offset into mmc for the environment.  we
- * put it after the partition table, which is 34
- * sectors (17KB) in size.
- */
-#define CONFIG_ENV_OFFSET		(17 * 1024)
 #define CONFIG_MALLOC_SIZE_KB		(128)
 #define CONFIG_SYS_MALLOC_LEN		(CONFIG_ENV_SIZE + ((CONFIG_MALLOC_SIZE_KB) << 10))
 /* Vector Base */
