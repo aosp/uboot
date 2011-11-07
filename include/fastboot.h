@@ -242,9 +242,10 @@ typedef struct chunk_header {
 
 #ifdef	CONFIG_CMD_FASTBOOT
 enum fbt_reboot_type {
-  FASTBOOT_REBOOT_NORMAL,
-  FASTBOOT_REBOOT_BOOTLOADER,
-  FASTBOOT_REBOOT_RECOVERY,
+	FASTBOOT_REBOOT_UNKNOWN, /* typically for a cold boot */
+	FASTBOOT_REBOOT_NORMAL,
+	FASTBOOT_REBOOT_BOOTLOADER,
+	FASTBOOT_REBOOT_RECOVERY,
 };
 extern void fbt_preboot(void);
 extern void fbt_reset_ptn(void);
