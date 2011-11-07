@@ -67,6 +67,7 @@ DECLARE_GLOBAL_DATA_PTR;
 #define CONFIG_FASTBOOT_VERSION_BOOTLOADER FASTBOOT_VERSION
 #endif
 
+#define FASTBOOT_RUN_RECOVERY_ENV_NAME "fastboot_run_recovery"
 #define FASTBOOT_UNLOCKED_ENV_NAME "fastboot_unlocked"
 #define FASTBOOT_UNLOCK_TIMEOUT_SECS 5
 
@@ -2008,11 +2009,48 @@ U_BOOT_CMD(
 	"\tfrom the 'boot' partition.\n"
 );
 
+static void fbt_clear_recovery_flag(void)
+{
+	setenv(FASTBOOT_RUN_RECOVERY_ENV_NAME, NULL);
+#if defined(CONFIG_CMD_SAVEENV)
+	saveenv();
+#endif
+}
+
+static void fbt_run_recovery(int do_saveenv)
+{
+	/* to make recovery (which processes OTAs) more failsafe,
+	 * we save the fact that we were asked to boot into
+	 * recovery.  if power is pulled and then restored, we
+	 * will use that info to rerun recovery again and try
+	 * to complete the OTA installation.
+	 */
+	if (do_saveenv) {
+		setenv(FASTBOOT_RUN_RECOVERY_ENV_NAME, "1");
+#ifdef CONFIG_CMD_SAVEENV
+		saveenv();
+#endif
+	}
+
+	char *const boot_recovery_cmd[] = {"booti", "recovery"};
+	do_booti(NULL, 0, ARRAY_SIZE(boot_recovery_cmd), boot_recovery_cmd);
+
+	/* returns if recovery.img is bad */
+	printf("\nfastboot: Error: Invalid recovery img\n");
+
+	/* Always clear so we don't wind up rebooting again into
+	 * bad recovery img.
+	 */
+	fbt_clear_recovery_flag();
+}
+
 static void fbt_request_start_fastboot(void)
 {
 	char buf[512];
 	char *old_preboot = getenv("preboot");
 	printf("old preboot env = %s\n", old_preboot);
+
+	fbt_clear_recovery_flag();
 
 	if (old_preboot) {
 		snprintf(buf, sizeof(buf),
@@ -2033,6 +2071,7 @@ void fbt_preboot(void)
 {
 	enum fbt_reboot_type frt;
 
+
 	priv.dev_desc = get_dev_by_name(FASTBOOT_BLKDEV);
 	if (!priv.dev_desc) {
 		FBTERR("%s: fastboot device %s not found\n",
@@ -2047,19 +2086,10 @@ void fbt_preboot(void)
 
 	frt = board_fbt_get_reboot_type();
 	if (frt == FASTBOOT_REBOOT_RECOVERY) {
-		char *const boot_cmd[] = {"booti", "recovery"};
-
 		printf("\n%s: starting recovery img because of reboot flag\n",
 		       __func__);
 
-		do_booti(NULL, 0, ARRAY_SIZE(boot_cmd), boot_cmd);
-
-		/* returns if recovery.img is bad
-		 * Default to normal boot
-		 */
-
-		printf("\nfastboot: Error: Invalid recovery img\n");
-		return;
+		return fbt_run_recovery(1);
 	} else if (frt == FASTBOOT_REBOOT_BOOTLOADER) {
 
 		/* Case: %fastboot reboot-bootloader
@@ -2069,9 +2099,26 @@ void fbt_preboot(void)
 		printf("\n%s: starting fastboot because of reboot flag\n",
 		       __func__);
 		fbt_request_start_fastboot();
-	} else
+	} else if (frt == FASTBOOT_REBOOT_NORMAL) {
+		/* explicit request for a regular reboot */
+		printf("\n%s: request for a normal boot\n",
+		       __func__);
+		fbt_clear_recovery_flag();
+	} else {
+		/* unkown reboot cause (typically because of a cold boot).
+		 * check if we had flag set to boot recovery and it
+		 * was never cleared properly (i.e. recovery didn't finish).
+		 * if so, jump to recovery again.
+		 */
+		char *run_recovery = getenv(FASTBOOT_RUN_RECOVERY_ENV_NAME);
+		if (run_recovery) {
+			printf("\n%s: starting recovery because of "
+			       "saved reboot flag\n", __func__);
+			return fbt_run_recovery(0);
+		}
 		printf("\n%s: no special reboot flags, doing normal boot\n",
 		       __func__);
+	}
 }
 
 int fbt_send_info(const char *info)
