@@ -324,7 +324,8 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
 }
 
 #ifdef CONFIG_MFG
-static void set_default_mac_env_vars() {
+static void set_default_mac_env_vars(void)
+{
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(mac_defaults); ++i) {

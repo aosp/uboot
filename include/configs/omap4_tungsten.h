@@ -230,6 +230,9 @@
 #endif
 
 /* overloaded in board/google/tungsten/tungsten.c */
+#ifndef __ASSEMBLY__
+int name_to_gpio(const char *name);
+#endif
 #define name_to_gpio(name) name_to_gpio(name)
 
 #define CONFIG_ENV_OVERWRITE
