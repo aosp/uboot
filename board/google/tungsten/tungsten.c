@@ -106,6 +106,11 @@ static void init_hw_rev(void)
 	for (i = 0; i < ARRAY_SIZE(hwrev_gpios); i++)
 		steelhead_hw_rev |= gpio_get_value(hwrev_gpios[i]) << i;
 
+	/* put board_id pins into safe mode to save power */
+	do_set_mux(CONTROL_PADCONF_CORE, core_padconf_array_disable_board_id,
+		   sizeof(core_padconf_array_disable_board_id) /
+		   sizeof(struct pad_conf_entry));
+
 	printf("Steelhead HW revision: %02x (%s)\n", steelhead_hw_rev,
 		steelhead_hw_rev_name());
 
@@ -308,6 +313,12 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
 				mac_defaults[i].name,
 				mac);
 	}
+
+	/* Add board_id */
+	snprintf(args + used,
+		 buf_sz - used,
+		 " board_steelhead.steelhead_hw_rev=%d",
+		 steelhead_hw_rev);
 
 	args[buf_sz-1] = 0;
 }
