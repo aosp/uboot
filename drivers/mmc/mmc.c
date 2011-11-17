@@ -1367,7 +1367,7 @@ static int do_samsung_smart(cmd_tbl_t *cmdtp, int flag,
 {
 	struct mmc *mmc;
 	struct mmc_cmd cmd;
-	int i, read_ret;
+	int i, ret, read_ret;
 	char *ep;
 	uint32_t val, data[512 / 4];
 
@@ -1391,15 +1391,15 @@ static int do_samsung_smart(cmd_tbl_t *cmdtp, int flag,
 
 	/* Enter Smart Report Mode */
 	cmd.cmdarg = 0xEFAC62EC;
-	i = mmc_send_cmd(mmc, &cmd, NULL);
-	if (i) {
-		printf("Error 1:%d entering Smart Report mode.\n", i);
+	ret = mmc_send_cmd(mmc, &cmd, NULL);
+	if (ret) {
+		printf("Error 1:%d entering Smart Report mode.\n", ret);
 		return 1;
 	}
 	cmd.cmdarg = 0x0000CCEE;
-	i = mmc_send_cmd(mmc, &cmd, NULL);
-	if (i) {
-		printf("Error 2:%d entering Smart Report mode.\n", i);
+	ret = mmc_send_cmd(mmc, &cmd, NULL);
+	if (ret) {
+		printf("Error 2:%d entering Smart Report mode.\n", ret);
 		return 1;
 	}
 
@@ -1408,15 +1408,16 @@ static int do_samsung_smart(cmd_tbl_t *cmdtp, int flag,
 
 	/* Exit Smart Report Mode */
 	cmd.cmdarg = 0xEFAC62EC;
-	i = mmc_send_cmd(mmc, &cmd, NULL);
-	if (i) {
-		printf("Error 1:%d entering Smart Report mode.\n", i);
-		return 1;
+	ret = mmc_send_cmd(mmc, &cmd, NULL);
+	if (ret)
+		printf("Error 1:%d exiting Smart Report mode.\n", ret);
+	else {
+		cmd.cmdarg = 0x00DECCEE;
+		ret = mmc_send_cmd(mmc, &cmd, NULL);
+		if (ret)
+			printf("Error 2:%d exiting Smart Report mode.\n", ret);
 	}
-	cmd.cmdarg = 0x00DECCEE;
-	i = mmc_send_cmd(mmc, &cmd, NULL);
 
-	printf("rets = %d, %d, %d, %d, %d\n", ret, ret2, read_ret, ret3, ret4);
 	if (read_ret != 1) {
 		printf("Smart Report could not be read.\n");
 		return 1;
