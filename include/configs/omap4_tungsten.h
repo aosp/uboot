@@ -187,6 +187,7 @@
 /* Enabled commands */
 #define CONFIG_CMD_I2C		/* I2C serial bus support	*/
 #define CONFIG_CMD_MMC		/* MMC support                  */
+#define CONFIG_MMC_SAMSUNG_SMART/* Command to dump Smart Report */
 #define CONFIG_CMD_ENV		/* Environment support          */
 
 /* Disabled commands */
