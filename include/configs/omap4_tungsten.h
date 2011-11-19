@@ -224,6 +224,8 @@
  */
 #define CONFIG_BOOTCOMMAND_FORCE_OVERRIDE "fastboot"
 #define CONFIG_CMD_GPIO
+#define CONFIG_MMC_SAMSUNG_SMART
+#define CONFIG_CMD_BLK
 #define CONFIG_SYS_LONGHELP 1
 #else
 #undef CONFIG_SYS_LONGHELP	/* undef to save memory */
