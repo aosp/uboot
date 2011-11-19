@@ -949,6 +949,7 @@ int mmc_startup(struct mmc *mmc)
 	struct mmc_cmd cmd;
 	char ext_csd[512];
 	int timeout = 1000;
+	uint cid_mid, cid_cbx, cid_oid, cid_prv, cid_psn, cid_mdtm, cid_mdty;
 
 #ifdef CONFIG_MMC_SPI_CRC_ON
 	if (mmc_host_is_spi(mmc)) { /* enable CRC check for spi */
@@ -1202,13 +1203,26 @@ int mmc_startup(struct mmc *mmc)
 	mmc->block_dev.type = 0;
 	mmc->block_dev.blksz = mmc->read_bl_len;
 	mmc->block_dev.lba = lldiv(mmc->capacity, mmc->read_bl_len);
-	sprintf(mmc->block_dev.vendor, "Man %06x Snr %08x", mmc->cid[0] >> 8,
-			(mmc->cid[2] << 8) | (mmc->cid[3] >> 24));
-	sprintf(mmc->block_dev.product, "%c%c%c%c%c", mmc->cid[0] & 0xff,
-			(mmc->cid[1] >> 24), (mmc->cid[1] >> 16) & 0xff,
-			(mmc->cid[1] >> 8) & 0xff, mmc->cid[1] & 0xff);
-	sprintf(mmc->block_dev.revision, "%d.%d", mmc->cid[2] >> 28,
-			(mmc->cid[2] >> 24) & 0xf);
+	cid_mid = mmc->cid[0] >> 24;
+	cid_cbx = mmc->cid[0] >> 16 & 3;
+	cid_oid = mmc->cid[0] >> 8 & 0xFF;
+	mmc->block_dev.product[0] = mmc->cid[0] & 0xFF;
+	mmc->block_dev.product[1] = mmc->cid[1] >> 24;
+	mmc->block_dev.product[2] = mmc->cid[1] >> 16 & 0xFF;
+	mmc->block_dev.product[3] = mmc->cid[1] >> 8 & 0xFF;
+	mmc->block_dev.product[4] = mmc->cid[1] & 0xFF;
+	mmc->block_dev.product[5] = mmc->cid[2] >> 24;
+	mmc->block_dev.product[6] = '\0';
+	cid_prv = mmc->cid[2] >> 16 & 0xFF;
+	cid_psn = mmc->cid[2] << 16 | mmc->cid[3] >> 16;
+	cid_mdtm = mmc->cid[3] >> 12 & 0xF;
+	cid_mdty = 1997 + (mmc->cid[3] >> 8 & 0xF);
+	snprintf(mmc->block_dev.vendor, sizeof(mmc->block_dev.vendor),
+				"ID=%02x:%02x CBX=%d PSN=%08x MDT=%d/%d",
+				cid_mid, cid_oid, cid_cbx,
+				cid_psn, cid_mdtm, cid_mdty);
+	mmc->block_dev.vendor[sizeof(mmc->block_dev.vendor) - 1] = '\0';
+	sprintf(mmc->block_dev.revision, "%d.%d", cid_prv >> 4, cid_prv & 0xF);
 	init_part(&mmc->block_dev);
 
 	return 0;
