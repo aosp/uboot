@@ -1361,7 +1361,7 @@ int mmc_initialize(bd_t *bis)
 	return 0;
 }
 
-#ifdef CONFIG_MMC_SAMSUNG_SMART
+#if defined(CONFIG_MMC_SAMSUNG_SMART) && !defined(CONFIG_SPL_BUILD)
 static int do_samsung_smart(cmd_tbl_t *cmdtp, int flag,
 						int argc, char * const argv[])
 {
@@ -1472,4 +1472,4 @@ U_BOOT_CMD(samsung_smart, 2,	1, do_samsung_smart,
 	"list the Samsung e-MMC Smart Report data",
 	""
 );
-#endif /* CONFIG_MMC_SAMSUNG_SMART */
+#endif /* CONFIG_MMC_SAMSUNG_SMART && !CONFIG_SPL_BUILD */
