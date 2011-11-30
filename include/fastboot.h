@@ -246,6 +246,7 @@ enum fbt_reboot_type {
 	FASTBOOT_REBOOT_NORMAL,
 	FASTBOOT_REBOOT_BOOTLOADER,
 	FASTBOOT_REBOOT_RECOVERY,
+	FASTBOOT_REBOOT_NONE,
 };
 extern void fbt_preboot(void);
 extern void fbt_reset_ptn(void);
@@ -257,6 +258,7 @@ void board_fbt_set_reboot_type(enum fbt_reboot_type frt);
 /* gets the reboot type, automatically clearing it for next boot */
 enum fbt_reboot_type board_fbt_get_reboot_type(void);
 int board_fbt_key_pressed(void);
+enum fbt_reboot_type board_fbt_key_command(void);
 int board_fbt_load_ptbl(void);
 void board_fbt_start(void);
 void board_fbt_end(void);

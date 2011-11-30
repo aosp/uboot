@@ -1637,6 +1637,41 @@ static void fbt_handle_response(void)
 	}
 }
 
+static void fbt_clear_recovery_flag(void)
+{
+	setenv(FASTBOOT_RUN_RECOVERY_ENV_NAME, NULL);
+#if defined(CONFIG_CMD_SAVEENV)
+	saveenv();
+#endif
+}
+
+static void fbt_run_recovery(int do_saveenv)
+{
+	/* to make recovery (which processes OTAs) more failsafe,
+	 * we save the fact that we were asked to boot into
+	 * recovery.  if power is pulled and then restored, we
+	 * will use that info to rerun recovery again and try
+	 * to complete the OTA installation.
+	 */
+	if (do_saveenv) {
+		setenv(FASTBOOT_RUN_RECOVERY_ENV_NAME, "1");
+#ifdef CONFIG_CMD_SAVEENV
+		saveenv();
+#endif
+	}
+
+	char *const boot_recovery_cmd[] = {"booti", "recovery"};
+	do_booti(NULL, 0, ARRAY_SIZE(boot_recovery_cmd), boot_recovery_cmd);
+
+	/* returns if recovery.img is bad */
+	printf("\nfastboot: Error: Invalid recovery img\n");
+
+	/* Always clear so we don't wind up rebooting again into
+	 * bad recovery img.
+	 */
+	fbt_clear_recovery_flag();
+}
+
 /*
  * default board-specific hooks and defaults
  */
@@ -1654,6 +1689,10 @@ static enum fbt_reboot_type __def_fbt_get_reboot_type(void)
 static int __def_fbt_key_pressed(void)
 {
 	return 0;
+}
+static enum fbt_reboot_type __def_fbt_key_command(void)
+{
+	return FASTBOOT_REBOOT_NONE;
 }
 static int __def_fbt_load_ptbl(void)
 {
@@ -1715,6 +1754,8 @@ enum fbt_reboot_type board_fbt_get_reboot_type(void)
 	__attribute__((weak, alias("__def_fbt_get_reboot_type")));
 int board_fbt_key_pressed(void)
 	__attribute__((weak, alias("__def_fbt_key_pressed")));
+enum fbt_reboot_type board_fbt_key_command(void)
+	__attribute__((weak, alias("__def_fbt_key_command")));
 int board_fbt_load_ptbl(void)
 	__attribute__((weak, alias("__def_fbt_load_ptbl")));
 void board_fbt_start(void)
@@ -1774,6 +1815,24 @@ static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
 		priv.exit |= ctrlc();
 		if (priv.exit) {
 			FBTINFO("fastboot end\n");
+			break;
+		}
+		switch(board_fbt_key_command()) {
+		case FASTBOOT_REBOOT_NORMAL:
+			printf("rebooting due to key\n");
+			fbt_handle_reboot("reboot");
+			break;
+		case FASTBOOT_REBOOT_BOOTLOADER:
+			printf("rebooting to bootloader due to key\n");
+			fbt_handle_reboot("reboot-bootloader");
+			break;
+		case FASTBOOT_REBOOT_RECOVERY:
+			printf("starting recovery due to key\n");
+			fbt_run_recovery(1);
+			break;
+		case FASTBOOT_REBOOT_UNKNOWN:
+		case FASTBOOT_REBOOT_NONE:
+		default:
 			break;
 		}
 	}
@@ -2010,41 +2069,6 @@ U_BOOT_CMD(
 	"\tof the partition to boot from.  The default is to boot\n"
 	"\tfrom the 'boot' partition.\n"
 );
-
-static void fbt_clear_recovery_flag(void)
-{
-	setenv(FASTBOOT_RUN_RECOVERY_ENV_NAME, NULL);
-#if defined(CONFIG_CMD_SAVEENV)
-	saveenv();
-#endif
-}
-
-static void fbt_run_recovery(int do_saveenv)
-{
-	/* to make recovery (which processes OTAs) more failsafe,
-	 * we save the fact that we were asked to boot into
-	 * recovery.  if power is pulled and then restored, we
-	 * will use that info to rerun recovery again and try
-	 * to complete the OTA installation.
-	 */
-	if (do_saveenv) {
-		setenv(FASTBOOT_RUN_RECOVERY_ENV_NAME, "1");
-#ifdef CONFIG_CMD_SAVEENV
-		saveenv();
-#endif
-	}
-
-	char *const boot_recovery_cmd[] = {"booti", "recovery"};
-	do_booti(NULL, 0, ARRAY_SIZE(boot_recovery_cmd), boot_recovery_cmd);
-
-	/* returns if recovery.img is bad */
-	printf("\nfastboot: Error: Invalid recovery img\n");
-
-	/* Always clear so we don't wind up rebooting again into
-	 * bad recovery img.
-	 */
-	fbt_clear_recovery_flag();
-}
 
 static void fbt_request_start_fastboot(void)
 {
