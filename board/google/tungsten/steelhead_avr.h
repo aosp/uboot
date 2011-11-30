@@ -28,18 +28,22 @@
 #ifndef _STEELHEAD_AVR_H_
 #define _STEELHEAD_AVR_H_
 
-struct avr_led_set_all_vals {
+struct avr_led_rgb_vals {
 	u8 rgb[3];
 };
 
-struct avr_led_set_bank_vals {
-	u8 bank_id;
-	u8 rgb[3];
+struct avr_led_set_range_vals {
+	u8 start;
+	u8 count;
+	u8 rgb_triples;
+	u8 rgb[32][3]; /* maximum number for now */
 };
 
 extern int detect_avr(void);
-extern int avr_led_set_all_vals(struct avr_led_set_all_vals *req);
+extern int avr_led_set_all(const struct avr_led_rgb_vals *req);
+extern int avr_led_set_mute(const struct avr_led_rgb_vals *req);
 extern int avr_led_commit_led_state(u8 val);
 extern int avr_led_set_mode(u8 mode);
+extern int avr_get_key(u8 *key_code);
 
 #endif /* _STEELHEAD_AVR_H_ */

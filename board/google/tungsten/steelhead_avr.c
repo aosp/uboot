@@ -33,22 +33,15 @@
 #include <malloc.h>
 #include <errno.h>
 #include <fastboot.h>
+#include <linux/ctype.h>
 
 #include "steelhead_avr.h"
 #include "steelhead_avr_regs.h"
 
 #define LED_BYTE_SZ 3
-#define SET_RANGE_OVERHEAD 2
 
 #define AVR_I2C_CLIENT_ID (0x20) /* 7 bit i2c id */
 #define AVR_I2C_BUS_ID    (0x1)
-
-struct led_bank_state {
-	u8 bank_id;
-	u8 led_count;
-	const char *name;
-	u8 *vals;
-};
 
 static struct avr_driver_state {
 	int avr_detected;
@@ -57,94 +50,11 @@ static struct avr_driver_state {
 	u16 firmware_rev;
 	u8  hardware_type;
 	u8  hardware_rev;
+	u16 led_count;
 
 	/* Current LED state. */
-	struct led_bank_state *banks;
-	u32 bank_cnt;
-	u32 total_led_cnt;
-	u8 *bank_scratch;
-	u32 bank_scratch_bytes;
 	u8 led_mode;
 } state;
-
-static const struct led_bank_state sphere_bank_template[] = {
-	{	.bank_id = 0,
-		.led_count = 8,
-		.name = "QuarterArc0",
-		.vals = NULL  },
-	{	.bank_id = 1,
-		.led_count = 8,
-		.name = "QuarterArc1",
-		.vals = NULL  },
-	{	.bank_id = 2,
-		.led_count = 8,
-		.name = "QuarterArc2",
-		.vals = NULL  },
-	{	.bank_id = 3,
-		.led_count = 8,
-		.name = "QuarterArc3",
-		.vals = NULL  },
-};
-
-static const struct led_bank_state rhombus_bank_template[] = {
-	{	.bank_id = 0,
-		.led_count = 8,
-		.name = "Crack_0",
-		.vals = NULL  },
-	{	.bank_id = 1,
-		.led_count = 8,
-		.name = "Crack_1",
-		.vals = NULL  },
-	{	.bank_id = 2,
-		.led_count = 8,
-		.name = "Crack_2",
-		.vals = NULL  },
-	{	.bank_id = 3,
-		.led_count = 8,
-		.name = "Crack_3",
-		.vals = NULL  },
-	{	.bank_id = 4,
-		.led_count = 8,
-		.name = "Crack_4",
-		.vals = NULL  },
-	{	.bank_id = 5,
-		.led_count = 8,
-		.name = "Crack_5",
-		.vals = NULL  },
-	{	.bank_id = 6,
-		.led_count = 8,
-		.name = "Crack_6",
-		.vals = NULL  },
-	{	.bank_id = 7,
-		.led_count = 8,
-		.name = "Crack_7",
-		.vals = NULL  },
-	{	.bank_id = 8,
-		.led_count = 8,
-		.name = "Crack_8",
-		.vals = NULL  },
-	{	.bank_id = 9,
-		.led_count = 8,
-		.name = "Buttons",
-		.vals = NULL  },
-};
-
-static void cleanup_driver_state(void)
-{
-	if (NULL != state.banks) {
-		u32 i;
-		for (i = 0; i < state.bank_cnt; ++i)
-			free(state.banks[i].vals);
-		free(state.banks);
-		state.banks = NULL;
-		state.bank_cnt = 0;
-	}
-
-	if (NULL != state.bank_scratch) {
-		free(state.bank_scratch);
-		state.bank_scratch = NULL;
-	}
-}
 
 /* the AVR can't do a normal i2c_read() with the
  * register address passed in one transfer.
@@ -179,8 +89,7 @@ static int avr_get_firmware_rev(void)
 
 	rc = avr_i2c_read(AVR_FW_VERSION_REG_ADDR, sizeof(buf), buf);
 
-	/* Revision will come back little-endian. */
-	state.firmware_rev = ((u16)buf[1] << 8) | (u16)buf[0];
+	state.firmware_rev = ((u16)buf[0] << 8) | (u16)buf[1];
 	return rc;
 }
 
@@ -206,9 +115,23 @@ static int avr_get_hardware_rev(void)
 	return avr_i2c_read(AVR_HW_REVISION_REG_ADDR, 1, &state.hardware_rev);
 }
 
-int avr_led_set_all_vals(struct avr_led_set_all_vals *req)
+static int avr_get_led_count(void)
 {
-	u32 i, j;
+	u8 buf[2];
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+	rc = avr_i2c_read(AVR_LED_GET_COUNT_ADDR, sizeof(buf), buf);
+
+	state.led_count = ((u16)buf[0] << 8) | (u16)buf[1];
+	return rc;
+}
+
+int avr_led_set_all(const struct avr_led_rgb_vals *req)
+{
 	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
 	if (rc) {
 		printf("Failed in i2c_set_bus_num(%d), error %d\n",
@@ -220,75 +143,49 @@ int avr_led_set_all_vals(struct avr_led_set_all_vals *req)
 		return -EFAULT;
 
 	rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_SET_ALL_REG_ADDR, 1,
-		       req->rgb, sizeof(req->rgb));
-
-
-	/* If the command failed, then skip the update of our internal
-	 * bookkeeping and just get out.
-	 */
-	if (rc)
-		return rc;
-
-	/* Update internal LED state. */
-	for (i = 0; i < state.bank_cnt; ++i) {
-		u32 cnt  = state.banks[i].led_count * LED_BYTE_SZ;
-		u8 *data = state.banks[i].vals;
-		for (j = 0; j < cnt; j += LED_BYTE_SZ) {
-			data[j + 0] = req->rgb[0];
-			data[j + 1] = req->rgb[1];
-			data[j + 2] = req->rgb[2];
-		}
-	}
+		       (uchar *)req->rgb, sizeof(req->rgb));
 
 	return rc;
 }
 
-static int avr_led_set_bank_vals(struct avr_led_set_bank_vals *req)
+int avr_led_set_mute(const struct avr_led_rgb_vals *req)
 {
-	u32 cnt, i;
-	u8 *data;
-	int rc;
-
-	if (!req)
-		return -EFAULT;
-
-	if (req->bank_id >= state.bank_cnt)
-		return -EINVAL;
-
-	/* Pack the scratch buffer with the command to transmit
-	 * to the AVR.
-	 */
-	BUG_ON(state.bank_scratch_bytes < 4);
-	state.bank_scratch[0] = req->bank_id;
-	state.bank_scratch[1] = req->rgb[0];
-	state.bank_scratch[2] = req->rgb[1];
-	state.bank_scratch[3] = req->rgb[2];
-
-	rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
 	if (rc) {
 		printf("Failed in i2c_set_bus_num(%d), error %d\n",
 		       AVR_I2C_BUS_ID, rc);
 		return rc;
 	}
 
-	rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_SET_BANK_REG_ADDR, 1,
-		       state.bank_scratch, 4);
+	if (!req)
+		return -EFAULT;
 
-	/* If the command failed, then skip the update of our internal
-	 * bookkeeping and just get out.
-	 */
+	rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_SET_MUTE_ADDR, 1,
+		       (uchar *)req->rgb, sizeof(req->rgb));
+
+	return rc;
+}
+
+int avr_led_set_range(struct avr_led_set_range_vals *req)
+{
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
 	if (rc) {
-		printf("SET_BANK_REG_ADDR command failed\n");
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
 		return rc;
 	}
 
-	cnt  = state.banks[req->bank_id].led_count * LED_BYTE_SZ;
-	data = state.banks[req->bank_id].vals;
-	for (i = 0; i < cnt; i += LED_BYTE_SZ) {
-		data[i + 0] = req->rgb[0];
-		data[i + 1] = req->rgb[1];
-		data[i + 2] = req->rgb[2];
+	if (!req)
+		return -EFAULT;
+	printf("Sending i2c set range packet, %d bytes\n", 3 + (req->rgb_triples * 3));
+	{
+		int i;
+		for (i = 0; i < (3 + (req->rgb_triples * 3)); i++) {
+			printf("0x%x\n", ((uint8_t*)req)[i]);
+		}
 	}
+	rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_SET_RANGE_REG_ADDR, 1,
+		       (uint8_t*)req, 3 + (req->rgb_triples * 3));
 
 	return rc;
 }
@@ -314,19 +211,6 @@ int avr_led_set_mode(u8 mode)
 	return rc;
 }
 
-static int avr_led_set_vol_indicator(u8 vol)
-{
-	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
-	if (rc) {
-		printf("Failed in i2c_set_bus_num(%d), error %d\n",
-		       AVR_I2C_BUS_ID, rc);
-		return rc;
-	}
-
-	return i2c_write(AVR_I2C_CLIENT_ID, AVR_VOLUME_SETTING_REG_ADDR,
-			 1, &vol, 1);
-}
-
 int avr_led_commit_led_state(u8 val)
 {
 	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
@@ -340,111 +224,6 @@ int avr_led_commit_led_state(u8 val)
 			 1, &val, 1);
 }
 
-static int avr_led_set_button_ctrl_reg(u8 val)
-{
-	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
-	if (rc) {
-		printf("Failed in i2c_set_bus_num(%d), error %d\n",
-		       AVR_I2C_BUS_ID, rc);
-		return rc;
-	}
-	return i2c_write(AVR_I2C_CLIENT_ID, AVR_BUTTON_CONTROL_REG_ADDR,
-			 1, &val, 1);
-}
-
-static int avr_led_set_int_reg(u8 val)
-{
-	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
-	if (rc) {
-		printf("Failed in i2c_set_bus_num(%d), error %d\n",
-		       AVR_I2C_BUS_ID, rc);
-		return rc;
-	}
-	return i2c_write(AVR_I2C_CLIENT_ID, AVR_BUTTON_INT_REG_ADDR,
-			 1, &val, 1);
-}
-
-static int avr_setup_bank_state(void)
-{
-	const void *bank_template = NULL;
-	u32 bank_template_sz = 0;
-	u32 bank_template_cnt = 0;
-	u32 i;
-
-	/* Pick a bank topology template base on the hardware revision enum
-	 * fetched from the AVR.
-	 */
-	switch (state.hardware_type) {
-	case AVR_HE_TYPE_SPHERE:
-		bank_template = sphere_bank_template;
-		bank_template_sz = sizeof(sphere_bank_template);
-		bank_template_cnt = ARRAY_SIZE(sphere_bank_template);
-		break;
-
-	case AVR_HE_TYPE_RHOMBUS:
-		bank_template = rhombus_bank_template;
-		bank_template_sz = sizeof(rhombus_bank_template);
-		bank_template_cnt = ARRAY_SIZE(rhombus_bank_template);
-		break;
-
-	default:
-		printf("Unrecognized hardware type 0x%02x\n",
-				state.hardware_type);
-		return -ENODEV;
-	}
-
-	/* Allocate the memory for the bank state array and
-	 * copy the template.
-	 */
-	state.banks = calloc(1, bank_template_sz);
-	if (NULL == state.banks) {
-		printf("Failed to allocate memory for bank state array.\n");
-		return -ENOMEM;
-	}
-	state.bank_cnt = bank_template_cnt;
-	memcpy(state.banks, bank_template, bank_template_sz);
-
-	/* Allocate the memory for the individual banks. */
-	state.bank_scratch_bytes = 0;
-	state.total_led_cnt = 0;
-	for (i = 0; i < state.bank_cnt; ++i) {
-		u32 bank_mem = (LED_BYTE_SZ * state.banks[i].led_count);
-
-		state.bank_scratch_bytes += bank_mem;
-		state.total_led_cnt += state.banks[i].led_count;
-
-		state.banks[i].vals = calloc(1, bank_mem);
-		if (NULL == state.banks[i].vals) {
-			printf("Failed to allocate %d bytes for led bank #%d\n",
-					bank_mem, i);
-			goto err_alloc_bank_vals;
-		}
-	}
-
-	/* Allocate the memory for the scratch buffer used during bank set
-	 * operations.  We need enough scratch buffer for the R G and B values
-	 * for the all the banks in the system, as well as 2 bytes of overhead
-	 * (for packing the set range command, we need a start and count value
-	 * each of which is 8 bits)
-	 */
-	state.bank_scratch_bytes += SET_RANGE_OVERHEAD;
-	state.bank_scratch = calloc(1, state.bank_scratch_bytes);
-	if (NULL == state.bank_scratch) {
-		printf("Failed to allocate %d bytes for bank scratch memory\n",
-				state.bank_scratch_bytes);
-		goto err_alloc_bank_scratch;
-	}
-
-	return 0;
-
- err_alloc_bank_scratch:
-	while (--i)
-		free(state.banks[i].vals);
- err_alloc_bank_vals:
-	free(state.banks);
-	return -ENOMEM;
-}
-
 static int avr_read_event_fifo(u8 *next_event)
 {
 	if (!next_event)
@@ -456,7 +235,7 @@ static int avr_read_event_fifo(u8 *next_event)
 int detect_avr(void)
 {
 	int rc;
-	struct avr_led_set_all_vals clear_led_req;
+	struct avr_led_rgb_vals clear_led_req;
 
 	printf("%s\n", __func__);
 
@@ -476,8 +255,7 @@ int detect_avr(void)
 		goto error;
 	}
 
-	/* Cache the hardware type and revision, then use it to determine the
-	 * bank topology and setup the internal state for the banks.
+	/* Cache the hardware type and revision.
 	 */
 	rc = avr_get_hardware_type();
 	if (rc) {
@@ -491,9 +269,9 @@ int detect_avr(void)
 		goto error;
 	}
 
-	rc = avr_setup_bank_state();
+	rc = avr_get_led_count();
 	if (rc) {
-		printf("Failed to setup LED bank state (rc = %d)\n", rc);
+		printf("Failed to fetch AVR led count (rc = %d)\n", rc);
 		goto error;
 	}
 
@@ -503,28 +281,9 @@ int detect_avr(void)
 	clear_led_req.rgb[0] = 0x00;
 	clear_led_req.rgb[1] = 0x00;
 	clear_led_req.rgb[2] = 0x00;
-	rc = avr_led_set_all_vals(&clear_led_req);
+	rc = avr_led_set_all(&clear_led_req);
 	if (rc) {
 		printf("Failed to clear LEDs on AVR (rc = %d)\n", rc);
-		goto error;
-	}
-
-	rc = avr_led_commit_led_state(AVR_LED_COMMMIT_IMMEDIATELY);
-	if (rc) {
-		printf("Failed to commit clear of LEDs on AVR (rc = %d)\n", rc);
-		goto error;
-	}
-
-	rc = avr_led_set_int_reg(AVR_BUTTON_INT_ENABLE | AVR_BUTTON_INT_CLEAR);
-	if (rc) {
-		printf("Failed to set int control register (rc = %d)\n", rc);
-		goto error;
-	}
-
-	/* Enable buttons inside of the AVR. */
-	rc = avr_led_set_button_ctrl_reg(AVR_BUTTON_CONTROL_ENABLE0);
-	if (rc) {
-		printf("Failed to set button control register (rc = %d)\n", rc);
 		goto error;
 	}
 
@@ -533,7 +292,6 @@ int detect_avr(void)
 	state.avr_detected = 1;
 	return 0;
  error:
-	cleanup_driver_state();
 	return rc;
 }
 
@@ -560,6 +318,27 @@ static int do_avr_commit_state(cmd_tbl_t *cmdtp, int flag,
 	return 0;
 }
 
+int avr_get_key(u8 *key_code)
+{
+	u8 next_event;
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+	rc = avr_read_event_fifo(&next_event);
+	if (rc) {
+		printf("Failed to read event fifo, err = %d\n", rc);
+		return 1;
+	}
+	*key_code = next_event;
+	if (next_event != AVR_KEY_EVENT_EMPTY) {
+		printf("%s returning 0x%x\n", __func__, next_event);
+	}
+	return 0;
+}
+
 static int do_avr_get_key(cmd_tbl_t *cmdtp, int flag,
 			 int argc, char * const argv[])
 {
@@ -572,11 +351,9 @@ static int do_avr_get_key(cmd_tbl_t *cmdtp, int flag,
 	}
 	while (1) {
 		u8 next_event;
-		rc = avr_read_event_fifo(&next_event);
-		if (rc) {
-			printf("Failed to read event fifo, err = %d\n", rc);
+		rc = avr_get_key(&next_event);
+		if (rc)
 			return 1;
-		}
 		if (next_event == AVR_KEY_EVENT_EMPTY) {
 			if (saw_key)
 				printf("done\n");
@@ -609,65 +386,7 @@ static int do_avr_get_info(cmd_tbl_t *cmdtp, int flag,
 	printf("  hardware_type = %d\n", state.hardware_type);
 	printf("  hardware_rev = %d\n", state.hardware_rev);
 	printf("  led_mode = %d\n", state.led_mode);
-	printf("  led_bank_count = %d\n", state.bank_cnt);
-	return 0;
-}
-
-static int do_avr_get_bank_desc(cmd_tbl_t *cmdtp, int flag,
-				int argc, char * const argv[])
-{
-	int bank_idx;
-	if (argc != 2) {
-		printf("usage: avr get bank_desc bank#\n");
-		return 1;
-	}
-	bank_idx = simple_strtoul(argv[1], NULL, 10);
-	if (bank_idx >= state.bank_cnt) {
-		printf("invalid bank_idx %d, must be 0 to %d\n",
-		       bank_idx, state.bank_cnt);
-		return 1;
-	} else {
-		printf("led bank %d has id = %d, name = '%s', led_count = %d\n",
-		       bank_idx,
-		       state.banks[bank_idx].bank_id,
-		       state.banks[bank_idx].name,
-		       state.banks[bank_idx].led_count);
-	}
-	return 0;
-}
-
-static int do_avr_get_bank_values(cmd_tbl_t *cmdtp, int flag,
-				  int argc, char * const argv[])
-{
-	int bank_idx;
-	int start;
-	if (argc != 3) {
-		printf("usage: avr get bank_values bank# start\n");
-		return 1;
-	}
-	bank_idx = simple_strtoul(argv[1], NULL, 10);
-	start = simple_strtoul(argv[2], NULL, 10);
-	if (bank_idx >= state.bank_cnt) {
-		printf("invalid bank_idx %d, must be 0 to %d\n",
-		       bank_idx, state.bank_cnt - 1);
-		return 1;
-	} else {
-		struct led_bank_state *bank = &(state.banks[bank_idx]);
-		if (start >= bank->led_count) {
-			printf("invalid start led %d, must be 0 to %d\n",
-			       start, bank->led_count - 1);
-			return 1;
-		} else {
-			int i;
-			printf("led bank %d values:\n", bank_idx);
-			for (i = start; i < bank->led_count; i++) {
-				printf(" led[%d] = 0x%x 0x%x 0x%x\n",
-				       i, bank->vals[i * LED_BYTE_SZ],
-				       bank->vals[(i * LED_BYTE_SZ) + 1],
-				       bank->vals[(i * LED_BYTE_SZ) + 2]);
-			}
-		}
-	}
+	printf("  led_count = %d\n", state.led_count);
 	return 0;
 }
 
@@ -675,10 +394,10 @@ static int do_avr_set_mode(cmd_tbl_t *cmdtp, int flag,
 			   int argc, char * const argv[])
 {
 	ulong raw;
-	const char *mode_names[] = {"BOOT_ANIMATION", "VOLUME", "HOST"};
+	const char *mode_names[] = {"BOOT_ANIMATION", "HOST_AUTO_COMMIT", "HOST"};
 	if (argc != 2) {
 		printf("usage: avr set mode "
-		       "[0=boot_animation,1=volume,2=host]\n");
+		       "[0=boot_animation,1=host_auto_commit,2=host]\n");
 		return 1;
 	}
 	raw = simple_strtoul(argv[1], NULL, 10);
@@ -697,76 +416,24 @@ static int do_avr_set_mode(cmd_tbl_t *cmdtp, int flag,
 	return 0;
 }
 
-static int do_avr_set_bank_values(cmd_tbl_t *cmdtp, int flag,
-				  int argc, char * const argv[])
-{
-	struct avr_led_set_bank_vals req;
-	ulong raw;
-	if (argc != 5) {
-		printf("usage: avr set bank_values bank# red green blue\n");
-		return 1;
-	}
-	raw = simple_strtoul(argv[1], NULL, 10);
-	if (raw >= state.bank_cnt) {
-		printf("invalid bank# %lu, must be 0 to %d\n",
-		       raw, state.bank_cnt - 1);
-		return 1;
-	}
-	req.bank_id = raw;
-	raw = simple_strtoul(argv[2], NULL, 10);
-	if (raw > 255) {
-		printf("red value of %lu too large, must be 0-255\n", raw);
-		return 1;
-	}
-	req.rgb[0] = raw;
-	raw = simple_strtoul(argv[3], NULL, 10);
-	if (raw > 255) {
-		printf("green value of %lu too large, must be 0-255\n", raw);
-		return 1;
-	}
-	req.rgb[1] = raw;
-	raw = simple_strtoul(argv[4], NULL, 10);
-	if (raw > 255) {
-		printf("blue value of %lu too large, must be 0-255\n", raw);
-		return 1;
-	}
-	req.rgb[2] = raw;
-	if (avr_led_set_bank_vals(&req)) {
-		printf("Error setting bank values\n");
-		return 1;
-	}
-	printf("Succeeded setting bank values\n");
-	return 0;
-}
-
 static int do_avr_set_all(cmd_tbl_t *cmdtp, int flag,
 			  int argc, char * const argv[])
 {
-	struct avr_led_set_all_vals req;
+	struct avr_led_rgb_vals req;
 	ulong raw;
-	if (argc != 4) {
-		printf("usage: avr set all red green blue\n");
+	if (argc != 2) {
+		printf("usage: avr set all rgb888_value\n");
 		return 1;
 	}
-	raw = simple_strtoul(argv[1], NULL, 10);
-	if (raw > 255) {
-		printf("red value of %lu too large, must be 0-255\n", raw);
+	raw = simple_strtoul(argv[1], NULL, 16);
+	if (raw > 0x00ffffff) {
+		printf("rgb888_value 0x%lx too large\n", raw);
 		return 1;
 	}
-	req.rgb[0] = raw;
-	raw = simple_strtoul(argv[2], NULL, 10);
-	if (raw > 255) {
-		printf("green value of %lu too large, must be 0-255\n", raw);
-		return 1;
-	}
-	req.rgb[1] = raw;
-	raw = simple_strtoul(argv[3], NULL, 10);
-	if (raw > 255) {
-		printf("blue value of %lu too large, must be 0-255\n", raw);
-		return 1;
-	}
-	req.rgb[2] = raw;
-	if (avr_led_set_all_vals(&req)) {
+	req.rgb[0] = (raw >> 16) & 0xff;
+	req.rgb[1] = (raw >> 8) & 0xff;
+	req.rgb[2] = (raw >> 0) & 0xff;
+	if (avr_led_set_all(&req)) {
 		printf("Error setting all led values\n");
 		return 1;
 	}
@@ -774,33 +441,101 @@ static int do_avr_set_all(cmd_tbl_t *cmdtp, int flag,
 	return 0;
 }
 
-static int do_avr_set_volume(cmd_tbl_t *cmdtp, int flag,
-			     int argc, char * const argv[])
+static int do_avr_set_mute(cmd_tbl_t *cmdtp, int flag,
+			  int argc, char * const argv[])
 {
+	struct avr_led_rgb_vals req;
 	ulong raw;
-
 	if (argc != 2) {
-		printf("usage: avr set volume volume#\n");
+		printf("usage: avr set mute rgb888_value\n");
 		return 1;
 	}
-	raw = simple_strtoul(argv[3], NULL, 10);
-	if (raw > 255) {
-		printf("volume value of %lu too large, must be 0-255\n", raw);
+	raw = simple_strtoul(argv[1], NULL, 16);
+	if (raw > 0x00ffffff) {
+		printf("rgb888_value 0x%lx too large\n", raw);
 		return 1;
 	}
-	if (avr_led_set_vol_indicator(raw)) {
-		printf("Error setting volume %lu\n", raw);
+	req.rgb[0] = (raw >> 16) & 0xff;
+	req.rgb[1] = (raw >> 8) & 0xff;
+	req.rgb[2] = (raw >> 0) & 0xff;
+	if (avr_led_set_mute(&req)) {
+		printf("Error setting mute led values\n");
 		return 1;
 	}
-	printf("Succeeded in setting volume %lu\n", raw);
+	printf("Succeeded setting mute led values\n");
+	return 0;
+}
+
+/* examples:
+  1) to set 4 leds starting at 0 to white, red, green, blue:
+    avr set range 0 4 ffffffff000000ff000000ff
+  2) to set all first led to green and rest to white:
+    avr set range 0 32 00ff00ffffff
+*/
+static int do_avr_set_range(cmd_tbl_t *cmdtp, int flag,
+			  int argc, char * const argv[])
+{
+	struct avr_led_set_range_vals req;
+	ulong start, count, rgb_triples, end;
+	ulong value, i;
+	char *cp;
+	if (argc != 4) {
+		printf("usage: avr set range start count rgb888_hex_string\n");
+		return 1;
+	}
+	start = simple_strtoul(argv[1], NULL, 10);
+	if (start > state.led_count) {
+		printf("start %lu too large, must be between 0 and %u\n",
+		       start, state.led_count);
+		return 1;
+	}
+	count = simple_strtoul(argv[2], NULL, 10);
+	if (count == 0) {
+		printf("0 count invalid\n");
+		return 1;
+	}
+	end = start + count - 1;
+	if (end >= state.led_count) {
+		printf("count %lu too large, must be between 1 and %lu\n",
+		       count, state.led_count - start);
+		return 1;
+	}
+	rgb_triples = strlen(argv[3]);
+	/* the length of the string must be a multiple of 6 bytes
+	   (two bytes each for red, green, and blue */
+	if (rgb_triples % 6) {
+		printf("rgb888_hex_string is invalid, must have a multiple of 6 characters,"
+		       "two each for red, green, and blue\n");
+		return 1;
+	}
+	rgb_triples /= 6;
+
+	req.start = start;
+	req.count = count;
+	req.rgb_triples = rgb_triples;
+	cp = argv[3];
+	for (i = 0; i < rgb_triples; i++) {
+		int j;
+		for (j = 0; j < 3; j++) {
+			value = (isdigit(*cp) ? *cp - '0' : (islower(*cp) ? toupper(*cp) : *cp) - 'A' + 10) * 16;
+			cp++;
+			value += (isdigit(*cp) ? *cp - '0' : (islower(*cp) ? toupper(*cp) : *cp) - 'A' + 10);
+			cp++;
+
+			req.rgb[i][j] = value;
+		}
+	}
+	if (avr_led_set_range(&req)) {
+		printf("Error setting range led values\n");
+		return 1;
+	}
+	printf("Succeeded setting range led values\n");
 	return 0;
 }
 
 static cmd_tbl_t cmd_avr_get_sub[] = {
 	U_BOOT_CMD_MKENT(info, 1, 1, do_avr_get_info, "", ""),
 	U_BOOT_CMD_MKENT(key, 1, 1, do_avr_get_key, "", ""),
-	U_BOOT_CMD_MKENT(bank_desc, 2, 1, do_avr_get_bank_desc, "", ""),
-	U_BOOT_CMD_MKENT(bank, 3, 1, do_avr_get_bank_values, "", ""),
 };
 
 static int do_avr_get(cmd_tbl_t *cmdtp, int flag,
@@ -830,9 +565,9 @@ static int do_avr_get(cmd_tbl_t *cmdtp, int flag,
 
 static cmd_tbl_t cmd_avr_set_sub[] = {
 	U_BOOT_CMD_MKENT(mode, 2, 1, do_avr_set_mode, "", ""),
-	U_BOOT_CMD_MKENT(bank, 5, 1, do_avr_set_bank_values, "", ""),
-	U_BOOT_CMD_MKENT(all, 4, 1, do_avr_set_all, "", ""),
-	U_BOOT_CMD_MKENT(volume, 2, 1, do_avr_set_volume, "", ""),
+	U_BOOT_CMD_MKENT(all, 2, 1, do_avr_set_all, "", ""),
+	U_BOOT_CMD_MKENT(mute, 2, 1, do_avr_set_mute, "", ""),
+	U_BOOT_CMD_MKENT(range, 4, 1, do_avr_set_range, "", ""),
 };
 
 static int do_avr_set(cmd_tbl_t *cmdtp, int flag,
@@ -907,15 +642,14 @@ static int do_avr(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 }
 
 U_BOOT_CMD(
-	avr, 7, 1, do_avr,
+	avr, 6, 1, do_avr,
 	"steelhead avr sub system",
 	"avr reinit\n"
 	"avr commit_state\n"
 	"avr get key\n"
 	"avr get info\n"
-	"avr get bank_desc bank#\n"
-	"avr get bank bank# start\n"
-	"avr set mode [0=boot_animation,1=volume,2=host]\n"
-	"avr set all red green blue\n"
-	"avr set bank bank# red green blue\n"
-	"avr set volume volume#\n");
+	"avr set mode [0=boot_animation,1=host_auto_commit,2=host]\n"
+	"avr set all rgb888_hex\n"
+	"avr set mute rgb888_hex\n"
+	"avr set range start count rgb888_hex_string\n");
+
