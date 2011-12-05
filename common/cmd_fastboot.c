@@ -1430,6 +1430,11 @@ static void fbt_handle_oem(char *cmdbuf)
 
 static void fbt_handle_boot(const char *cmdbuf)
 {
+	if (!priv.unlocked) {
+		sprintf(priv.response, "FAILdevice is locked");
+		return;
+	}
+
 	if ((priv.d_bytes) &&
 		(CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE < priv.d_bytes)) {
 		char start[32];
