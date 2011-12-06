@@ -1297,6 +1297,14 @@ static void fbt_handle_oem(char *cmdbuf)
 {
 	cmdbuf += 4;
 
+	/* %fastboot oem log */
+	if (strcmp(cmdbuf, "log") == 0) {
+		FBTDBG("oem %s\n", cmdbuf);
+		fbt_dump_log();
+		strcpy(priv.response, "OKAY");
+		return;
+	}
+
 	/* %fastboot oem recovery */
 	if (strcmp(cmdbuf, "recovery") == 0) {
 		FBTDBG("oem recovery\n");
@@ -1359,6 +1367,23 @@ static void fbt_handle_oem(char *cmdbuf)
 		return;
 	}
 
+	/* %fastboot oem erase partition <numblocks>
+	 * similar to 'fastboot erase' except an optional number
+	 * of blocks can be passed to erase less than the
+	 * full partition, for speed
+	 */
+	if (strncmp(cmdbuf, "erase ", 6) == 0) {
+		FBTDBG("oem %s\n", cmdbuf);
+		fbt_handle_erase(cmdbuf);
+		return;
+	}
+
+	/* All other oem commands are not allowed if device is locked */
+	if (!priv.unlocked) {
+		sprintf(priv.response, "FAILdevice is locked");
+		return;
+	}
+
 	/* %fastboot oem setinfo <info_name>=<info_value> */
 	if (strncmp(cmdbuf, "setinfo ", 8) == 0) {
 		cmdbuf += 8;
@@ -1383,25 +1408,6 @@ static void fbt_handle_oem(char *cmdbuf)
 			       info_ptn->name);
 			sprintf(priv.response, "OKAY");
 		}
-		return;
-	}
-
-	/* %fastboot oem erase partition <numblocks>
-	 * similar to 'fastboot erase' except an optional number
-	 * of blocks can be passed to erase less than the
-	 * full partition, for speed
-	 */
-	if (strncmp(cmdbuf, "erase ", 6) == 0) {
-		FBTDBG("oem %s\n", cmdbuf);
-		fbt_handle_erase(cmdbuf);
-		return;
-	}
-
-	/* %fastboot oem log */
-	if (strcmp(cmdbuf, "log") == 0) {
-		FBTDBG("oem %s\n", cmdbuf);
-		fbt_dump_log();
-		strcpy(priv.response, "OKAY");
 		return;
 	}
 
