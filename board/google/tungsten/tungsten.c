@@ -48,12 +48,16 @@ DECLARE_GLOBAL_DATA_PTR;
 #define STEELHEAD_REV_EVT     0x1
 #define STEELHEAD_REV_EVT2    0x2
 #define STEELHEAD_REV_DVT     0x3
+#define STEELHEAD_REV_DVT1_5  0x4
+#define STEELHEAD_REV_DVT2    0x5
 
 static const char const *steelhead_hw_name[] = {
-	[STEELHEAD_REV_ALPHA] = "Steelhead ALPHA",
-	[STEELHEAD_REV_EVT]   = "Steelhead EVT",
-	[STEELHEAD_REV_EVT2]  = "Steelhead EVT2",
-	[STEELHEAD_REV_DVT]   = "Steelhead DVT",
+	[STEELHEAD_REV_ALPHA]  = "Steelhead ALPHA",
+	[STEELHEAD_REV_EVT]    = "Steelhead EVT",
+	[STEELHEAD_REV_EVT2]   = "Steelhead EVT2",
+	[STEELHEAD_REV_DVT]    = "Steelhead DVT",
+	[STEELHEAD_REV_DVT1_5] = "Steelhead DVT1.5",
+	[STEELHEAD_REV_DVT2]   = "Steelhead DVT2",
 };
 int hwrev_gpios[] = {
 	182, /* board_id_0 */
