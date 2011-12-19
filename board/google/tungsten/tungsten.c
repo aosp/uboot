@@ -380,6 +380,8 @@ struct fbt_partition fbt_partitions[] = {
 void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
 	int used = strlen(args);
 	int i;
+	int bgap_threshold_t_hot  = 83000; /* 83 deg C */
+	int bgap_threshold_t_cold = 76000; /* 76 deg C */
 
 	for (i = 0; i < ARRAY_SIZE(mac_defaults); ++i) {
 		u8 m[6];
@@ -400,10 +402,25 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
 	}
 
 	/* Add board_id */
+	used += snprintf(args + used,
+			 buf_sz - used,
+			 " board_steelhead.steelhead_hw_rev=%d",
+			 steelhead_hw_rev);
+
+	/* Add bandgap threshold temperature based on board_id.
+	 * Units before DVT2 didn't have a thermal rework so
+	 * we'll throttle at a lower temperature to try to
+	 * prevent damage to the OMAP.
+	 */
+	if (steelhead_hw_rev < STEELHEAD_REV_DVT2) {
+		bgap_threshold_t_hot  = 64000; /* 64 deg C */
+		bgap_threshold_t_cold = 61000; /* 61 deg C */
+	}
 	snprintf(args + used,
 		 buf_sz - used,
-		 " board_steelhead.steelhead_hw_rev=%d",
-		 steelhead_hw_rev);
+		 " omap_temp_sensor.bgap_threshold_t_hot=%d"
+		 " omap_temp_sensor.bgap_threshold_t_cold=%d",
+		 bgap_threshold_t_hot, bgap_threshold_t_cold);
 
 	args[buf_sz-1] = 0;
 }
