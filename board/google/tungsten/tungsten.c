@@ -347,11 +347,14 @@ struct fbt_partition {
  */
 struct fbt_partition fbt_partitions[] = {
 	{ "--ptable",  17},     /* partition table in first 34 sectors */
-	{ "environment", 111 },  /* partition used to u-boot environment,
-				  * which is also where we store
-				  * oem lock/unlock state.  size
-				  * must match CONFIG_ENV_SIZE.
-				  */
+	{ "environment", 95 },  /* partition used to u-boot environment,
+				 * which is also where we store
+				 * oem lock/unlock state.  size
+				 * must match CONFIG_ENV_SIZE.
+				 */
+	{ "crypto", 16},        /* 16KB partition for crypto keys.
+				 * used when userdata is encrypted.
+				 */
 	{ "xloader", 384 },	/* must start at 128KB offset into eMMC
 				 * for ROM bootloader to find it.
 				 * pad out to fill whole erase group */

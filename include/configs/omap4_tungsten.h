@@ -67,12 +67,12 @@
 
 /*
  * Size of malloc() pool
- * Total Size Environment - 111KB - must match partition table
+ * Total Size Environment - 95KB - must match partition table
  * Malloc - add 128KB
  */
 #define CONFIG_ENV_IS_IN_BLKDEV
 #define CONFIG_SYS_ENV_BLKDEV		"mmc0"
-#define CONFIG_ENV_SIZE_KB		(111)
+#define CONFIG_ENV_SIZE_KB		(95)
 #define CONFIG_ENV_SIZE			((CONFIG_ENV_SIZE_KB) << 10)
 #define CONFIG_MALLOC_SIZE_KB		(128)
 #define CONFIG_SYS_MALLOC_LEN		(CONFIG_ENV_SIZE + ((CONFIG_MALLOC_SIZE_KB) << 10))
