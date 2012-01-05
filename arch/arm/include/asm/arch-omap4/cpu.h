@@ -33,15 +33,37 @@
 #ifndef __ASSEMBLY__
 struct ctrl_id {
 	u8 res1[0x200];
-	u32 die_id_0;		/* 0x200 */
-	u32 idcode;		/* 0x204 */
-	u32 die_id_1;		/* 0x208 */
-	u32 die_id_2;		/* 0x20C */
-	u32 die_id_3;		/* 0x210 */
-	u32 prod_id_0;		/* 0x214 */
-	u32 prod_id_1;		/* 0x218 */
-	u8 res2[0xa8];
-	u32 control_status;	/* 0x2c4 */
+	u32 die_id_0;			/* 0x200 */
+	u32 idcode;			/* 0x204 */
+	u32 die_id_1;			/* 0x208 */
+	u32 die_id_2;			/* 0x20C */
+	u32 die_id_3;			/* 0x210 */
+	u32 prod_id_0;			/* 0x214 */
+	u32 prod_id_1;			/* 0x218 */
+	u8 res2[0x50];			/* 0x21C */
+	u32 core_std_fuse_mpk_0;	/* 0x26C */
+	u32 core_std_fuse_mpk_1;	/* 0x270 */
+	u32 core_std_fuse_mpk_2;	/* 0x274 */
+	u32 core_std_fuse_mpk_3;	/* 0x278 */
+	u32 core_std_fuse_mpk_4;	/* 0x27C */
+	u32 core_std_fuse_mpk_5;	/* 0x280 */
+	u32 core_std_fuse_mpk_6;	/* 0x284 */
+	u32 core_std_fuse_mpk_7;	/* 0x288 */
+	u32 core_cust_fuse_cek_bch_0;	/* 0x28C */
+	u32 core_cust_fuse_cek_bch_1;	/* 0x290 */
+	u32 core_cust_fuse_cek_bch_2;	/* 0x294 */
+	u32 core_cust_fuse_cek_bch_3;	/* 0x298 */
+	u32 core_cust_fuse_cek_bch_4;	/* 0x29C */
+	u32 core_cust_fuse_msv_bch_0;	/* 0x2A0 */
+	u32 core_cust_fuse_msv_bch_1;	/* 0x2A4 */
+	u32 core_cust_fuse_msv_swrv_0;	/* 0x2A8 */
+	u32 core_cust_fuse_msv_swrv_1;	/* 0x2AC */
+	u32 core_cust_fuse_msv_swrv_2;	/* 0x2B0 */
+	u32 core_cust_fuse_msv_swrv_3;	/* 0x2B4 */
+	u32 core_cust_fuse_msv_swrv_4;	/* 0x2B8 */
+	u32 core_cust_fuse_msv_swrv_5;	/* 0x2BC */
+	u32 core_cust_fuse_msv_swrv_6;	/* 0x2C0 */
+	u32 control_status;	     	/* 0x2C4 */
 };
 #endif /* __ASSEMBLY__ */
 #endif /* __KERNEL_STRICT_NAMES */
