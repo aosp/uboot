@@ -341,6 +341,36 @@ static void musb_peri_ep0_zero_data_request(int err)
 					      __PRETTY_FUNCTION__);
 			usbd_device_event_irq(udc_device, DEVICE_CONFIGURED, 0);
 			break;
+		case USB_REQ_CLEAR_FEATURE:
+			if ((ep0_urb->device_request.bmRequestType &
+			     USB_REQ_RECIPIENT_MASK) ==
+			    USB_REQ_RECIPIENT_ENDPOINT) {
+				const u8		epnum =
+					ep0_urb->device_request.wIndex & 0x0f;
+				u16			csr;
+
+				if (epnum == 0 || epnum >= 16 ||
+				    ep0_urb->device_request.wValue != USB_ENDPOINT_HALT)
+					break;
+
+				if (ep0_urb->device_request.wIndex &
+				    USB_DIR_IN) {
+					csr  = readw(&musbr->ep[epnum].epN.txcsr);
+					csr |= MUSB_TXCSR_CLRDATATOG |
+					       MUSB_TXCSR_P_WZC_BITS;
+					csr &= ~(MUSB_TXCSR_P_SENDSTALL |
+						 MUSB_TXCSR_P_SENTSTALL |
+						 MUSB_TXCSR_TXPKTRDY);
+					writew(csr, &musbr->ep[epnum].epN.txcsr);
+				} else {
+					csr  = readw(&musbr->ep[epnum].epN.rxcsr);
+					csr |= MUSB_RXCSR_CLRDATATOG |
+					       MUSB_RXCSR_P_WZC_BITS;
+					csr &= ~(MUSB_RXCSR_P_SENDSTALL |
+						 MUSB_RXCSR_P_SENTSTALL);
+					writew(csr, &musbr->ep[epnum].epN.rxcsr);
+				}
+			}
 		}
 
 		/* EP0 state */
