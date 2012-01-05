@@ -1012,6 +1012,18 @@ static void fbt_handle_flash(char *cmdbuf)
 		return;
 	}
 
+	/* do board/cpu specific special handling if needed.  this
+	 * can include modifying priv.image_start_ptr to flash from
+	 * an address other than the start of the transfer buffer.
+	 */
+	priv.image_start_ptr = priv.transfer_buffer;
+	if (board_fbt_handle_flash(ptn, &priv)) {
+		/* error case, return.  expect priv.response to be
+		 * set by the board specific handler.
+		 */
+		return;
+	}
+
 	/* Prevent using flash command to write to device_info partition */
 	if (is_info_partition(ptn)) {
 		sprintf(priv.response,
@@ -1022,7 +1034,7 @@ static void fbt_handle_flash(char *cmdbuf)
 	/* Check if this is not really a flash write but rather a saveenv */
 	if (is_env_partition(ptn)) {
 		if (!himport_r(&env_htab,
-			       (const char *)priv.transfer_buffer,
+			       (const char *)priv.image_start_ptr,
 			       priv.d_bytes, '\n', H_NOCLEAR)) {
 			FBTINFO("Import '%s' FAILED!\n", ptn->name);
 			sprintf(priv.response, "FAIL: Import environment");
@@ -1043,10 +1055,10 @@ static void fbt_handle_flash(char *cmdbuf)
 		printf("writing to partition '%s'\n", ptn->name);
 
 		/* Check if we have sparse compressed image */
-		if (((sparse_header_t *)priv.transfer_buffer)->magic
+		if (((sparse_header_t *)priv.image_start_ptr)->magic
 		    == SPARSE_HEADER_MAGIC) {
 			printf("fastboot: %s is in sparse format\n", ptn->name);
-			if (!do_unsparse(ptn, priv.transfer_buffer,
+			if (!do_unsparse(ptn, priv.image_start_ptr,
 					 ptn->start, ptn->size)) {
 				printf("Writing sparsed: '%s' DONE!\n",
 				       ptn->name);
@@ -1064,7 +1076,7 @@ static void fbt_handle_flash(char *cmdbuf)
 			printf("Writing %llu bytes to '%s'\n",
 						num_bytes, ptn->name);
 			err = partition_write_bytes(priv.dev_desc, ptn,
-					&num_bytes, priv.transfer_buffer);
+				&num_bytes, priv.image_start_ptr);
 			if (err) {
 				printf("Writing '%s' FAILED! error=%d\n",
 							ptn->name, err);
@@ -1766,6 +1778,11 @@ static void __def_board_fbt_finalize_bootargs(char* args, size_t buf_sz)
 {
 	return;
 }
+static int __def_board_fbt_handle_flash(disk_partition_t *ptn,
+					struct cmd_fastboot_interface *priv)
+{
+	return 0;
+}
 
 int board_fbt_oem(const char *cmdbuf)
 	__attribute__((weak, alias("__def_fbt_oem")));
@@ -1785,6 +1802,9 @@ void board_fbt_end(void)
 	__attribute__((weak, alias("__def_fbt_end")));
 void board_fbt_finalize_bootargs(char* args, size_t buf_sz)
 	__attribute__((weak, alias("__def_board_fbt_finalize_bootargs")));
+int board_fbt_handle_flash(disk_partition_t *ptn,
+			   struct cmd_fastboot_interface *priv)
+	__attribute__((weak, alias("__def_board_fbt_handle_flash")));
 
 /* command */
 static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
