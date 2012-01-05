@@ -428,6 +428,127 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
 	args[buf_sz-1] = 0;
 }
 
+struct TOC_entry {
+	uint32_t start_offset;
+	uint32_t size;
+	uint8_t reserved[8];
+	uint32_t load_address;
+	char filename[12];
+};
+
+#define NUM_MPKH_REGISTERS 8
+struct MPKH_info {
+	char tag[4];
+	uint32_t mpkh[NUM_MPKH_REGISTERS];
+};
+
+int board_fbt_handle_flash(disk_partition_t *ptn,
+			   struct cmd_fastboot_interface *priv)
+{
+	struct TOC_entry *toc_p;
+	void *end_ptr;
+	void *image_ptr;
+	struct MPKH_info *mpkh_ptr;
+	struct MPKH_info my_mpkh;
+	struct ctrl_id *ctrl;
+	int i;
+
+	/* We support flashing a MLO "package" that has more than one
+	 * MLO image, each signed with a different MPK for a different
+	 * HS part.  We check if the MLO image has a MPKH_info structure
+	 * appended to it that has the tag, and the 8 MPKH values for
+	 * us to compare against our own MPKH register.  If no MPKH_info,
+	 * we'll just go ahead and accept it presuming the user knows
+	 * what they're doing or it's an old MLO file.  If the MPKH_info
+	 * structure exists, we'll compare the MPK info and if no
+	 * match, we'll try the next image in the downloaded file if
+	 * there is one.
+	 */
+	if ((get_device_type() != HS_DEVICE) ||
+	    (strcmp((char *)ptn->name, "xloader"))) {
+		/* not an HS part, or not flashing the xloader, just
+		 * go ahead and flash it.
+		 */
+		return 0;
+	}
+
+
+	/* read the MPKH registers into a local struct for easy comparison
+	 * with the MKPH_info we expect to find appended to the end
+	 * of the MLO image, if any.
+	 */
+	ctrl = (struct ctrl_id *)CTRL_BASE;
+	my_mpkh.tag[0] = 'M';
+	my_mpkh.tag[1] = 'P';
+	my_mpkh.tag[2] = 'K';
+	my_mpkh.tag[3] = 'H';
+	for (i = 0; i < NUM_MPKH_REGISTERS; i++) {
+		my_mpkh.mpkh[i] = ((uint32_t*)&ctrl->core_std_fuse_mpk_0)[i];
+	}
+
+	end_ptr = priv->transfer_buffer + priv->d_bytes;
+	image_ptr = priv->transfer_buffer;
+
+	printf("Verifying xloader image before flashing\n");
+	do {
+		printf("Checking image at offset 0x%x... ",
+		       image_ptr - (void*)priv->transfer_buffer);
+		toc_p = (struct TOC_entry *)image_ptr;
+		if ((void*)(toc_p + 1) >= end_ptr) {
+			printf("Image too small, not flashing\n");
+			snprintf(priv->response, sizeof(priv->response),
+				 "FAILImage too small\n");
+			return -1;
+		}
+		if (strcmp("MLO", toc_p->filename)) {
+			/* downloaded image does not have the MLO as the first
+			 * TOC entry like we expect, or is too small,
+			 * return error
+			 */
+			printf("Not an MLO image, not flashing\n");
+			snprintf(priv->response, sizeof(priv->response),
+				"FAILxloader requires MLO image");
+			return -1;
+		}
+		/* check for special case of a simple MLO image with
+		 * no MPKH_info appended to it.
+		 */
+		if (toc_p->start_offset + toc_p->size == priv->d_bytes) {
+			printf("    No MPKH_info in image, "
+			       "accepting unconditionally\n");
+			return 0;
+		}
+		mpkh_ptr = (struct MPKH_info *)(image_ptr +
+						toc_p->start_offset +
+						toc_p->size);
+		if ((void*)(mpkh_ptr + 1) < end_ptr) {
+			if (memcmp(&my_mpkh, mpkh_ptr, sizeof(my_mpkh)) == 0) {
+				printf("    MPKH match, using this image\n");
+				priv->image_start_ptr = image_ptr;
+				priv->d_bytes = (toc_p->start_offset +
+						 toc_p->size);
+				return 0;
+			}
+			printf("    MPKH mismatch, not using this image\n");
+#ifdef DEBUG
+			for (i = 0; i < NUM_MPKH_REGISTERS; i++) {
+				printf("MPKH[%d]: 0x%08x %s 0x%08x\n",
+				       i, my_mpkh.mpkh[i],
+				       (my_mpkh.mpkh[i] == mpkh_ptr->mpkh[i]) ?
+				       "==" : "!=", mpkh_ptr->mpkh[i]);
+			}
+#endif
+		}
+		/* go to the next image, if there is one */
+		image_ptr += (toc_p->start_offset + toc_p->size +
+			      sizeof(*mpkh_ptr));
+	} while (image_ptr < end_ptr);
+	snprintf(priv->response, sizeof(priv->response),
+		 "FAILMLO verification failed");
+	return -1;
+}
+
+
 #ifdef CONFIG_MFG
 static void set_default_mac_env_vars(void)
 {
