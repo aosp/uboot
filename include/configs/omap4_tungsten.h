@@ -159,7 +159,7 @@
 #define	CONFIG_CMD_FASTBOOT
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER		(OMAP44XX_DRAM_ADDR_SPACE_START + SZ_16M)
 #define	CONFIG_FASTBOOT_TRANSFER_BUFFER_SIZE	(SZ_512M - SZ_16M)
-#define CONFIG_FASTBOOT_VERSION_BOOTLOADER "steelheadB1001"
+#define CONFIG_FASTBOOT_VERSION_BOOTLOADER "steelheadB1002"
 /* Fastboot product name */
 #define	FASTBOOT_PRODUCT_NAME	"steelhead"
 /* Fastboot reboot paramenter address, it's currently put at

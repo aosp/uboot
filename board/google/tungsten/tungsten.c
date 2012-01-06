@@ -521,7 +521,7 @@ int board_fbt_handle_flash(disk_partition_t *ptn,
 		mpkh_ptr = (struct MPKH_info *)(image_ptr +
 						toc_p->start_offset +
 						toc_p->size);
-		if ((void*)(mpkh_ptr + 1) < end_ptr) {
+		if ((void*)(mpkh_ptr + 1) <= end_ptr) {
 			if (memcmp(&my_mpkh, mpkh_ptr, sizeof(my_mpkh)) == 0) {
 				printf("    MPKH match, using this image\n");
 				priv->image_start_ptr = image_ptr;
