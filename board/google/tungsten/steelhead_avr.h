@@ -45,5 +45,6 @@ extern int avr_led_set_mute(const struct avr_led_rgb_vals *req);
 extern int avr_led_commit_led_state(u8 val);
 extern int avr_led_set_mode(u8 mode);
 extern int avr_get_key(u8 *key_code);
+extern int avr_set_mute_threshold(u8 mute_threshold);
 
 #endif /* _STEELHEAD_AVR_H_ */

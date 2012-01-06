@@ -50,6 +50,7 @@ DECLARE_GLOBAL_DATA_PTR;
 #define STEELHEAD_REV_DVT     0x3
 #define STEELHEAD_REV_DVT1_5  0x4
 #define STEELHEAD_REV_DVT2    0x5
+#define STEELHEAD_REV_DVT3    0x6
 
 static const char const *steelhead_hw_name[] = {
 	[STEELHEAD_REV_ALPHA]  = "Steelhead ALPHA",
@@ -58,6 +59,7 @@ static const char const *steelhead_hw_name[] = {
 	[STEELHEAD_REV_DVT]    = "Steelhead DVT",
 	[STEELHEAD_REV_DVT1_5] = "Steelhead DVT1.5",
 	[STEELHEAD_REV_DVT2]   = "Steelhead DVT2",
+	[STEELHEAD_REV_DVT3]   = "Steelhead DVT3",
 };
 int hwrev_gpios[] = {
 	182, /* board_id_0 */
@@ -195,6 +197,20 @@ int board_fbt_key_pressed(void)
 	if (!avr_detected) {
 		printf("%s: avr not detected, returning false\n", __func__);
 		return is_pressed;
+	}
+
+	/* if this is older than DVT3, disable mute key in the avr
+	 * because it's unreliable.
+	 */
+	if (steelhead_hw_rev < STEELHEAD_REV_DVT3) {
+		avr_set_mute_threshold(0);
+		/* flush key buffer */
+		while (1) {
+			if (avr_get_key(&key_code))
+				break;
+			if (key_code == AVR_KEY_EVENT_EMPTY)
+				break;
+		}
 	}
 
 	/* check for the mute key to be pressed as an indicator

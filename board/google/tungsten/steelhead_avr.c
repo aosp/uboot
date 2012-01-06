@@ -54,6 +54,7 @@ static struct avr_driver_state {
 
 	/* Current LED state. */
 	u8 led_mode;
+	u8 mute_threshold;
 } state;
 
 /* the AVR can't do a normal i2c_read() with the
@@ -162,6 +163,36 @@ int avr_led_set_mute(const struct avr_led_rgb_vals *req)
 
 	rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_LED_SET_MUTE_ADDR, 1,
 		       (uchar *)req->rgb, sizeof(req->rgb));
+
+	return rc;
+}
+
+int avr_set_mute_threshold(u8 mute_threshold)
+{
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+
+	rc = i2c_write(AVR_I2C_CLIENT_ID, AVR_KEY_MUTE_THRESHOLD_REG_ADDR,
+		       1, &mute_threshold, sizeof(mute_threshold));
+
+	return rc;
+}
+
+static int avr_get_mute_threshold(void)
+{
+	int rc = i2c_set_bus_num(AVR_I2C_BUS_ID);
+	if (rc) {
+		printf("Failed in i2c_set_bus_num(%d), error %d\n",
+		       AVR_I2C_BUS_ID, rc);
+		return rc;
+	}
+
+	rc = avr_i2c_read(AVR_KEY_MUTE_THRESHOLD_REG_ADDR,
+			  1, &state.mute_threshold);
 
 	return rc;
 }
@@ -387,6 +418,8 @@ static int do_avr_get_info(cmd_tbl_t *cmdtp, int flag,
 	printf("  hardware_rev = %d\n", state.hardware_rev);
 	printf("  led_mode = %d\n", state.led_mode);
 	printf("  led_count = %d\n", state.led_count);
+	avr_get_mute_threshold();
+	printf("  mute_threshold = %d\n", state.mute_threshold);
 	return 0;
 }
 
@@ -463,6 +496,27 @@ static int do_avr_set_mute(cmd_tbl_t *cmdtp, int flag,
 		return 1;
 	}
 	printf("Succeeded setting mute led values\n");
+	return 0;
+}
+
+static int do_avr_set_mute_threshold(cmd_tbl_t *cmdtp, int flag,
+				     int argc, char * const argv[])
+{
+	ulong raw;
+	if (argc != 2) {
+		printf("usage: avr set mute_threshold value\n");
+		return 1;
+	}
+	raw = simple_strtoul(argv[1], NULL, 10);
+	if (raw > 0xff) {
+		printf("mute_threshold_value 0x%lx too large\n", raw);
+		return 1;
+	}
+	if (avr_set_mute_threshold((u8)raw)) {
+		printf("Error setting mute_threshold\n");
+		return 1;
+	}
+	printf("Succeeded setting mute_threshold\n");
 	return 0;
 }
 
@@ -567,6 +621,7 @@ static cmd_tbl_t cmd_avr_set_sub[] = {
 	U_BOOT_CMD_MKENT(mode, 2, 1, do_avr_set_mode, "", ""),
 	U_BOOT_CMD_MKENT(all, 2, 1, do_avr_set_all, "", ""),
 	U_BOOT_CMD_MKENT(mute, 2, 1, do_avr_set_mute, "", ""),
+	U_BOOT_CMD_MKENT(mute_threshold, 2, 1, do_avr_set_mute_threshold, "", ""),
 	U_BOOT_CMD_MKENT(range, 4, 1, do_avr_set_range, "", ""),
 };
 
@@ -651,5 +706,6 @@ U_BOOT_CMD(
 	"avr set mode [0=boot_animation,1=host_auto_commit,2=host]\n"
 	"avr set all rgb888_hex\n"
 	"avr set mute rgb888_hex\n"
+	"avr set mute_threshold value\n"
 	"avr set range start count rgb888_hex_string\n");
 
