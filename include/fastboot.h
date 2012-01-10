@@ -272,6 +272,7 @@ void board_fbt_end(void);
 void board_fbt_finalize_bootargs(char* args, size_t buf_sz);
 int board_fbt_handle_flash(disk_partition_t *ptn,
 			   struct cmd_fastboot_interface *priv);
+const char *board_fbt_get_partition_type(const char *partition_name);
 
 #endif /* CONFIG_FASTBOOT */
 #endif /* FASTBOOT_H */
