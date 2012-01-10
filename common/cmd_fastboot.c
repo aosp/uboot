@@ -819,9 +819,10 @@ static int _unsparse(unsigned char *source,
 					lbaint_t sector, lbaint_t num_blks)
 {
 	sparse_header_t *header = (void *) source;
-	u32 i, outlen = 0;
+	u32 i;
 	unsigned long blksz = priv.dev_desc->blksz;
 	u64 section_size = (u64)num_blks * blksz;
+	u64 outlen = 0;
 
 	FBTINFO("sparse_header:\n");
 	FBTINFO("\t         magic=0x%08X\n", header->magic);
@@ -929,7 +930,7 @@ static int _unsparse(unsigned char *source,
 		}
 	}
 
-	printf("\nsparse: out-length-0x%d MB\n", outlen/(1024*1024));
+	printf("\nsparse: out-length-0x%llu MB\n", outlen/(1024*1024));
 	return 0;
 }
 
