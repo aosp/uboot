@@ -788,9 +788,10 @@ static void fbt_handle_erase(char *cmdbuf)
 	}
 
 #ifndef CONFIG_MFG
-	/* don't allow erasing a valid device info partition in a production
-	 * u-boot */
-	if (is_info_partition(ptn) && (!priv.dev_info_uninitialized)) {
+	/* don't allow erasing environment partition or a valid
+	 * device info partition in a production u-boot */
+	if (is_env_partition(ptn) ||
+	    (is_info_partition(ptn) && (!priv.dev_info_uninitialized))) {
 		printf("Not allowed to erase %s partition\n", ptn->name);
 		strcpy(priv.response, "FAILnot allowed to erase partition");
 		return;
