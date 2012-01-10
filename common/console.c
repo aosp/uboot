@@ -404,6 +404,10 @@ void puts(const char *s)
 		return;
 #endif
 
+#if defined(CONFIG_FASTBOOT) && !defined(CONFIG_SPL_BUILD)
+	fbt_send_info(s);
+#endif
+
 	if (gd->flags & GD_FLG_DEVINIT) {
 		/* Send to the standard output */
 		fputs(stdout, s);
@@ -430,9 +434,6 @@ int printf(const char *fmt, ...)
 	/* Print the string */
 	puts(printbuffer);
 
-#if defined(CONFIG_FASTBOOT) && !defined(CONFIG_SPL_BUILD)
-	fbt_send_info(printbuffer);
-#endif
 	return i;
 }
 
