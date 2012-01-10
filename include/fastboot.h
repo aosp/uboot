@@ -254,6 +254,7 @@ enum fbt_reboot_type {
 	FASTBOOT_REBOOT_BOOTLOADER,
 	FASTBOOT_REBOOT_RECOVERY,
 	FASTBOOT_REBOOT_NONE,
+	FASTBOOT_REBOOT_RECOVERY_WIPE_DATA,
 };
 extern void fbt_preboot(void);
 extern void fbt_reset_ptn(void);

@@ -1846,6 +1846,26 @@ static void fbt_run_recovery(int do_saveenv)
 	fbt_clear_recovery_flag();
 }
 
+struct bootloader_message {
+	char command[32];
+	char status[32];
+	char recovery[1024];
+};
+
+static void fbt_set_recovery_bootloader_message_args(const char *command)
+{
+	struct bootloader_message *bmsg;
+
+	bmsg = (struct bootloader_message*)priv.transfer_buffer;
+	bmsg->command[0] = 0;
+	bmsg->status[0] = 0;
+	strcpy(bmsg->recovery, command);
+	priv.d_bytes = sizeof(*bmsg);
+
+	/* write this structure to the "misc" partition */
+	fbt_handle_flash("flash:misc");
+}
+
 /*
  * default board-specific hooks and defaults
  */
@@ -2014,6 +2034,10 @@ static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
 			printf("rebooting to bootloader due to key\n");
 			fbt_handle_reboot("reboot-bootloader");
 			break;
+		case FASTBOOT_REBOOT_RECOVERY_WIPE_DATA:
+			printf("setting recovery argument for data wipe\n");
+			fbt_set_recovery_bootloader_message_args("recovery\n--wipe_data");
+			/* fall through */
 		case FASTBOOT_REBOOT_RECOVERY:
 			printf("starting recovery due to key\n");
 			fbt_run_recovery(1);
