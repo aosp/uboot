@@ -183,6 +183,8 @@ struct _fbt_config_desc {
 
 static void fbt_handle_response(void);
 static disk_partition_t *fastboot_flash_find_ptn(const char *name);
+static void fbt_set_recovery_bootloader_message_args(const char *command);
+static void fbt_run_recovery(int do_saveenv);
 
 /* defined and used by gadget/ep0.c */
 extern struct usb_string_descriptor **usb_strings;
@@ -1516,6 +1518,15 @@ static void fbt_handle_oem(char *cmdbuf)
 		printf("Erasing succeeded\n");
 		fbt_set_unlocked(1);
 		strcpy(priv.response, "OKAY");
+		priv.flag |= FASTBOOT_FLAG_RESPONSE;
+		fbt_handle_response();
+		udelay(1000000); /* 1 sec */
+		/* now reboot into recovery to do a format of the
+		 * userdata partition so it's ready to use on next boot
+		 */
+		printf("Rebooting into recovery to do factory data wipe\n");
+		fbt_set_recovery_bootloader_message_args("recovery\n--wipe_data");
+		fbt_run_recovery(1);
 		return;
 	}
 
