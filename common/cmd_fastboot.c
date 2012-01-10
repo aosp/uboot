@@ -1091,71 +1091,211 @@ static void fbt_handle_flash(char *cmdbuf)
 	} /* Normal Case */
 }
 
-static void fbt_handle_getvar(char *cmdbuf)
-{
-	strcpy(priv.response, "OKAY");
-	char *subcmd = cmdbuf + strlen("getvar:");
-	char *value = NULL;
-	if (!strcmp(subcmd, "version"))
-		value = version_string;
-	else if (!strcmp(subcmd, "version-baseband"))
-		value = "n/a";
-	else if (!strcmp(subcmd, "version-bootloader"))
-		value = CONFIG_FASTBOOT_VERSION_BOOTLOADER;
-	else if (!strcmp(subcmd, "unlocked"))
-		value = (priv.unlocked ? "yes" : "no");
-	else if (!strcmp(subcmd, "secure")) {
-		/* we use the inverse meaning of unlocked */
-		value = (priv.unlocked ? "no" : "yes");
-	}
-#if defined (CONFIG_OMAP)
-	else if (!strcmp(subcmd, "device_type")) {
-		switch(get_device_type()) {
-		case TST_DEVICE:
-			value = "TST";
-			break;
-		case EMU_DEVICE:
-			value = "EMU";
-			break;
-		case HS_DEVICE:
-			value = "HS";
-			break;
-		case GP_DEVICE:
-			value = "GP";
-			break;
-		default:
-			value = "unknown";
-			break;
-		}
-	}
-#endif
-	else if (!strcmp(subcmd, "product"))
-		value = FASTBOOT_PRODUCT_NAME;
-	else if (!strcmp(subcmd, "serialno"))
-		value = priv.serial_no;
-#ifdef CONFIG_FASTBOOT_UBOOT_GETVAR
-	else {
-		ENTRY e, *ep;
+struct getvar_entry {
+	const char *variable_name;
+	int exact_match;
+	const char *(*getvar_func)(const char *arg);
+};
 
-		e.key = subcmd;
-		e.data = NULL;
-		ep = NULL;
-		if (hsearch_r(e, FIND, &ep, &env_htab) && ep != NULL)
-			value = ep->data;
-	}
-#endif
-	if (value) {
-		/* At first I was reluctant to use strncpy because it
-		 * typically pads the whole buffer with nulls, but U-Boot's
-		 * strncpy does not do that.  However, I do rely on
-		 * priv.null_term after priv.response in the struct
-		 * cmd_fastboot_interface to ensure the strlen in
-		 * fbt_response_process doesn't take a long time.
-		 */
-		strncpy(priv.response + 4, value, (sizeof(priv.response) - 4));
-	}
+static const char *getvar_version(const char *unused)
+{
+	return version_string;
 }
 
+static const char *getvar_version_baseband(const char *unused)
+{
+	return "n/a";
+}
+
+static const char *getvar_version_bootloader(const char *unused)
+{
+	return CONFIG_FASTBOOT_VERSION_BOOTLOADER;
+}
+
+static const char *getvar_unlocked(const char *unused)
+{
+	return (priv.unlocked ? "yes" : "no");
+}
+
+static const char *getvar_secure(const char *unused)
+{
+	/* we use the inverse meaning of unlocked */
+	return (priv.unlocked ? "no" : "yes");
+}
+
+#if defined (CONFIG_OMAP)
+static const char *getvar_device_type(const char *unused)
+{
+	switch(get_device_type()) {
+	case TST_DEVICE:
+		return "TST";
+	case EMU_DEVICE:
+		return "EMU";
+	case HS_DEVICE:
+		return "HS";
+	case GP_DEVICE:
+		return "GP";
+	default:
+		return "unknown";
+	}
+}
+#endif
+
+static const char *getvar_product(const char *unused)
+{
+	return FASTBOOT_PRODUCT_NAME;
+}
+
+static const char *getvar_serialno(const char *unused)
+{
+	return priv.serial_no;
+}
+
+static const char *getvar_partition_type(const char *args)
+{
+	const char *partition_name;
+	const char *type;
+
+	if (!strcmp(args, "all")) {
+		int i;
+		for (i = 0; i < pcount; i++) {
+			partition_name = (char*)ptable[i].name;
+			printf("partition \"%s\" has type \"%s\"\n",
+			       partition_name,
+			       board_fbt_get_partition_type(partition_name));
+		}
+		return NULL;
+	}
+
+	partition_name = args + sizeof("partition-type:") - 1;
+	type = board_fbt_get_partition_type(partition_name);
+	if (type) {
+		return type;
+	}
+	snprintf(priv.response, sizeof(priv.response),
+		 "FAILunknown partition %s\n", partition_name);
+	return NULL;
+}
+
+static const char *getvar_partition_size(const char *args)
+{
+	const char *partition_name;
+	disk_partition_t *ptn;
+
+	if (!strcmp(args, "all")) {
+		int i;
+		for (i = 0; i < pcount; i++) {
+			printf("partition \"%s\" has size 0x%016llx bytes\n",
+			       ptable[i].name,
+			       (uint64_t)ptable[i].size * ptable[i].blksz);
+		}
+		return NULL;
+	}
+
+	partition_name = args + sizeof("partition-size:") - 1;
+	ptn = fastboot_flash_find_ptn(partition_name);
+	if (ptn) {
+		snprintf(priv.response, sizeof(priv.response),
+			 "OKAY0x%016llx", (uint64_t)ptn->size * ptn->blksz);
+	} else {
+		snprintf(priv.response, sizeof(priv.response),
+			 "FAILunknown partition %s\n", partition_name);
+	}
+	return NULL;
+}
+
+static const struct getvar_entry getvar_table[] = {
+	{"version", 1, getvar_version},
+	{"version-baseband", 1, getvar_version_baseband},
+	{"version-bootloader", 1, getvar_version_bootloader},
+	{"unlocked", 1, getvar_unlocked},
+	{"secure", 1, getvar_secure},
+#if defined (CONFIG_OMAP)
+	{"device_type", 1, getvar_device_type},
+#endif
+	{"product", 1, getvar_product},
+	{"serialno", 1, getvar_serialno},
+	{"partition-type:", 0, getvar_partition_type},
+	{"partition-size:", 0, getvar_partition_size}
+};
+
+static void fbt_handle_getvar(char *cmdbuf)
+{
+	char *subcmd = cmdbuf + sizeof("getvar:") - 1;
+	const char *value = NULL;
+	int do_all;
+	int i;
+	if (!strcmp(subcmd, "all"))
+		do_all = 1;
+	else
+		do_all = 0;
+
+	if (do_all) {
+		for (i = 0; i < ARRAY_SIZE(getvar_table); i++) {
+			value = (getvar_table[i].getvar_func)(subcmd);
+			if (value ) {
+				printf("%s: %s\n",
+				       getvar_table[i].variable_name, value);
+			}
+		}
+		strcpy(priv.response, "OKAY");
+	} else {
+		for (i = 0; i < ARRAY_SIZE(getvar_table); i++) {
+			int match;
+			if (getvar_table[i].exact_match) {
+				/* look for exact string match */
+				match = !strcmp(getvar_table[i].variable_name,
+						subcmd);
+			} else {
+				/* look for the target string at the
+				 * beginning of the argument passed
+				 */
+				match = strstr(subcmd,
+					       getvar_table[i].variable_name) ==
+					subcmd;
+			}
+			if (match) {
+				value = (getvar_table[i].getvar_func)(subcmd);
+				if (value == NULL) {
+					/* handler did it all in terms of
+					 * creating a response.
+					 */
+					return;
+				}
+				/* fall through to let the common code
+				 * handle creating a response string.
+				 */
+				break;
+			}
+		}
+#ifdef CONFIG_FASTBOOT_UBOOT_GETVAR
+		if (!value) {
+			ENTRY e, *ep;
+
+			e.key = subcmd;
+			e.data = NULL;
+			ep = NULL;
+			if (hsearch_r(e, FIND, &ep, &env_htab) && ep != NULL)
+				value = ep->data;
+		}
+#endif
+		if (value) {
+			/* At first I was reluctant to use strncpy because it
+			 * typically pads the whole buffer with nulls, but
+			 * U-Boot's strncpy does not do that.  However, I
+			 * do rely on priv.null_term after priv.response
+			 * in the struct cmd_fastboot_interface to ensure
+			 * the strlen in fbt_response_process doesn't take
+			 * a long time.
+			 */
+			strcpy(priv.response, "OKAY");
+			strncpy(priv.response + 4, value,
+				(sizeof(priv.response) - 4));
+		} else {
+			strcpy(priv.response, "FAILunknown variable");
+		}
+	}
+}
 
 static void fbt_handle_reboot(const char *cmdbuf)
 {
@@ -1784,6 +1924,10 @@ static int __def_board_fbt_handle_flash(disk_partition_t *ptn,
 {
 	return 0;
 }
+static const char *__def_board_fbt_get_partition_type(const char *p_name)
+{
+	return NULL;
+}
 
 int board_fbt_oem(const char *cmdbuf)
 	__attribute__((weak, alias("__def_fbt_oem")));
@@ -1806,6 +1950,8 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz)
 int board_fbt_handle_flash(disk_partition_t *ptn,
 			   struct cmd_fastboot_interface *priv)
 	__attribute__((weak, alias("__def_board_fbt_handle_flash")));
+const char *board_fbt_get_partition_type(const char *partition_name)
+	__attribute__((weak, alias("__def_board_fbt_get_partition_type")));
 
 /* command */
 static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
