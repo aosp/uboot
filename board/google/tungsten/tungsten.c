@@ -349,6 +349,7 @@ void board_fbt_end(void)
 
 struct fbt_partition {
 	const char *name;
+	const char *type;
 	unsigned size_kb;
 };
 
@@ -362,38 +363,42 @@ struct fbt_partition {
  * partition is being erased.
  */
 struct fbt_partition fbt_partitions[] = {
-	{ "--ptable",  17},     /* partition table in first 34 sectors */
-	{ "environment", 95 },  /* partition used to u-boot environment,
-				 * which is also where we store
-				 * oem lock/unlock state.  size
-				 * must match CONFIG_ENV_SIZE.
-				 */
-	{ "crypto", 16},        /* 16KB partition for crypto keys.
-				 * used when userdata is encrypted.
-				 */
-	{ "xloader", 384 },	/* must start at 128KB offset into eMMC
-				 * for ROM bootloader to find it.
-				 * pad out to fill whole erase group */
-	{ "bootloader", 512 },  /* u-boot, one erase group in size */
-	{ "device_info", 512 }, /* device specific info like MAC addresses.
-				 * read-only once it has been written to.
-				 * bootloader parses this at boot and sends
-				 * the contents to the kernel via cmdline args.
-				 */
-	{ "bootloader2", 512 }, /* u-boot, alternate copy */
-	{ "misc", 512 }, 	/* misc partition used by recovery for storing
-				 * parameters in the case of a power failure
-				 * during recovery operation.
-				 */
-	{ "recovery", 8*1024 },
-	{ "boot", 8*1024 },
-	{ "efs", 8*1024 },      /* for factory programmed encryption keys,
-				 * minimum size for a ext4 fs is about 8MB
-				 */
-	{ "system", 1024*1024 },
-	{ "cache", 512*1024 },
-	{ "userdata", 0},
-	{ 0, 0 },
+	{ "--ptable", NULL,  17},  /* partition table in
+					* first 34 sectors */
+	{ "environment", "raw", 95 },  /* partition used to u-boot environment,
+					* which is also where we store
+					* oem lock/unlock state.  size
+					* must match CONFIG_ENV_SIZE.
+					*/
+	{ "crypto", "raw", 16},        /* 16KB partition for crypto keys.
+					* used when userdata is encrypted.
+					*/
+	{ "xloader", "raw", 384 },	/* must start at 128KB offset into eMMC
+					 * for ROM bootloader to find it.
+					 * pad out to fill whole erase group */
+	{ "bootloader", "raw", 512 },  /* u-boot, one erase group in size */
+	{ "device_info", "raw", 512 }, /* device specific info like MAC
+					* addresses.  read-only once it has
+					* been written to.  bootloader parses
+					* this at boot and sends the contents
+					* to the kernel via cmdline args.
+					*/
+	{ "bootloader2", "raw", 512 }, /* u-boot, alternate copy */
+	{ "misc", "raw", 512 }, 	/* misc partition used by recovery for
+					 * storing parameters in the case of a
+					 * power failure during recovery
+					 * operation.
+					 */
+	{ "recovery", "boot", 8*1024 },
+	{ "boot", "boot", 8*1024 },
+	{ "efs", "ext4", 8*1024 },      /* for factory programmed keys,
+					 * minimum size for a ext4 fs is
+					 * about 8MB
+					 */
+	{ "system", "ext4", 1024*1024 },
+	{ "cache", "ext4", 512*1024 },
+	{ "userdata", "ext4", 0},
+	{ 0, 0, 0 },
 };
 
 void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {

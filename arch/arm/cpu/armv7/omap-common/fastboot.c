@@ -36,6 +36,7 @@ static struct ptable the_ptable;
 /* in a board specific file */
 struct fbt_partition {
 	const char *name;
+	const char *type;
 	unsigned size_kb;
 };
 extern struct fbt_partition fbt_partitions[];
@@ -283,3 +284,15 @@ enum fbt_reboot_type board_fbt_get_reboot_type(void)
 	writel(0, (void*)FASTBOOT_REBOOT_PARAMETER_ADDR);
 	return frt;
 }
+
+const char *board_fbt_get_partition_type(const char *partition_name)
+{
+	int i;
+	for (i = 0; fbt_partitions[i].name; i++) {
+		if (!strcmp(partition_name, fbt_partitions[i].name)) {
+			return fbt_partitions[i].type;
+		}
+	}
+	return NULL;
+}
+
