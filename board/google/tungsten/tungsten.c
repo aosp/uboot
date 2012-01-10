@@ -69,6 +69,11 @@ int hwrev_gpios[] = {
 int steelhead_hw_rev;
 int avr_detected;
 
+static unsigned long key_pressed_start_time;
+static unsigned long last_time;
+#define KEY_CHECK_POLLING_INTERVAL_MS 100
+#define RECOVERY_KEY_HOLD_TIME_SECS 10
+
 const struct omap_sysinfo sysinfo = {
 	"Board: OMAP4 Tungsten\n"
 };
@@ -214,7 +219,14 @@ int board_fbt_key_pressed(void)
 	}
 
 	/* check for the mute key to be pressed as an indicator
-	 * to enter fastboot mode in preboot mode
+	 * to enter fastboot mode in preboot mode.  since the
+	 * AVR sends an initial boot indication key, we have to
+	 * filter that out first.  we also filter out and volume
+	 * up/down keys and don't care if we spin until those
+	 * stop (it's almost impossible to make the volume
+	 * up/down key events repeat indefinitely since they
+	 * involve actually rotating the top of the sphere
+	 * without pause).
 	 */
 	while (1) {
 		if (avr_get_key(&key_code))
@@ -222,38 +234,16 @@ int board_fbt_key_pressed(void)
 		if (key_code == AVR_KEY_EVENT_EMPTY)
 			break;
 		if (key_code == (AVR_KEY_MUTE | AVR_KEY_EVENT_DOWN)) {
-			/* got mute key down, wait for release */
-			int was_green = 1;
-
 			avr_led_set_mode(AVR_LED_MODE_HOST_AUTO_COMMIT);
 			avr_led_set_all(&green);
 			avr_led_set_mute(&black);
 			is_pressed = 1;
-
-			/* spin until key is released, but flash
-			 * something on LEDs so user knows we're alive
-			 */
-			do {
-				if (avr_get_key(&key_code))
-					break;
-				if (was_green) {
-					avr_led_set_all(&black);
-					was_green = 0;
-				} else {
-					avr_led_set_all(&green);
-					was_green = 1;
-				}
-				/* wait 100ms to prevent polling
-				   too fast, otherwise we can
-				   get NAK from AVR
-				*/
-				udelay(100000);
-			} while (key_code & AVR_KEY_EVENT_DOWN);
-			avr_led_set_all(&green);
-			avr_led_set_mute(&green);
+			key_pressed_start_time = get_timer(0);
+			/* don't wait for key release */
 			break;
 		}
 	}
+
 	/* On a cold boot, the AVR boots up into a boot animation
 	 * state automatically.  However, during a OMAP warm reset, the
 	 * AVR isn't notified of the reset so we need to make sure
@@ -266,11 +256,6 @@ int board_fbt_key_pressed(void)
 	printf("Returning key pressed %s\n", is_pressed ? "true" : "false");
 	return is_pressed;
 }
-
-static unsigned long key_pressed_start_time;
-static unsigned long last_time;
-#define KEY_CHECK_POLLING_INTERVAL_MS 100
-#define RECOVERY_KEY_HOLD_TIME_SECS 10
 
 /* we only check for a long press of mute as an indicator to
  * go into recovery.  due to i2c errors if we poll too fast,
@@ -311,7 +296,7 @@ enum fbt_reboot_type board_fbt_key_command(void)
 				printf("%s: mute key down more than %u seconds,"
 				       " starting recovery\n",
 				       __func__, RECOVERY_KEY_HOLD_TIME_SECS);
-				return FASTBOOT_REBOOT_RECOVERY;
+				return FASTBOOT_REBOOT_RECOVERY_WIPE_DATA;
 			}
 			printf("%s: mute key still down after %lu ms\n",
 			       __func__, time_down);
