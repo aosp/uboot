@@ -126,6 +126,7 @@
 /* USB */
 #define CONFIG_MUSB_UDC			1
 #define CONFIG_USB_OMAP3		1
+#define CONFIG_MUSB_RXFIFO_DOUBLE	1
 
 /* Disable some non-essential dpll and clock setup because it
  * increases power consumption and heat significantly.  We'll let
