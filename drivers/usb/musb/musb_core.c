@@ -91,7 +91,11 @@ void musb_configure_ep(const struct musb_epinfo *epinfo, u8 cnt)
 		writeb(epinfo->epnum, &musbr->index);
 		if (epinfo->epdir) {
 			/* Configure fifo size and fifo base address */
+#ifdef CONFIG_MUSB_TXFIFO_DOUBLE
+			config_fifo(tx, (idx | MUSB_FIFOSZ_DPB), fifoaddr);
+#else
 			config_fifo(tx, idx, fifoaddr);
+#endif
 
 			writew(epinfo->epsize, &musbr->txmaxp);
 
@@ -106,7 +110,11 @@ void musb_configure_ep(const struct musb_epinfo *epinfo, u8 cnt)
 					&musbr->txcsr);
 		} else {
 			/* Configure fifo size and fifo base address */
+#ifdef CONFIG_MUSB_RXFIFO_DOUBLE
+			config_fifo(rx, (idx | MUSB_FIFOSZ_DPB), fifoaddr);
+#else
 			config_fifo(rx, idx, fifoaddr);
+#endif
 
 			writew(epinfo->epsize, &musbr->rxmaxp);
 
