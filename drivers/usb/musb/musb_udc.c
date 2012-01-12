@@ -551,8 +551,7 @@ static void musb_peri_ep0_rx(void)
 				else
 					length = count0;
 
-				data = (u8 *) urb->buffer_data;
-				data += urb->actual_length;
+				data = urb->buffer + urb->actual_length;
 
 				/* The common musb fifo reader */
 				read_fifo(0, length, data);
@@ -680,61 +679,140 @@ static void musb_peri_ep0(void)
 		musb_peri_ep0_rx();
 }
 
+/* to make compatiblity easier, we dma to a fixed buffer and
+ * memcpy it out.  otherwise, the buffer we're given might not
+ * be cache aligned.  buffer must be word aligned, but we make
+ * it aligned even bigger to make it cache aligned on most systems.
+ *
+ * we only read from the dma_buffer and never write to it, so it's
+ * safe to only invalidate the range after the dma is done and
+ * before we memcpy to the receive buffer.  if this ever changes,
+ * we may have to do more to make sure the cache doesn't flush
+ * itself asynchronously after we've done the dma but before
+ * we've done the invalidate, and corrupt our data.
+ */
+static u8 dma_buffer[1024] __attribute__ ((aligned(0x100)));
+
+static int read_fifo_dma(unsigned int ep, u32 count, u8 *buf)
+{
+	int rc = -1;
+	u16 peri_rxcsr;
+	u16 dma_control;
+
+	if (count > sizeof(dma_buffer)) {
+		serial_printf("count %d > sizeof(dma_buffer) %d\n",
+			      count, sizeof(dma_buffer));
+		return rc;
+	}
+
+	peri_rxcsr = readw(&musbr->ep[ep].epN.rxcsr);
+	peri_rxcsr &= ~MUSB_RXCSR_AUTOCLEAR;
+	peri_rxcsr |= MUSB_RXCSR_DMAENAB;
+	writew(peri_rxcsr, &musbr->ep[ep].epN.rxcsr);
+
+	/* hard coded for dma channel 1 for now */
+
+	/* stop any previous transfer */
+	writeb(0, &musbr->hsdma_control_1);
+
+	/* set the address */
+	writel((u32)dma_buffer, &musbr->hsdma_address_1);
+	/* set the transfer size */
+	writel(count, &musbr->hsdma_count_1);
+
+	/* set the control parts.  we already checked that
+	 * the size is a multiple of 16 so we can use
+	 * burst mode of 16 bytes.
+	 */
+	dma_control = (MUSB_DMA_CNTL_BURST_MODE_3 |
+		       MUSB_DMA_CNTL_END_POINT(ep) |
+		       MUSB_DMA_CNTL_WRITE |
+		       MUSB_DMA_CNTL_ENABLE);
+	writew(dma_control, &musbr->hsdma_control_1);
+
+	while (1) {
+		if (readw(&musbr->hsdma_control_1) & MUSB_DMA_CNTL_ERR) {
+			serial_printf("dma error\n");
+			break;
+		}
+		if (readl(&musbr->hsdma_count_1) == 0) {
+			rc = 0;
+			break;
+		}
+	}
+
+	/* clear DMAENAB and DMAMODE and do the rx_ack */
+	peri_rxcsr &= ~(MUSB_RXCSR_AUTOCLEAR | MUSB_RXCSR_DMAENAB |
+			MUSB_RXCSR_RXPKTRDY);
+	writew(peri_rxcsr, &musbr->ep[ep].epN.rxcsr);
+
+	if (rc == 0) {
+		invalidate_dcache_range((u32)dma_buffer,
+					(u32)dma_buffer + sizeof(dma_buffer));
+		memcpy(buf, dma_buffer, count);
+	}
+	return rc;
+}
+
 static void musb_peri_rx_ep(unsigned int ep)
 {
-	u16 peri_rxcount = readw(&musbr->ep[ep].epN.rxcount);
+	struct usb_endpoint_instance *endpoint;
+	struct urb *urb;
 
-	if (peri_rxcount) {
-		struct usb_endpoint_instance *endpoint;
-		u32 length;
-		u8 *data;
+	if (!(readw(&musbr->ep[ep].epN.rxcsr) & MUSB_RXCSR_RXPKTRDY))
+		return;
 
-		endpoint = GET_ENDPOINT(udc_device, ep);
-		if (endpoint && endpoint->rcv_urb) {
-			struct urb *urb = endpoint->rcv_urb;
-			unsigned int remaining_space = urb->buffer_length -
-				urb->actual_length;
+	endpoint = GET_ENDPOINT(udc_device, ep);
+	if (endpoint == NULL) {
+		if (debug_level > 0)
+			serial_printf("ERROR : %s %d problem with endpoint\n",
+				      __PRETTY_FUNCTION__, ep);
+		return;
+	}
 
-			if (remaining_space) {
-				int urb_bad = 0; /* urb is good */
+	urb = endpoint->rcv_urb;
+	if (urb == NULL) {
+		if (debug_level > 0)
+			serial_printf("ERROR : %s %d problem with urb\n",
+				      __PRETTY_FUNCTION__, ep);
+		return;
 
-				if (peri_rxcount > remaining_space)
-					length = remaining_space;
-				else
-					length = peri_rxcount;
+	}
 
-				data = (u8 *) urb->buffer_data;
-				data += urb->actual_length;
+	do {
+		u16 peri_rxcount = readw(&musbr->ep[ep].epN.rxcount);
+		unsigned int remaining_space;
+		if (peri_rxcount == 0)
+			return;
+		remaining_space = urb->buffer_length - urb->actual_length;
+		if (remaining_space) {
+			u8 *data = urb->buffer + urb->actual_length;
 
-				/* The common musb fifo reader */
-				read_fifo(ep, length, data);
+			if (peri_rxcount > remaining_space)
+				peri_rxcount = remaining_space;
 
+			/* The common musb fifo reader.  Use dma
+			 * read if length is a multiple of 16.
+			 * Fallback to pio mode on any failure.
+			 */
+			if ((peri_rxcount & 0xf) ||
+			    (read_fifo_dma(ep, peri_rxcount, data))) {
+				read_fifo(ep, peri_rxcount, data);
 				musb_peri_rx_ack(ep);
-
-				/*
-				 * urb's actual_length is updated in
-				 * usbd_rcv_complete
-				 */
-				usbd_rcv_complete(endpoint, length, urb_bad);
-
-			} else {
-				if (debug_level > 0)
-					serial_printf("ERROR : %s %d no space "
-						      "in rcv buffer\n",
-						      __PRETTY_FUNCTION__, ep);
 			}
+
+			/* urb's actual_length is updated in
+			 * usbd_rcv_complete
+			 */
+			usbd_rcv_complete(endpoint, peri_rxcount, 0);
+
 		} else {
 			if (debug_level > 0)
-				serial_printf("ERROR : %s %d problem with "
-					      "endpoint\n",
+				serial_printf("ERROR : %s %d no space "
+					      "in rcv buffer\n",
 					      __PRETTY_FUNCTION__, ep);
 		}
-
-	} else {
-		if (debug_level > 0)
-			serial_printf("ERROR : %s %d with nothing to do\n",
-				      __PRETTY_FUNCTION__, ep);
-	}
+	} while (readw(&musbr->ep[ep].epN.rxcsr) & MUSB_RXCSR_RXPKTRDY);
 }
 
 static void musb_peri_rx(u16 intr)
@@ -901,8 +979,7 @@ int udc_endpoint_write(struct usb_endpoint_instance *endpoint)
 			else
 				length = remaining_packet;
 
-			data = (u8 *) urb->buffer;
-			data += endpoint->sent;
+			data = (u8 *) urb->buffer + endpoint->sent;
 
 			/* common musb fifo function */
 			write_fifo(ep, length, data);

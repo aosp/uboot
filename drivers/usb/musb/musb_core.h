@@ -145,6 +145,19 @@ struct musb_regs {
 		struct musb_epN_regs epN;
 	} ep[16];
 
+	u8	hsdma_intr;         /* 0x200 */
+	u8	reserved4[3];
+	u16	hsdma_control_1;    /* 0x204 */
+	u16	hsdma_reserved_1_1; /* 0x206 */
+	u32	hsdma_address_1;    /* 0x208 */
+	u32	hsdma_count_1;      /* 0x20C */
+
+	u32	hsdma_reserved2_0;  /* 0x210 */
+	u16	hsdma_control_2;    /* 0x214 */
+	u16	hsdma_reserved2_1;  /* 0x216 */
+	u32	hsdma_address_2;    /* 0x218 */
+	u32	hsdma_count_2;      /* 0x21C */
+
 } __attribute__((packed, aligned(32)));
 #endif
 
@@ -328,6 +341,20 @@ struct musb_regs {
 
 /* HUBADDR */
 #define MUSB_HUBADDR_MULTI_TT		0x80
+
+/* DMA Control */
+#define MUSB_DMA_CNTL_BURST_MODE_0      0x0000
+#define MUSB_DMA_CNTL_BURST_MODE_1      0x0200
+#define MUSB_DMA_CNTL_BURST_MODE_2      0x0400
+#define MUSB_DMA_CNTL_BURST_MODE_3      0x0600
+#define MUSB_DMA_CNTL_ERR		0x0100
+#define MUSB_DMA_CNTL_END_POINT(n)	((n)<<4)
+#define MUSB_DMA_CNTL_INTERRUPT_ENABLE	0x0008
+#define MUSB_DMA_CNTL_MODE_0		0x0000
+#define MUSB_DMA_CNTL_MODE_1		0x0004
+#define MUSB_DMA_CNTL_WRITE		0x0000
+#define MUSB_DMA_CNTL_READ		0x0002
+#define MUSB_DMA_CNTL_ENABLE		0x0001
 
 /* Endpoint configuration information. Note: The value of endpoint fifo size
  * element should be either 8,16,32,64,128,256,512,1024,2048 or 4096. Other
