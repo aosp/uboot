@@ -1650,124 +1650,135 @@ static void fbt_handle_boot(const char *cmdbuf)
 	sprintf(priv.response, "FAILinvalid boot image");
 }
 
-static void fbt_rx_process_download(unsigned char *buffer, int length)
+/* XXX: Replace magic number & strings with macros */
+static int fbt_rx_process(unsigned char *buffer, int length)
 {
-	unsigned int xfr_size;
+	struct usb_endpoint_instance *ep;
+	char *cmdbuf;
+	int clear_cmd_buf;
 
-	if (length == 0) {
-		FBTWARN("empty buffer download\n");
-		return;
-	}
+	if (priv.d_size) {
+		if (length < priv.d_size) {
+			/* don't clear cmd buf because we've replaced it
+			 * with our transfer buffer.  we'll clear it at
+			 * the end of the download.
+			 */
+			return 0;
+		}
 
-	xfr_size = priv.d_size - priv.d_bytes;
-	if (xfr_size > length)
-		xfr_size = length;
-	memcpy(priv.transfer_buffer + priv.d_bytes, buffer, xfr_size);
-	priv.d_bytes += xfr_size;
-
-	if (priv.d_bytes >= priv.d_size) {
+		/* transfer complete */
+		priv.d_bytes = priv.d_size;
 		priv.d_size = 0;
 		strcpy(priv.response, "OKAY");
 		priv.flag |= FASTBOOT_FLAG_RESPONSE;
 
-		FBTINFO("downloaded %llu bytes\n", priv.d_bytes);
-	}
-}
+		/* restore default buffer in urb */
+		ep = &endpoint_instance[RX_EP_INDEX];
+		ep->rcv_urb->buffer = (u8 *)ep->rcv_urb->buffer_data;
+		ep->rcv_urb->buffer_length = sizeof(ep->rcv_urb->buffer_data);
 
-/* XXX: Replace magic number & strings with macros */
-static void fbt_rx_process(unsigned char *buffer, int length)
-{
+		FBTINFO("downloaded %llu bytes\n", priv.d_bytes);
+
+		/* clear the cmd buf from last time */
+		return 1;
+	}
+
+	/* command */
+	cmdbuf = (char *) buffer;
+	clear_cmd_buf = 1;
+
 	/* Generic failed response */
 	strcpy(priv.response, "FAIL");
 
-	if (!priv.d_size) {
-		/* command */
-		char *cmdbuf = (char *) buffer;
+	FBTDBG("command\n");
 
-		FBTDBG("command\n");
+	printf("cmdbuf = (%s)\n", cmdbuf);
+	priv.executing_command = 1;
 
-		printf("cmdbuf = (%s)\n", cmdbuf);
-		priv.executing_command = 1;
-
-		/* %fastboot getvar: <var_name> */
-		if (memcmp(cmdbuf, "getvar:", 7) == 0) {
-			FBTDBG("getvar\n");
-			fbt_handle_getvar(cmdbuf);
-		}
-
-		/* %fastboot oem <cmd> */
-		else if (memcmp(cmdbuf, "oem ", 4) == 0) {
-			FBTDBG("oem\n");
-			fbt_handle_oem(cmdbuf);
-		}
-
-		/* %fastboot erase <partition_name> */
-		else if (memcmp(cmdbuf, "erase:", 6) == 0) {
-			FBTDBG("erase\n");
-			fbt_handle_erase(cmdbuf);
-		}
-
-		/* %fastboot flash:<partition_name> */
-		else if (memcmp(cmdbuf, "flash:", 6) == 0) {
-			FBTDBG("flash\n");
-			fbt_handle_flash(cmdbuf);
-		}
-
-		/* %fastboot reboot
-		 * %fastboot reboot-bootloader
-		 */
-		else if (memcmp(cmdbuf, "reboot", 6) == 0) {
-			FBTDBG("reboot or reboot-bootloader\n");
-			fbt_handle_reboot(cmdbuf);
-			return;
-		}
-
-		/* %fastboot continue */
-		else if (strcmp(cmdbuf, "continue") == 0) {
-			FBTDBG("continue\n");
-			strcpy(priv.response, "OKAY");
-			priv.exit = 1;
-		}
-
-		/* %fastboot boot <kernel> [ <ramdisk> ] */
-		else if (memcmp(cmdbuf, "boot", 4) == 0) {
-			FBTDBG("boot\n");
-			fbt_handle_boot(cmdbuf);
-		}
-
-		/* Sent as part of a '%fastboot flash <partname>' command
-		 * This sends the data over with byte count:
-		 * %download:<num_bytes>
-		 */
-		else if (memcmp(cmdbuf, "download:", 9) == 0) {
-			FBTDBG("download\n");
-
-			/* XXX: need any check for size & bytes ? */
-			priv.d_size =
-				simple_strtoul (cmdbuf + 9, NULL, 16);
-			priv.d_bytes = 0;
-
-			FBTINFO("starting download of %llu bytes\n",
-				priv.d_size);
-
-			if (priv.d_size == 0) {
-				strcpy(priv.response, "FAILdata invalid size");
-			} else if (priv.d_size >
-					priv.transfer_buffer_size) {
-				priv.d_size = 0;
-				strcpy(priv.response, "FAILdata too large");
-			} else {
-				sprintf(priv.response, "DATA%08llx",
-					priv.d_size);
-			}
-		}
-
-		priv.flag |= FASTBOOT_FLAG_RESPONSE;
-		priv.executing_command = 0;
-		return;
+	/* %fastboot getvar: <var_name> */
+	if (memcmp(cmdbuf, "getvar:", 7) == 0) {
+		FBTDBG("getvar\n");
+		fbt_handle_getvar(cmdbuf);
 	}
 
-	fbt_rx_process_download(buffer, length);
+	/* %fastboot oem <cmd> */
+	else if (memcmp(cmdbuf, "oem ", 4) == 0) {
+		FBTDBG("oem\n");
+		fbt_handle_oem(cmdbuf);
+	}
+
+	/* %fastboot erase <partition_name> */
+	else if (memcmp(cmdbuf, "erase:", 6) == 0) {
+		FBTDBG("erase\n");
+		fbt_handle_erase(cmdbuf);
+	}
+
+	/* %fastboot flash:<partition_name> */
+	else if (memcmp(cmdbuf, "flash:", 6) == 0) {
+		FBTDBG("flash\n");
+		fbt_handle_flash(cmdbuf);
+	}
+
+	/* %fastboot reboot
+	 * %fastboot reboot-bootloader
+	 */
+	else if (memcmp(cmdbuf, "reboot", 6) == 0) {
+		FBTDBG("reboot or reboot-bootloader\n");
+		fbt_handle_reboot(cmdbuf);
+	}
+
+	/* %fastboot continue */
+	else if (strcmp(cmdbuf, "continue") == 0) {
+		FBTDBG("continue\n");
+		strcpy(priv.response, "OKAY");
+		priv.exit = 1;
+	}
+
+	/* %fastboot boot <kernel> [ <ramdisk> ] */
+	else if (memcmp(cmdbuf, "boot", 4) == 0) {
+		FBTDBG("boot\n");
+		fbt_handle_boot(cmdbuf);
+	}
+
+	/* Sent as part of a '%fastboot flash <partname>' command
+	 * This sends the data over with byte count:
+	 * %download:<num_bytes>
+	 */
+	else if (memcmp(cmdbuf, "download:", 9) == 0) {
+		FBTDBG("download\n");
+
+		/* XXX: need any check for size & bytes ? */
+		priv.d_size = simple_strtoul (cmdbuf + 9, NULL, 16);
+		priv.d_bytes = 0;
+
+		FBTINFO("starting download of %llu bytes\n", priv.d_size);
+		if (priv.d_size == 0) {
+			strcpy(priv.response, "FAILdata invalid size");
+		} else if (priv.d_size > priv.transfer_buffer_size) {
+			priv.d_size = 0;
+			strcpy(priv.response, "FAILdata too large");
+		} else {
+			sprintf(priv.response, "DATA%08llx", priv.d_size);
+
+			/* as an optimization, replace the builtin
+			 * urb->buffer and urb->buffer_length with our
+			 * own so we don't have to do extra copy.
+			 */
+			ep = &endpoint_instance[RX_EP_INDEX];
+			ep->rcv_urb->buffer = priv.transfer_buffer;
+			ep->rcv_urb->buffer_length = priv.transfer_buffer_size;
+			ep->rcv_urb->actual_length = 0;
+
+			/* don't poison the cmd buffer because
+			 * we've replaced it with our
+			 * transfer buffer for the download.
+			 */
+			clear_cmd_buf = 0;
+		}
+	}
+	priv.flag |= FASTBOOT_FLAG_RESPONSE;
+	priv.executing_command = 0;
+	return clear_cmd_buf;
 }
 
 static void fbt_handle_rx(void)
@@ -1778,14 +1789,19 @@ static void fbt_handle_rx(void)
 		"usbd_rcv_complete" [gadget/core.c] also need to be modified */
 	if (ep->rcv_urb->actual_length) {
 		FBTDBG("rx length: %u\n", ep->rcv_urb->actual_length);
-		fbt_rx_process(ep->rcv_urb->buffer, ep->rcv_urb->actual_length);
-		/* Required to poison rx urb buffer as in omapzoom ?,
-		   yes, as fastboot command are sent w/o NULL termination.
-		   Attempt is made here to reduce poison length, may be safer
-		   to posion the whole buffer, also it is assumed that at
-		   the time of creation of urb it is poisoned */
-		memset(ep->rcv_urb->buffer, 0, ep->rcv_urb->actual_length);
-		ep->rcv_urb->actual_length = 0;
+		if (fbt_rx_process(ep->rcv_urb->buffer,
+				   ep->rcv_urb->actual_length)) {
+			/* Poison the command buffer so there's no confusion
+			 * when we receive the next one.  fastboot commands
+			 * are sent w/o NULL termination so we don't want
+			 * stale data in the buffer.
+			 * Also, it is assumed that at the time of creation of
+			 * urb it is poisoned.
+			*/
+			memset(ep->rcv_urb->buffer, 0, FASTBOOT_COMMAND_SIZE);
+			ep->rcv_urb->actual_length = 0;
+		}
+		fbt_handle_response();
 	}
 }
 
@@ -2030,7 +2046,6 @@ static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
 					priv.unlock_pending_start_time = 0;
 				}
 			}
-			fbt_handle_response();
 		}
 		priv.exit |= ctrlc();
 		if (priv.exit) {

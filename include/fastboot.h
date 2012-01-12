@@ -91,9 +91,19 @@
 #define CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE 2048
 #endif
 
-/* Fastboot bulk packet sizes */
-#define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_HS	512
+/* Fastboot bulk packet sizes.  1024 is faster than 512 when
+ * communicating with Linux hosts, but slower for macbook pro
+ * for some reason.  Since we're mostly dealing with Linux
+ * hosts, we use 1024.
+ */
+#define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_HS	1024
 #define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_FS	64
+
+/* Max size of commands from host to us */
+#define FASTBOOT_COMMAND_SIZE 64
+
+/* Max size of responses from us to host */
+#define FASTBOOT_RESPONSE_SIZE 64
 
 /* Flags */
 #define	FASTBOOT_FLAG_RESPONSE	1
@@ -157,8 +167,8 @@ struct cmd_fastboot_interface {
 	/* Data uploaded so far */
 	u64 u_bytes;
 
-	/* 64 byte response with a NULL following to stop strlen() */
-	char response[64];
+	/* response with a NULL following to stop strlen() */
+	char response[FASTBOOT_RESPONSE_SIZE];
 	char null_term;
 
 	/* Indicate response to be sent, data to be recieved */
