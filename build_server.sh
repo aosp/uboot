@@ -26,8 +26,17 @@ fi
 export ARCH=arm
 export CROSS_COMPILE=arm-eabi-
 
+make clean
 make $BUILD_CONFIG
 make -j $BUILD_JOBS
 mkdir -p $BUILD_OUTPUT
 cp -f $FILES_TO_ARCHIVE $BUILD_OUTPUT
+
+if [ "$BUILD_CONFIG" = "omap4_tungsten_config" ]; then
+make clean
+make MFG=1 $BUILD_CONFIG
+make MFG=1 -j $BUILD_JOBS
+cp -f u-boot.img $BUILD_OUTPUT/factory_u-boot.img
+fi
+
 
