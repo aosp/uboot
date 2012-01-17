@@ -712,13 +712,10 @@ static int read_fifo_dma(unsigned int ep, u32 count, u8 *buf)
 
 	/* hard coded for dma channel 1 for now */
 
-	/* stop any previous transfer */
-	writeb(0, &musbr->hsdma_control_1);
-
 	/* set the address */
-	writel((u32)dma_buffer, &musbr->hsdma_address_1);
+	writel((u32)dma_buffer, &musbr->dma[0].address);
 	/* set the transfer size */
-	writel(count, &musbr->hsdma_count_1);
+	writel(count, &musbr->dma[0].count);
 
 	/* set the control parts.  we already checked that
 	 * the size is a multiple of 16 so we can use
@@ -728,14 +725,14 @@ static int read_fifo_dma(unsigned int ep, u32 count, u8 *buf)
 		       MUSB_DMA_CNTL_END_POINT(ep) |
 		       MUSB_DMA_CNTL_WRITE |
 		       MUSB_DMA_CNTL_ENABLE);
-	writew(dma_control, &musbr->hsdma_control_1);
+	writew(dma_control, &musbr->dma[0].ctrl);
 
 	while (1) {
-		if (readw(&musbr->hsdma_control_1) & MUSB_DMA_CNTL_ERR) {
+		if (readw(&musbr->dma[0].ctrl) & MUSB_DMA_CNTL_ERR) {
 			serial_printf("dma error\n");
 			break;
 		}
-		if (readl(&musbr->hsdma_count_1) == 0) {
+		if (readl(&musbr->dma[0].count) == 0) {
 			rc = 0;
 			break;
 		}
@@ -1071,6 +1068,7 @@ int udc_init(void)
 {
 	int ret;
 	int ep_loop;
+	int dma_channel;
 
 	ret = musb_platform_init();
 	if (ret < 0)
@@ -1085,6 +1083,12 @@ int udc_init(void)
 		epinfo[ep_loop].epdir = ep_loop % 2; /* OUT, IN */
 		epinfo[ep_loop].epsize = 0;
 	}
+
+	/* Clear DMA controllers, especially if any might
+	 * have been usd in earlier stage bootloaders.
+	 */
+	for (dma_channel = 0; dma_channel < 8; dma_channel++)
+		writew(0, &musbr->dma[dma_channel].ctrl);
 
 	ret = 0;
 end:
