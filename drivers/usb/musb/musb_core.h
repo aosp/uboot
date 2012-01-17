@@ -145,18 +145,14 @@ struct musb_regs {
 		struct musb_epN_regs epN;
 	} ep[16];
 
-	u8	hsdma_intr;         /* 0x200 */
-	u8	reserved4[3];
-	u16	hsdma_control_1;    /* 0x204 */
-	u16	hsdma_reserved_1_1; /* 0x206 */
-	u32	hsdma_address_1;    /* 0x208 */
-	u32	hsdma_count_1;      /* 0x20C */
-
-	u32	hsdma_reserved2_0;  /* 0x210 */
-	u16	hsdma_control_2;    /* 0x214 */
-	u16	hsdma_reserved2_1;  /* 0x216 */
-	u32	hsdma_address_2;    /* 0x218 */
-	u32	hsdma_count_2;      /* 0x21C */
+	struct musb_dma_regs {
+		u8	intr;
+		u8	reserved0[3];
+		u16	ctrl;
+		u8	reserved1[2];
+		u32	address;
+		u32	count;
+	} dma[8];
 
 } __attribute__((packed, aligned(32)));
 #endif
