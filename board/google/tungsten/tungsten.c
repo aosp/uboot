@@ -44,13 +44,19 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-#define STEELHEAD_REV_ALPHA   0x0
-#define STEELHEAD_REV_EVT     0x1
-#define STEELHEAD_REV_EVT2    0x2
-#define STEELHEAD_REV_DVT     0x3
-#define STEELHEAD_REV_DVT1_5  0x4
-#define STEELHEAD_REV_DVT2    0x5
-#define STEELHEAD_REV_DVT3    0x6
+enum {
+	STEELHEAD_REV_ALPHA  = 0x0,
+	STEELHEAD_REV_EVT    = 0x1,
+	STEELHEAD_REV_EVT2   = 0x2,
+	STEELHEAD_REV_DVT    = 0x3,
+	STEELHEAD_REV_DVT1_5 = 0x4,
+	STEELHEAD_REV_DVT2   = 0x5,
+	STEELHEAD_REV_DVT3   = 0x6,
+	STEELHEAD_REV_DVT4   = 0x7,
+	STEELHEAD_REV_PVT    = 0x8,
+	STEELHEAD_REV_PROD   = 0x9,
+	STEELHEAD_REV_PROD1  = 0xA,
+};
 
 static const char const *steelhead_hw_name[] = {
 	[STEELHEAD_REV_ALPHA]  = "Steelhead ALPHA",
@@ -60,12 +66,32 @@ static const char const *steelhead_hw_name[] = {
 	[STEELHEAD_REV_DVT1_5] = "Steelhead DVT1.5",
 	[STEELHEAD_REV_DVT2]   = "Steelhead DVT2",
 	[STEELHEAD_REV_DVT3]   = "Steelhead DVT3",
+	[STEELHEAD_REV_DVT4]   = "Steelhead DVT4",
+	[STEELHEAD_REV_PVT]    = "Steelhead PVT",
+	[STEELHEAD_REV_PROD]   = "Steelhead PROD",
+	[STEELHEAD_REV_PROD1]  = "Steelhead PROD1",
 };
 int hwrev_gpios[] = {
 	182, /* board_id_0 */
 	101, /* board_id_1 */
 	171, /* board_id_2 */
 };
+/* We have 3 bits of board-id to track revision.  Older
+ * revisions started to get deprecated and their board-id
+ * values reused, so we use a mapping table to converet
+ * the raw board-id values to the enum values.
+ */
+static const board_id_to_steelhead_rev[8] = {
+	STEELHEAD_REV_PVT,    /* board_id: 0x0 */
+	STEELHEAD_REV_PROD,   /* board_id: 0x1 */
+	STEELHEAD_REV_PROD1,  /* board_id: 0x2 */
+	STEELHEAD_REV_DVT,    /* board_id: 0x3 */
+	STEELHEAD_REV_DVT1_5, /* board_id: 0x4 */
+	STEELHEAD_REV_DVT2,   /* board_id: 0x5 */
+	STEELHEAD_REV_DVT3,   /* board_id: 0x6 */
+	STEELHEAD_REV_DVT4    /* board_id: 0x7 */
+};
+
 int steelhead_hw_rev;
 int avr_detected;
 
@@ -107,24 +133,35 @@ static const char *steelhead_hw_rev_name(void)
 static void init_hw_rev(void)
 {
 	int i;
+	int board_id;
 
 	do_set_mux(CONTROL_PADCONF_CORE, core_padconf_array_non_essential,
 		   sizeof(core_padconf_array_non_essential) /
 		   sizeof(struct pad_conf_entry));
 
-	steelhead_hw_rev = 0;
+	board_id = 0;
 
 	for (i = 0; i < ARRAY_SIZE(hwrev_gpios); i++)
-		steelhead_hw_rev |= gpio_get_value(hwrev_gpios[i]) << i;
+		board_id |= gpio_get_value(hwrev_gpios[i]) << i;
 
 	/* put board_id pins into safe mode to save power */
 	do_set_mux(CONTROL_PADCONF_CORE, core_padconf_array_disable_board_id,
 		   sizeof(core_padconf_array_disable_board_id) /
 		   sizeof(struct pad_conf_entry));
 
-	printf("Steelhead HW revision: %02x (%s)\n", steelhead_hw_rev,
-		steelhead_hw_rev_name());
-
+	/* not absolutely necessary but good in case the size of the
+	   array ever changes */
+	if (board_id < ARRAY_SIZE(board_id_to_steelhead_rev)) {
+		steelhead_hw_rev = board_id_to_steelhead_rev[board_id];
+		printf("HW revision: 0x%x = \"%s\" (board_id 0x%x)\n",
+		       steelhead_hw_rev, steelhead_hw_rev_name(), board_id);
+	} else {
+		/* default to the highest rev we know of */
+		steelhead_hw_rev = STEELHEAD_REV_PROD1;
+		printf("board_id 0x%x invalid, setting steelhead_hw_rev to "
+		       "0x%x = \"%s\"", board_id,
+		       steelhead_hw_rev, steelhead_hw_rev_name());
+	}
 }
 
 /**
@@ -202,20 +239,6 @@ int board_fbt_key_pressed(void)
 	if (!avr_detected) {
 		printf("%s: avr not detected, returning false\n", __func__);
 		return is_pressed;
-	}
-
-	/* if this is older than DVT3, disable mute key in the avr
-	 * because it's unreliable.
-	 */
-	if (steelhead_hw_rev < STEELHEAD_REV_DVT3) {
-		avr_set_mute_threshold(0);
-		/* flush key buffer */
-		while (1) {
-			if (avr_get_key(&key_code))
-				break;
-			if (key_code == AVR_KEY_EVENT_EMPTY)
-				break;
-		}
 	}
 
 	/* check for the mute key to be pressed as an indicator
