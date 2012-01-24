@@ -1510,10 +1510,10 @@ static void fbt_handle_oem(char *cmdbuf)
 			return;
 		}
 		printf("oem unlock requested:\n");
-		printf("\tUnlocking your device will invalidate\n");
-		printf("\tyour warranty and wipe user data.\n");
-		printf("\tDo 'fastboot oem unlock_accept' to accept\n");
-		printf("\tthese conditions within %d seconds.\n",
+		printf("\tUnlocking forces a factory reset and could\n");
+		printf("\topen your device up to a world of hurt.  If you\n");
+		printf("\tare sure you know what you're doing, then accept\n");
+		printf("\tin %d seconds via 'fastboot oem unlock_accept'.\n",
 		       FASTBOOT_UNLOCK_TIMEOUT_SECS);
 		priv.unlock_pending_start_time = get_timer(0);
 		strcpy(priv.response, "OKAY");
@@ -1652,6 +1652,8 @@ static void fbt_handle_boot(const char *cmdbuf)
 		struct fastboot_boot_img_hdr *fb_hdr =
 			(struct fastboot_boot_img_hdr *) priv.transfer_buffer;
 
+		board_fbt_end();
+
 		sprintf(start, "%p", fb_hdr);
 
 		/* Execution should jump to kernel so send the response
@@ -1669,6 +1671,7 @@ static void fbt_handle_boot(const char *cmdbuf)
 		do_go(NULL, 0, ARRAY_SIZE(go), go);
 
 		FBTERR("booting failed, reset the board\n");
+		board_fbt_start();
 	}
 	sprintf(priv.response, "FAILinvalid boot image");
 }
@@ -1872,6 +1875,8 @@ static void fbt_clear_recovery_flag(void)
 
 static void fbt_run_recovery(int do_saveenv)
 {
+	board_fbt_end();
+
 	/* to make recovery (which processes OTAs) more failsafe,
 	 * we save the fact that we were asked to boot into
 	 * recovery.  if power is pulled and then restored, we
@@ -1889,6 +1894,7 @@ static void fbt_run_recovery(int do_saveenv)
 	do_booti(NULL, 0, ARRAY_SIZE(boot_recovery_cmd), boot_recovery_cmd);
 
 	/* returns if recovery.img is bad */
+	board_fbt_start();
 	printf("\nfastboot: Error: Invalid recovery img\n");
 
 	/* Always clear so we don't wind up rebooting again into
