@@ -90,12 +90,8 @@
 #define CONFIG_FASTBOOT_MKBOOTIMAGE_PAGE_SIZE 2048
 #endif
 
-/* Fastboot bulk packet sizes.  1024 is faster than 512 when
- * communicating with Linux hosts, but slower for macbook pro
- * for some reason.  Since we're mostly dealing with Linux
- * hosts, we use 1024.
- */
-#define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_HS	1024
+/* Fastboot bulk packet sizes */
+#define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_HS	512
 #define	CONFIG_USBD_FASTBOOT_BULK_PKTSIZE_FS	64
 
 /* Max size of commands from host to us */
