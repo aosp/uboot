@@ -679,6 +679,104 @@ static void musb_peri_ep0(void)
 		musb_peri_ep0_rx();
 }
 
+#ifdef CONFIG_MUSB_DMA_MODE1
+static int read_fifo_dma_mode1(unsigned int ep, u32 count, u8 *buf)
+{
+	int rc = -1;
+	u16 peri_rxcsr;
+	u16 dma_control;
+	u16 peri_rxcount;
+
+	/* for large transfers, where speed matters most, it's
+	 * more efficient to flush the entire dcache using
+	 * flush_dcache_all() rather than using flush_dcache_range()
+	 */
+	flush_dcache_all();
+
+	peri_rxcsr = readw(&musbr->ep[ep].epN.rxcsr);
+	peri_rxcsr |= (MUSB_RXCSR_AUTOCLEAR | MUSB_RXCSR_DMAENAB);
+	writew(peri_rxcsr, &musbr->ep[ep].epN.rxcsr);
+	/* special sequence required to get dma started, from Linux driver */
+	peri_rxcsr |= MUSB_RXCSR_DMAMODE;
+	writew(peri_rxcsr, &musbr->ep[ep].epN.rxcsr);
+	peri_rxcsr |= MUSB_RXCSR_DMAENAB;
+	writew(peri_rxcsr, &musbr->ep[ep].epN.rxcsr);
+
+	/* hard coded for dma channel 1 for now */
+
+	/* set the address */
+	writel((u32)buf, &musbr->dma[0].address);
+	/* set the transfer size */
+	writel(count, &musbr->dma[0].count);
+
+	/* set the control parts.  we already checked that
+	 * the size is a multiple of 16 so we can use
+	 * burst mode of 16 bytes.
+	 */
+	dma_control = (MUSB_DMA_CNTL_BURST_MODE_3 |
+		       MUSB_DMA_CNTL_END_POINT(ep) |
+		       MUSB_DMA_CNTL_MODE_1 |
+		       MUSB_DMA_CNTL_WRITE |
+		       MUSB_DMA_CNTL_ENABLE);
+	writew(dma_control, &musbr->dma[0].ctrl);
+
+	while (1) {
+		if (readw(&musbr->dma[0].ctrl) & MUSB_DMA_CNTL_ERR) {
+			serial_printf("dma error\n");
+			break;
+		}
+		if (readl(&musbr->dma[0].count) < epinfo[(ep - 1) * 2].epsize) {
+			rc = 0;
+			break;
+		}
+	}
+
+	/* handle last short packet, if any, using dma mode 0 */
+	if (rc) {
+		goto out;
+	}
+
+	if (readl(&musbr->dma[0].count)) {
+		/* reset for mode0 */
+		peri_rxcsr = readw(&musbr->ep[ep].epN.rxcsr);
+		peri_rxcsr &= ~(MUSB_RXCSR_AUTOCLEAR | MUSB_RXCSR_DMAMODE);
+		writew(peri_rxcsr, &musbr->ep[ep].epN.rxcsr);
+
+		/* first read of rxcount may not be right */
+		while (1) {
+			peri_rxcount = readw(&musbr->ep[ep].epN.rxcount);
+			if (peri_rxcount == readl(&musbr->dma[0].count)) {
+				break;
+			}
+		}
+
+		dma_control = (MUSB_DMA_CNTL_BURST_MODE_3 |
+			       MUSB_DMA_CNTL_END_POINT(ep) |
+			       MUSB_DMA_CNTL_WRITE |
+			       MUSB_DMA_CNTL_ENABLE);
+		writew(dma_control, &musbr->dma[0].ctrl);
+
+		while (1) {
+			if (readw(&musbr->dma[0].ctrl) & MUSB_DMA_CNTL_ERR) {
+				serial_printf("dma error\n");
+				rc = -1;
+				break;
+			}
+			if (readl(&musbr->dma[0].count) == 0) {
+				break;
+			}
+		}
+	}
+out:
+	/* clear DMAENAB and do the rx_ack */
+	peri_rxcsr &= ~(MUSB_RXCSR_AUTOCLEAR | MUSB_RXCSR_DMAENAB |
+			MUSB_RXCSR_DMAMODE | MUSB_RXCSR_RXPKTRDY);
+	writew(peri_rxcsr, &musbr->ep[ep].epN.rxcsr);
+	writew(0, &musbr->dma[0].ctrl);
+	return rc;
+}
+#endif
+
 /* to make compatiblity easier, we dma to a fixed buffer and
  * memcpy it out.  otherwise, the buffer we're given might not
  * be cache aligned.  buffer must be word aligned, but we make
@@ -738,7 +836,7 @@ static int read_fifo_dma(unsigned int ep, u32 count, u8 *buf)
 		}
 	}
 
-	/* clear DMAENAB and DMAMODE and do the rx_ack */
+	/* clear DMAENAB and do the rx_ack */
 	peri_rxcsr &= ~(MUSB_RXCSR_AUTOCLEAR | MUSB_RXCSR_DMAENAB |
 			MUSB_RXCSR_RXPKTRDY);
 	writew(peri_rxcsr, &musbr->ep[ep].epN.rxcsr);
@@ -776,6 +874,22 @@ static void musb_peri_rx_ep(unsigned int ep)
 
 	}
 
+#ifdef CONFIG_MUSB_DMA_MODE1
+	/* we use mode1 only if the buffer address satisfies the
+	 * alignment requirements for DMA, and is not the
+	 * default size (that's our hint that it's been
+	 * set to be the length of the actual transfer)
+	 */
+	if ((urb->buffer_length != sizeof(urb->buffer_data)) &&
+	    (((unsigned)urb->buffer & 0x3) == 0)) {
+		if (!read_fifo_dma_mode1(ep, urb->buffer_length, urb->buffer)) {
+			/* update actual_length to indicate success */
+			urb->actual_length = urb->buffer_length;
+		}
+		/* any error is not generally recoverable so we just return */
+		return;
+	}
+#endif
 	do {
 		u16 peri_rxcount = readw(&musbr->ep[ep].epN.rxcount);
 		unsigned int remaining_space;
