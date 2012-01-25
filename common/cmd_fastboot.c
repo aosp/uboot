@@ -1792,7 +1792,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 			 */
 			ep = &endpoint_instance[RX_EP_INDEX];
 			ep->rcv_urb->buffer = priv.transfer_buffer;
-			ep->rcv_urb->buffer_length = priv.transfer_buffer_size;
+			ep->rcv_urb->buffer_length = priv.d_size;
 			ep->rcv_urb->actual_length = 0;
 
 			/* don't poison the cmd buffer because
