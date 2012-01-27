@@ -234,11 +234,32 @@ int board_fbt_key_pressed(void)
 {
 	int is_pressed = 0;
 	u8 key_code;
+	unsigned long start_time = get_timer(0);
 
+#define DETECT_AVR_DELAY_MSEC 2000 /* 2 seconds */
+
+	/* If we power up with USB cable connected, the ROM bootloader
+	 * delays the OMAP boot long enough (as it checks for peripheral
+	 * boot) that the AVR will be ready at this point for us to
+	 * query.  If we power up with no USB cable, we will most likely
+	 * be here before the AVR is ready.  If we don't detect
+	 * the AVR right away, sleep a few seconds and try again.
+	 * We don't just poll until the AVR can respond because even
+	 * after we detect the AVR, it might not quite be ready to
+	 * do key detection so need to wait a bit more.
+	 */
 	avr_detected = !detect_avr();
 	if (!avr_detected) {
-		printf("%s: avr not detected, returning false\n", __func__);
-		return is_pressed;
+		printf("\tavr not detected\n");
+		printf("\tdelaying %d milliseconds until we try again\n",
+			DETECT_AVR_DELAY_MSEC);
+		while((get_timer(0) - start_time) < DETECT_AVR_DELAY_MSEC)
+			; /* spin on purpose */
+		avr_detected = !detect_avr();
+	}
+	if (!avr_detected) {
+		printf("%s: avr not detected, returning true\n", __func__);
+		return 1;
 	}
 
 	/* check for the mute key to be pressed as an indicator
