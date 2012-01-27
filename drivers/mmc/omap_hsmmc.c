@@ -32,12 +32,25 @@
 #include <asm/arch/mmc_host_def.h>
 #include <asm/arch/sys_proto.h>
 
+
+#ifdef CONFIG_SPL_BUILD
+# undef CONFIG_OMAP_MMC_USE_DMA_WRITES
+#endif
+
+#ifdef CONFIG_OMAP_MMC_USE_DMA_WRITES
+# include <asm/omap_sdma.h>
+#endif
+
 /* If we fail after 1 second wait, something is really bad */
 #define MAX_RETRY_MS	1000
 
 static int mmc_read_data(hsmmc_t *mmc_base, char *buf, unsigned int size);
-static int mmc_write_data(hsmmc_t *mmc_base, const char *buf, unsigned int siz);
-static struct mmc hsmmc_dev[2];
+static int mmc_write_data(hsmmc_t *mmc_base, const char *buf, unsigned int size);
+#ifdef CONFIG_OMAP_MMC_USE_DMA_WRITES
+static void mmc_dma_start(struct mmc* mmc, hsmmc_t *mmc_base, const char *buf, unsigned int blkSiz, unsigned int numBlk, int write);
+static int mmc_dma_wait_for_transfer_complete(struct mmc* mmc, hsmmc_t *mmc_base, const char *buf, unsigned int blkSiz, unsigned int numBlk);
+#endif
+static struct mmc hsmmc_dev[3];
 unsigned char mmc_board_init(struct mmc *mmc)
 {
 #if defined(CONFIG_TWL4030_POWER)
@@ -222,6 +235,7 @@ static int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 	hsmmc_t *mmc_base = (hsmmc_t *)mmc->priv;
 	unsigned int flags, mmc_stat;
 	ulong start;
+	int canUseDma = 1;
 
 	start = get_timer(0);
 	while ((readl(&mmc_base->pstate) & DATI_MASK) == DATI_CMDDIS) {
@@ -296,6 +310,22 @@ static int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 			flags |= (DP_DATA | DDIR_READ);
 		else
 			flags |= (DP_DATA | DDIR_WRITE);
+
+#ifdef CONFIG_OMAP_MMC_USE_DMA_WRITES
+		if (data->flags & MMC_DATA_WRITE) {
+
+			if ((((unsigned)data->src) & 3) || (((unsigned)data->blocksize) & 3)) {
+				canUseDma = 0;
+			} else {
+				flags = (flags &~ DE_DISABLE) | DE_ENABLE;
+
+				mmc_dma_start(mmc, mmc_base, data->src,
+						data->blocksize, data->blocks, 1);
+			}
+		}
+#else
+		canUseDma = 0;
+#endif
 	}
 
 	writel(cmd->cmdarg, &mmc_base->arg);
@@ -334,8 +364,16 @@ static int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 		mmc_read_data(mmc_base,	data->dest,
 				data->blocksize * data->blocks);
 	} else if (data && (data->flags & MMC_DATA_WRITE)) {
-		mmc_write_data(mmc_base, data->src,
-				data->blocksize * data->blocks);
+	
+		if (canUseDma) {
+#ifdef CONFIG_OMAP_MMC_USE_DMA_WRITES
+			return mmc_dma_wait_for_transfer_complete(mmc, mmc_base, data->src,
+					data->blocksize, data->blocks);
+#endif
+		} else {
+			return mmc_write_data(mmc_base, data->src,
+					data->blocksize * data->blocks);
+		}
 	}
 
 	/* if this is an erase, wait for it to complete.
@@ -420,7 +458,7 @@ static int mmc_write_data(hsmmc_t *mmc_base, const char *buf, unsigned int size)
 	unsigned int count;
 
 	/*
-	 * Start Polled Read
+	 * Start Polled Write
 	 */
 	count = (size > MMCSD_SECTOR_SIZE) ? MMCSD_SECTOR_SIZE : size;
 	count /= 4;
@@ -463,6 +501,129 @@ static int mmc_write_data(hsmmc_t *mmc_base, const char *buf, unsigned int size)
 	}
 	return 0;
 }
+
+#ifdef CONFIG_OMAP_MMC_USE_DMA_WRITES
+static void mmc_dma_start(struct mmc* mmc, hsmmc_t *mmc_base, const char *buf, unsigned int blkSiz, unsigned int numBlk, int write)
+{
+	/*
+	We would love to use ADMA here, since it is simpler to program,and faster,
+	BUT in interest of compatibility with OMAP 36xx, we cannot, since it lacks
+	such a feature. Additionally not all SDMMC controllers on OMAP44xx have
+	ADMA ability, while all controllers on OMAP36xx and OMAP44xx have sDMA
+	abilities. This forces us to write an sDMA driver. Writing a complete
+	driver, with full consideration for all possible options is most
+	definitely beyound the scope an SDMMC driver. So what folows is a very
+	very simple hard-coded mini-driver for OMAP's sDMA, which is functional
+	enough to allow us SDMMC transfers and no more than that. **If any other
+	part of uboot, at any point in time, decides that it will use sDMA too,
+	we'll probably have a conflict, and a better resolution will be needed**
+	(like a real driver).
+	*/
+
+	omap_sdma* sdma = OMAP_SDMA;
+	omap_sdma_channel* chan = sdma->channels + OMAP_DMA_CHANNEL_NUM;
+	unsigned i, dmaReqNum;
+	unsigned long csdp, ccr;
+
+	/* for large areas flushing the entire cache is likely faster */
+	if(numBlk > 128){
+		flush_dcache_all();
+	} else {
+		flush_cache((unsigned long)buf, blkSiz * numBlk);
+	}
+
+	/*  figure out what our controller and dma request num are */
+	switch (mmc - hsmmc_dev) {
+
+		default:
+		case 0:
+			dmaReqNum = write ? SDMA_REQ_MMC1_TX : SDMA_REQ_MMC1_RX;
+			break;
+
+		case 1:
+			dmaReqNum = write ? SDMA_REQ_MMC2_TX : SDMA_REQ_MMC2_RX;
+			break;
+
+		case 2:
+			dmaReqNum = write ? SDMA_REQ_MMC3_TX : SDMA_REQ_MMC3_RX;
+			break;
+	}
+	dmaReqNum += SDMA_REQ_NUM_OFFSET;
+
+
+	/*
+		clear interrupt statuses for our channel and mask them.
+		Why? Docs say we must clear these before enabling a channel.
+	*/
+	for (i = 0; i < 4; i++) {
+
+		writel(readl(&sdma->irqstatus[i]) | (1UL << OMAP_DMA_CHANNEL_NUM), &sdma->irqstatus[i]);
+	}
+
+	writel(SYSCONFIG_MIDLEMODE_NO_STBY | SYSCONFIG_SIDLEMODE_NO_IDLE | SYSCONFIG_AUTOIDLE_NONE, &sdma->ocpsysconfig);
+
+	/* configure the dma engine */
+	csdp = CSDP_SRC_LE | CSDP_SRC_ENDIAN_LOCK | CSDP_DST_LE | CSDP_DST_ENDIAN_LOCK | CSDP_DATA_TYPE_4B;
+	ccr = CCR_ENABLE | CCR_FIELDSYNC_FRAME | DMA_REQ_NUM_TO_CCR_VAL(dmaReqNum);
+	if (write) {
+		csdp |= CSDP_WRITE_POSTED_ALL | CSDP_SRC_BURST_64B | CSDP_DST_BURST_NONE;
+		writel((unsigned long)buf, &chan->cssa);
+		writel((unsigned long)&mmc_base->data, &chan->cdsa);
+		ccr |= CCR_DST_SYNC | CCR_DST_AMODE_CONST_ADDR | CCR_SRC_AMODE_POSTINCR;
+	} else {
+
+		csdp |= CSDP_WRITE_POSTED_ALL_BUT_LAST | CSDP_SRC_BURST_NONE  | CSDP_DST_BURST_64B;
+		writel((unsigned long)&mmc_base->data, &chan->cssa);
+		writel((unsigned long)buf, &chan->cdsa);
+		ccr |= CCR_SRC_AMODE_CONST_ADDR | CCR_DST_AMODE_POSTINCR;
+	}
+	writel(0, &chan->ccr);
+	writel(0, &chan->cicr);
+	writel(0xFFFFFFFF, &chan->csr);
+	writel(csdp, &chan->csdp);
+	writel(blkSiz >> 2, &chan->cen);
+	writel(numBlk, &chan->cfn);
+	writel(CDP_TRANSFER_MODE_NORMAL, &chan->cdp);
+	writel(ccr, &chan->ccr);
+}
+
+static int mmc_dma_wait_for_transfer_complete(struct mmc* mmc, hsmmc_t *mmc_base, const char *buf, unsigned int blkSiz, unsigned int numBlk)
+{
+	omap_sdma* sdma = OMAP_SDMA;
+	omap_sdma_channel* chan = sdma->channels + OMAP_DMA_CHANNEL_NUM;
+	unsigned mmc_stat;
+	ulong start;
+	int ret = 0;
+
+	start = get_timer(0);
+	while(1) {
+		mmc_stat = readl(&mmc_base->stat);
+
+		if (get_timer(0) - start > 10 * MAX_RETRY_MS) {
+			printf("%s: timed out waiting for status!\n",
+					__func__);
+			ret = TIMEOUT;
+			break;
+		}
+
+		if ((mmc_stat & ERRI_MASK) != 0) {
+
+			printf("%s: mmc error status reported!\n",
+					__func__);
+			ret = 1;
+			break;
+		}
+
+		if (mmc_stat & TC_MASK) {
+			writel(mmc_stat | TC_MASK, &mmc_base->stat);
+			break;
+		}
+	}
+
+	writel(0, &chan->ccr);
+	return ret;
+}
+#endif
 
 static void mmc_set_ios(struct mmc *mmc)
 {

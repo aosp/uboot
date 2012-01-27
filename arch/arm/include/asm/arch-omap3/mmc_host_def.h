@@ -25,6 +25,15 @@
 #ifndef MMC_HOST_DEF_H
 #define MMC_HOST_DEF_H
 
+#define OMAP_SDMA_BASE			0x48056000
+/*
+ Since we're currently the only user of sDMA in uboot,
+ we have our pick of channels. We choose channel 0 and
+ hardcode it here. If, in the future, other parts of
+ uboot want to use sDMA, a better solution will be needed.
+*/
+#define OMAP_DMA_CHANNEL_NUM		0
+
 /* T2 Register definitions */
 #define T2_BASE			0x48002000
 
@@ -100,6 +109,7 @@ typedef struct hsmmc {
 #define CTPL_MMC_SD 			(0x0 << 11)
 #define BLEN_512BYTESLEN		(0x200 << 0)
 #define NBLK_STPCNT			(0x0 << 16)
+#define DE_ENABLE			(0x1 << 0)
 #define DE_DISABLE			(0x0 << 0)
 #define BCE_DISABLE			(0x0 << 1)
 #define BCE_ENABLE			(0x1 << 1)
