@@ -223,8 +223,8 @@ int board_mmc_init(bd_t *bis)
 }
 #endif
 
-static const struct avr_led_rgb_vals green = {
-	.rgb[0] = 0, .rgb[1] = 50, .rgb[2] = 0
+static const struct avr_led_rgb_vals red = {
+	.rgb[0] = 128, .rgb[1] = 0, .rgb[2] = 0
 };
 static const struct avr_led_rgb_vals black = {
 	.rgb[0] = 0, .rgb[1] = 0, .rgb[2] = 0
@@ -262,6 +262,12 @@ int board_fbt_key_pressed(void)
 		return 1;
 	}
 
+	/* If we got here from a warm reset, AVR could be in some
+	 * other state than host mode so just make sure it is
+	 * in host mode.
+	 */
+	avr_led_set_mode(AVR_LED_MODE_HOST_AUTO_COMMIT);
+
 	/* check for the mute key to be pressed as an indicator
 	 * to enter fastboot mode in preboot mode.  since the
 	 * AVR sends an initial boot indication key, we have to
@@ -278,9 +284,8 @@ int board_fbt_key_pressed(void)
 		if (key_code == AVR_KEY_EVENT_EMPTY)
 			break;
 		if (key_code == (AVR_KEY_MUTE | AVR_KEY_EVENT_DOWN)) {
-			avr_led_set_mode(AVR_LED_MODE_HOST_AUTO_COMMIT);
-			avr_led_set_all(&green);
-			avr_led_set_mute(&black);
+			avr_led_set_all(&red);
+			avr_led_set_mute(&red);
 			is_pressed = 1;
 			key_pressed_start_time = get_timer(0);
 			/* don't wait for key release */
@@ -288,14 +293,12 @@ int board_fbt_key_pressed(void)
 		}
 	}
 
-	/* On a cold boot, the AVR boots up into a boot animation
-	 * state automatically.  However, during a OMAP warm reset, the
-	 * AVR isn't notified of the reset so we need to make sure
-	 * the AVR is in boot animation state.  Alternatively, we could
-	 * toggle the gpio reset pin.
-	 */
-	if (!is_pressed)
-		avr_led_set_mode(AVR_LED_MODE_BOOT_ANIMATION);
+	/* All black to indicate we've made our decision to boot. */
+	if (!is_pressed) {
+		serial_printf("\tsetting to black\n");
+		avr_led_set_all(&black);
+		avr_led_set_mute(&black);
+	}
 
 	printf("Returning key pressed %s\n", is_pressed ? "true" : "false");
 	return is_pressed;
@@ -331,7 +334,7 @@ enum fbt_reboot_type board_fbt_key_command(void)
 			printf("%s: mute key released within %lu ms\n",
 			       __func__, last_time - key_pressed_start_time);
 			key_pressed_start_time = 0;
-			avr_led_set_all(&green);
+			avr_led_set_all(&red);
 		} else if (key_pressed_start_time) {
 			unsigned long time_down;
 			time_down = last_time - key_pressed_start_time;
@@ -344,10 +347,10 @@ enum fbt_reboot_type board_fbt_key_command(void)
 			}
 			printf("%s: mute key still down after %lu ms\n",
 			       __func__, time_down);
-			/* toggle led ring green and black while down
+			/* toggle led ring red and black while down
 			   to give user some feedback */
 			if ((time_down / KEY_CHECK_POLLING_INTERVAL_MS) & 1)
-				avr_led_set_all(&green);
+				avr_led_set_all(&red);
 			else
 				avr_led_set_all(&black);
 		}
@@ -357,21 +360,20 @@ enum fbt_reboot_type board_fbt_key_command(void)
 
 void board_fbt_start(void)
 {
-	/* get avr out of boot animation because it consumes a lot of power
-	 * and can overheat the device if we're in fastboot mode because
-	 * there is no smartreflex code in the bootloader.
+	/* in case we entered fastboot by request from ADB or other
+	 * means that we couldn't detect in board_fbt_key_command(),
+	 * make sure the LEDs are set to red to indicate fastboot mode
 	 */
-	if (detect_avr() == 0) {
-		avr_led_set_mode(AVR_LED_MODE_HOST_AUTO_COMMIT);
-		avr_led_set_mute(&green);
-		avr_led_set_all(&green);
+	if (avr_detected) {
+		avr_led_set_mute(&red);
+		avr_led_set_all(&red);
 	}
 }
 
 void board_fbt_end(void)
 {
 	if (avr_detected) {
-		/* to match spec, put avr back into boot animation mode. */
+		/* to match spec, put avr into boot animation mode. */
 		avr_led_set_mode(AVR_LED_MODE_BOOT_ANIMATION);
 	}
 }
@@ -476,6 +478,11 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
 		 bgap_threshold_t_hot, bgap_threshold_t_cold);
 
 	args[buf_sz-1] = 0;
+
+	/* this is called just before booting normal image.  we
+	 * use opportunity to start boot animation.
+	 */
+	board_fbt_end();
 }
 
 struct TOC_entry {
