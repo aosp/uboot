@@ -258,8 +258,17 @@ int board_fbt_key_pressed(void)
 		avr_detected = !detect_avr();
 	}
 	if (!avr_detected) {
-		printf("%s: avr not detected, returning true\n", __func__);
-		return 1;
+		/* This might happen if avr_updater got interrupted
+		 * while an avr firmware update was in progress.
+		 * It's better to allow regular booting instead of
+		 * stopping in fastboot mode because the OS might
+		 * be able to recovery it by doing the update again.
+		 * It's also not good to stop in fastboot because we
+		 * can't use the LEDs to indicate to the user we're
+		 * in this state.
+		 */
+		printf("%s: avr not detected, returning false\n", __func__);
+		return 0;
 	}
 
 	/* If we got here from a warm reset, AVR could be in some
