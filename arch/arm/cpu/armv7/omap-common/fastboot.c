@@ -260,6 +260,9 @@ void board_fbt_set_reboot_type(enum fbt_reboot_type frt)
 	case FASTBOOT_REBOOT_RECOVERY:
 	  strcpy((char*)FASTBOOT_REBOOT_PARAMETER_ADDR, "recovery");
 	  break;
+	case FASTBOOT_REBOOT_RECOVERY_WIPE_DATA:
+	  strcpy((char*)FASTBOOT_REBOOT_PARAMETER_ADDR, "recovery:wipe_data");
+	  break;
 	default:
 	  writel(0, (void*)FASTBOOT_REBOOT_PARAMETER_ADDR);
 	  printf("unknown reboot type %d\n", frt);
@@ -270,13 +273,14 @@ void board_fbt_set_reboot_type(enum fbt_reboot_type frt)
 enum fbt_reboot_type board_fbt_get_reboot_type(void)
 {
 	enum fbt_reboot_type frt = FASTBOOT_REBOOT_UNKNOWN;
-	if (!strcmp((const char*)FASTBOOT_REBOOT_PARAMETER_ADDR, "recovery")) {
+	const char *sar_free_p = (const char*)FASTBOOT_REBOOT_PARAMETER_ADDR;
+	if (!strcmp(sar_free_p, "recovery")) {
 		frt = FASTBOOT_REBOOT_RECOVERY;
-	} else if (!strcmp((const char*)FASTBOOT_REBOOT_PARAMETER_ADDR,
-			   "bootloader")) {
+	} else if (!strcmp(sar_free_p, "recovery:wipe_data")) {
+		frt = FASTBOOT_REBOOT_RECOVERY_WIPE_DATA;
+	} else if (!strcmp(sar_free_p, "bootloader")) {
 		frt = FASTBOOT_REBOOT_BOOTLOADER;
-	} else if (!strcmp((const char*)FASTBOOT_REBOOT_PARAMETER_ADDR,
-			   "normal")) {
+	} else if (!strcmp(sar_free_p, "normal")) {
 		frt = FASTBOOT_REBOOT_NORMAL;
 	}
 

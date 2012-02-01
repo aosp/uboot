@@ -206,7 +206,7 @@ struct _fbt_config_desc {
 
 static void fbt_handle_response(void);
 static disk_partition_t *fastboot_flash_find_ptn(const char *name);
-static void fbt_set_recovery_bootloader_message_args(const char *command);
+static void fbt_run_recovery_wipe_data(void);
 static void fbt_run_recovery(int do_saveenv);
 
 /* defined and used by gadget/ep0.c */
@@ -778,6 +778,13 @@ static void fbt_fastboot_init(void)
 	else
 		printf("Device is locked\n");
 
+	priv.dev_desc = get_dev_by_name(FASTBOOT_BLKDEV);
+	if (!priv.dev_desc) {
+		FBTERR("%s: fastboot device %s not found\n",
+						__func__, FASTBOOT_BLKDEV);
+		return;
+	}
+
 	/*
 	 * We need to be able to run fastboot even if there isn't a partition
 	 * table (so we can use "oem format") and fbt_load_partition_table
@@ -1019,22 +1026,26 @@ static int fbt_save_info(disk_partition_t *info_ptn)
 	return 0;
 }
 
-static void fbt_handle_flash(char *cmdbuf)
+static void fbt_handle_flash(char *cmdbuf, int check_unlock)
 {
 	disk_partition_t *ptn;
 
-	if (!priv.unlocked) {
+	if (check_unlock && !priv.unlocked) {
+		printf("%s: failed, device is locked\n", __func__);
 		sprintf(priv.response, "FAILdevice is locked");
 		return;
 	}
 
 	if (!priv.d_bytes) {
+		printf("%s: failed, no image downloaded\n", __func__);
 		sprintf(priv.response, "FAILno image downloaded");
 		return;
 	}
 
 	ptn = fastboot_flash_find_ptn(cmdbuf + 6);
 	if (ptn == 0) {
+		printf("%s: failed, partition %s does not exist\n",
+		       __func__, cmdbuf + 6);
 		sprintf(priv.response, "FAILpartition does not exist");
 		return;
 	}
@@ -1048,11 +1059,16 @@ static void fbt_handle_flash(char *cmdbuf)
 		/* error case, return.  expect priv.response to be
 		 * set by the board specific handler.
 		 */
+		printf("%s: failed, board_fbt_handle_flash() error\n",
+		       __func__);
 		return;
 	}
 
 	/* Prevent using flash command to write to device_info partition */
 	if (is_info_partition(ptn)) {
+		printf("%s: failed, partition not writable"
+		       " using flash command\n",
+		       __func__);
 		sprintf(priv.response,
 			"FAILpartition not writable using flash command");
 		return;
@@ -1333,6 +1349,10 @@ static void fbt_handle_reboot(const char *cmdbuf)
 		FBTDBG("%s\n", cmdbuf);
 		board_fbt_set_reboot_type(FASTBOOT_REBOOT_RECOVERY);
 	}
+	if (!strcmp(&cmdbuf[6], "-recovery:wipe_data")) {
+		FBTDBG("%s\n", cmdbuf);
+		board_fbt_set_reboot_type(FASTBOOT_REBOOT_RECOVERY_WIPE_DATA);
+	}
 
 	strcpy(priv.response, "OKAY");
 	priv.flag |= FASTBOOT_FLAG_RESPONSE;
@@ -1501,6 +1521,13 @@ static void fbt_handle_oem(char *cmdbuf)
 		return;
 	}
 
+	/* %fastboot oem recovery:wipe_data */
+	if (strcmp(cmdbuf, "recovery:wipe_data") == 0) {
+		FBTDBG("oem recovery:wipe_data\n");
+		fbt_handle_reboot("reboot-recovery:wipe_data");
+		return;
+	}
+
 	/* %fastboot oem unlock */
 	if (strcmp(cmdbuf, "unlock") == 0) {
 		FBTDBG("oem unlock\n");
@@ -1547,9 +1574,7 @@ static void fbt_handle_oem(char *cmdbuf)
 		/* now reboot into recovery to do a format of the
 		 * userdata partition so it's ready to use on next boot
 		 */
-		printf("Rebooting into recovery to do factory data wipe\n");
-		fbt_set_recovery_bootloader_message_args("recovery\n--wipe_data");
-		fbt_run_recovery(1);
+		fbt_run_recovery_wipe_data();
 		return;
 	}
 
@@ -1742,7 +1767,7 @@ static int fbt_rx_process(unsigned char *buffer, int length)
 	/* %fastboot flash:<partition_name> */
 	else if (memcmp(cmdbuf, "flash:", 6) == 0) {
 		FBTDBG("flash\n");
-		fbt_handle_flash(cmdbuf);
+		fbt_handle_flash(cmdbuf, 1);
 	}
 
 	/* %fastboot reboot
@@ -1867,10 +1892,12 @@ static void fbt_handle_response(void)
 
 static void fbt_clear_recovery_flag(void)
 {
-	setenv(FASTBOOT_RUN_RECOVERY_ENV_NAME, NULL);
+	if (getenv(FASTBOOT_RUN_RECOVERY_ENV_NAME)) {
+		setenv(FASTBOOT_RUN_RECOVERY_ENV_NAME, NULL);
 #if defined(CONFIG_CMD_SAVEENV)
-	saveenv();
+		saveenv();
 #endif
+	}
 }
 
 static void fbt_run_recovery(int do_saveenv)
@@ -1909,18 +1936,24 @@ struct bootloader_message {
 	char recovery[1024];
 };
 
-static void fbt_set_recovery_bootloader_message_args(const char *command)
+static void fbt_run_recovery_wipe_data(void)
 {
 	struct bootloader_message *bmsg;
 
+	printf("Rebooting into recovery to do wipe_data\n");
+
 	bmsg = (struct bootloader_message*)priv.transfer_buffer;
+	memset(bmsg, 0, sizeof(*bmsg));
 	bmsg->command[0] = 0;
 	bmsg->status[0] = 0;
-	strcpy(bmsg->recovery, command);
+	strcpy(bmsg->recovery, "recovery\n--wipe_data");
 	priv.d_bytes = sizeof(*bmsg);
 
-	/* write this structure to the "misc" partition */
-	fbt_handle_flash("flash:misc");
+	/* write this structure to the "misc" partition, no unlock check */
+	fbt_handle_flash("flash:misc", 0);
+
+	/* now reboot to recovery */
+	fbt_run_recovery(1);
 }
 
 /*
@@ -2045,8 +2078,6 @@ static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
 
 	board_fbt_start();
 
-	fbt_fastboot_init();
-
 	fbt_init_endpoint_ptrs();
 
 	ret = udc_init();
@@ -2091,9 +2122,8 @@ static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
 			fbt_handle_reboot("reboot-bootloader");
 			break;
 		case FASTBOOT_REBOOT_RECOVERY_WIPE_DATA:
-			printf("setting recovery argument for data wipe\n");
-			fbt_set_recovery_bootloader_message_args("recovery\n--wipe_data");
-			/* fall through */
+			fbt_run_recovery_wipe_data();
+			break;
 		case FASTBOOT_REBOOT_RECOVERY:
 			printf("starting recovery due to key\n");
 			fbt_run_recovery(1);
@@ -2357,21 +2387,19 @@ static void fbt_request_start_fastboot(void)
 }
 
 /*
- * Determine if we should
- * enter fastboot mode based on board specific key press or
- * parameter left in memory from previous boot.
+ * Determine if we should enter fastboot mode based on board specific
+ * key press or parameter left in memory from previous boot.
+ *
+ * This is also where we initialize fbt private data.  Even if we
+ * don't enter fastboot mode, we need our environment setup for
+ * things like unlock state, clearing reboot to recovery flag, etc.
  */
 void fbt_preboot(void)
 {
 	enum fbt_reboot_type frt;
 
-
-	priv.dev_desc = get_dev_by_name(FASTBOOT_BLKDEV);
-	if (!priv.dev_desc) {
-		FBTERR("%s: fastboot device %s not found\n",
-						__func__, FASTBOOT_BLKDEV);
-		return;
-	}
+	/* need to init this ASAP so we know the unlocked state */
+	fbt_fastboot_init();
 
 	if (board_fbt_key_pressed()) {
 		fbt_request_start_fastboot();
@@ -2384,6 +2412,14 @@ void fbt_preboot(void)
 		       __func__);
 
 		return fbt_run_recovery(1);
+	} else if (frt == FASTBOOT_REBOOT_RECOVERY_WIPE_DATA) {
+		printf("\n%s: starting recovery img to wipe data "
+		       "because of reboot flag\n",
+		       __func__);
+		/* we've not initialized most of our state so don't
+		 * save env in this case
+		 */
+		return fbt_run_recovery_wipe_data();
 	} else if (frt == FASTBOOT_REBOOT_BOOTLOADER) {
 
 		/* Case: %fastboot reboot-bootloader
@@ -2399,7 +2435,7 @@ void fbt_preboot(void)
 		       __func__);
 		fbt_clear_recovery_flag();
 	} else {
-		/* unkown reboot cause (typically because of a cold boot).
+		/* unknown reboot cause (typically because of a cold boot).
 		 * check if we had flag set to boot recovery and it
 		 * was never cleared properly (i.e. recovery didn't finish).
 		 * if so, jump to recovery again.
