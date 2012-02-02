@@ -122,7 +122,7 @@ print "%04d/%02d/%02d %02d:%02d\n" % (int(foo[0], 36) + 2001,
 #define CONFIG_FASTBOOT_LOG_SIZE 4000
 #endif
 static char log_buffer[CONFIG_FASTBOOT_LOG_SIZE];
-static unsigned long log_position;
+static uint32_t log_position;
 
 #ifdef DEBUG
 #define FBTDBG(fmt, args...)\
@@ -1466,6 +1466,7 @@ static int fbt_send_raw_info(const char *info, int bytes_left)
 			   make sure priv.response is
 			   terminated */
 			priv.response[4 + bytes_left] = '\0';
+
 			break;
 		}
 	}
@@ -1477,7 +1478,7 @@ static int fbt_send_raw_info(const char *info, int bytes_left)
 	return 0;
 }
 
-static void fbt_dump_log(void)
+static void fbt_dump_log(char *buf, uint32_t buf_size)
 {
 	/* the log consists of a bunch of printf output, with
 	 * logs of '\n' interspersed. to make it format a
@@ -1486,20 +1487,60 @@ static void fbt_dump_log(void)
 	 * buffer, break the log into bits that end
 	 * with '\n', like replaying the printfs.
 	 */
-	int bytes_left = log_position;
-	char *line_start = log_buffer;
-	while (bytes_left) {
+	char *line_start = buf;
+
+	if (buf_size == 0) {
+		printf("%s: unexpected buf size of 0\n", __func__);
+		return;
+	}
+
+	/* guarantee null termination for strchr/strlen */
+	buf[buf_size - 1] = 0;
+	while (buf_size) {
 		char *next_line  = strchr(line_start, '\n');
 		if (next_line) {
 			int len = next_line - line_start + 1;
 			fbt_send_raw_info(line_start, len);
 			line_start += len;
-			bytes_left -= len;
+			buf_size -= len;
 		} else {
 			fbt_send_raw_info(line_start, strlen(line_start));
 			break;
 		}
 	}
+}
+
+struct ram_console_buffer {
+	uint32_t sig;
+	uint32_t start;
+	uint32_t size;
+	uint8_t  data[0];
+};
+#define RAM_CONSOLE_SIG (0x43474244) /* 'DBGC' */
+
+static void fbt_dump_kmsg(void)
+{
+	/* the kmsg log is similar to the log we keep in the bootloader
+	 * except that it has a header, is at an address fixed for
+	 * each board, and starts with a ram_console_buffer structure.
+	 */
+	struct ram_console_buffer *buf;
+#ifndef CONFIG_FASTBOOT_RAMCONSOLE_START
+	printf("No ram console start address defined\n");
+	strcpy(priv.response, "FAILNo ram console start address defined");
+	return;
+#else
+	buf = (struct ram_console_buffer *)CONFIG_FASTBOOT_RAMCONSOLE_START;
+#endif
+	if (buf->sig != RAM_CONSOLE_SIG) {
+		printf("Ram console signature not found\n");
+		strcpy(priv.response, "FAILRam console signature not found\n");
+		return;
+	}
+	printf("Ram console found (size %d, start %d):\n",
+	       buf->size, buf->start);
+	fbt_dump_log((char *)&buf->data[0], buf->start);
+	strcpy(priv.response, "OKAY");
 }
 
 static void fbt_handle_oem(char *cmdbuf)
@@ -1509,8 +1550,15 @@ static void fbt_handle_oem(char *cmdbuf)
 	/* %fastboot oem log */
 	if (strcmp(cmdbuf, "log") == 0) {
 		FBTDBG("oem %s\n", cmdbuf);
-		fbt_dump_log();
+		fbt_dump_log(log_buffer, log_position);
 		strcpy(priv.response, "OKAY");
+		return;
+	}
+
+	/* %fastboot oem kmsg */
+	if (strcmp(cmdbuf, "kmsg") == 0) {
+		FBTDBG("oem %s\n", cmdbuf);
+		fbt_dump_kmsg();
 		return;
 	}
 
