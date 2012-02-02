@@ -304,6 +304,19 @@ struct gptimer {
 	u32 tcicr;	/* 0x40 rw */
 	u32 tcar2;	/* 0x44 r */
 };
+
+
+#define OMAP_TCLR_GPO_CFG		(0x0 << 14)
+#define OMAP_TCLR_PT_TOGGLE		(0x1 << 12)
+#define OMAP_TCLR_TRG_OV_AND_MATCH	(0x2 << 10)
+#define OMAP_TCLR_SCPWM_LO		(0x0 << 7)
+#define OMAP_TCLR_CE_ON			(0x1 << 6)
+#define OMAP_TCLR_PRE_OFF		(0x0 << 5)
+#define OMAP_TCLR_AR_ON			(0x1 << 1)
+#define OMAP_TCLR_ST_ON			(0x1 << 0)
+
+#define OMAP_TSICR_NONPOSTED		(0x0 << 2)
+
 #endif /* __ASSEMBLY__ */
 #endif /* __KERNEL_STRICT_NAMES */
 
@@ -407,7 +420,6 @@ struct prcm {
 	u32 iclken_usbhost;	/* 0x1410 */
 };
 #else /* __ASSEMBLY__ */
-#define CM_CLKSEL_CORE		0x48004a40
 #define CM_CLKSEL_GFX		0x48004b40
 #define CM_CLKSEL_WKUP		0x48004c40
 #define CM_CLKEN_PLL		0x48004d00
@@ -415,6 +427,11 @@ struct prcm {
 #define CM_CLKSEL1_EMU		0x48005140
 #endif /* __ASSEMBLY__ */
 #endif /* __KERNEL_STRICT_NAMES */
+
+#define CM_FCLKEN1_CORE			0x48004A00
+#define CM_CLKSEL_CORE			0x48004A40
+#define CM_FCLKEN_PER			0x48005000
+#define CM_CLKSEL_PER			0x48005040
 
 #define PRM_BASE		0x48306000
 
