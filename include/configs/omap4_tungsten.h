@@ -136,13 +136,11 @@
  */
 #define CONFIG_SKIP_NON_ESSENTIAL_CLOCKS 1
 
-/* Specify a lower voltage (and resulting MPU DPLL freq) to
- * reduce power consumption and heat in the bootloader or else
- * it's way unstable with TI's default settings.
+/* Specify lower MPU DPLL freq to reduce power consumption and heat
+ * in the bootloader or else it's way unstable with TI's default settings.
  */
 #define CONFIG_FORCE_TPS62361 /* always use TPS62361, don't do runtime
 				 check of omap4430 vs omap4460 */
-#define CONFIG_OMAP_TPS_MPU_MV 1025
 #define CONFIG_OMAP4460_MPU_DPLL mpu_dpll_params_350mhz
 #define CONFIG_OMAP4430_ES1_0_MPU_DPLL mpu_dpll_params_350mhz
 #define CONFIG_OMAP4430_non_ES1_0_MPU_DPLL mpu_dpll_params_350mhz
@@ -168,6 +166,7 @@
  * PUBLIC_SAR_RAM1_FREE
  */
 #define FASTBOOT_REBOOT_PARAMETER_ADDR (0x4a326000 + 0xA0C)
+
 /* device to use */
 #define FASTBOOT_BLKDEV                 "mmc0"
 /* Use HS */
