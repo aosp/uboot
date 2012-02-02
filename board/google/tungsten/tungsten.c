@@ -100,6 +100,8 @@ static unsigned long last_time;
 #define KEY_CHECK_POLLING_INTERVAL_MS 100
 #define RECOVERY_KEY_HOLD_TIME_SECS 10
 
+static int force_fastboot = 0;
+
 const struct omap_sysinfo sysinfo = {
 	"Board: OMAP4 Tungsten\n"
 };
@@ -219,6 +221,29 @@ int board_mmc_init(bd_t *bis)
 	if (err)
 		printf("mmc init failed: err - %d\n", err);
 
+	printf("cid = %x%08x%08x%08x\n", mmc->cid[0], mmc->cid[1],
+	       mmc->cid[2], mmc->cid[3]);
+	if ((mmc->cid[0] == 0x1501004d) &&
+	    (mmc->cid[1] == 0x41473446) &&
+	    (mmc->cid[2] == 0x4112eb16) &&
+	    (mmc->cid[3] == 0xa1cbae11)) {
+		/* Unfortunately, we have units deployed with old
+		 * eMMC firmware (the cid we check for is specific
+		 * to the known bad eMMC firmware, there may be one
+		 * or more good versions).  Units with this eMMC firmware
+		 * eventually stop erasing.  Instead of letting users 
+		 * keep using them until they fail and then reporting 
+		 * an issue, force a stop if we detect this old firmware
+		 * and force them to update right away instead of getting
+		 * a constant trickle of these failed units coming in one
+		 * at a time.
+		 */
+		printf("\teMMC firmware version is bad, must update\n");
+		force_fastboot = 1;
+	} else {
+		printf("\teMMC firmware version okay\n");
+	}
+
 	return 0;
 }
 #endif
@@ -276,6 +301,11 @@ int board_fbt_key_pressed(void)
 	 * in host mode.
 	 */
 	avr_led_set_mode(AVR_LED_MODE_HOST_AUTO_COMMIT);
+
+	if (force_fastboot) {
+		printf("Forcing fastboot\n");
+		return 1;
+	}
 
 	/* check for the mute key to be pressed as an indicator
 	 * to enter fastboot mode in preboot mode.  since the
