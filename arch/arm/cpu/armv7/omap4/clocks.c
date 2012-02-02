@@ -37,10 +37,6 @@
 #include <asm/utils.h>
 #include <asm/omap_gpio.h>
 
-#ifndef CONFIG_OMAP_TPS_MPU_MV
-#define CONFIG_OMAP_TPS_MPU_MV 1430
-#endif
-
 #ifndef CONFIG_OMAP4430_ES1_0_MPU_DPLL
 #define CONFIG_OMAP4430_ES1_0_MPU_DPLL mpu_dpll_params_1200mhz
 #endif
@@ -540,7 +536,6 @@ static void do_scale_tps62361(u32 reg, u32 volt_mv)
 	 * VSEL1 = 0 and VSEL0 = 1
 	 */
 	gpio_direction_output(TPS62361_VSEL0_GPIO, 0);
-	gpio_set_value(TPS62361_VSEL0_GPIO, 1);
 
 	temp = TPS62361_I2C_SLAVE_ADDR |
 	    (reg << PRM_VC_VAL_BYPASS_REGADDR_SHIFT) |
@@ -553,6 +548,13 @@ static void do_scale_tps62361(u32 reg, u32 volt_mv)
 				&prcm->prm_vc_val_bypass, LDELAY)) {
 		puts("Scaling voltage failed for vdd_mpu from TPS\n");
 	}
+
+	/*
+	 * SET1 register default is 1.4V which is higher than OPPNITROSB
+	 * voltage.  In order to ensure proper OPP voltage, program SET1
+	 * register, then flip GPIO to select SET1 voltage set.
+	 */
+	gpio_set_value(TPS62361_VSEL0_GPIO, 1);
 }
 
 static void do_scale_vcore(u32 vcore_reg, u32 volt_mv)
@@ -628,11 +630,18 @@ static void scale_vcores(void)
 	writel(0x0, &prcm->prm_vc_cfg_i2c_mode);
 
 	omap4_rev = omap_revision();
-	/* TPS - supplies vdd_mpu on 4460 */
-	if (use_tps62361()) {
-		volt = CONFIG_OMAP_TPS_MPU_MV;
-		printf("Setting TPS to %dmV\n", volt);
-		do_scale_tps62361(TPS62361_REG_ADDR_SET1, volt);
+
+	/*
+	 * VCORE 3
+	 * 4430 : supplies vdd_core, must come up before vdd_mpu
+	 * 4460 : not connected
+	 */
+	if (!use_tps62361()) {
+		/* For OMAP4430, according to DM, for OPP100,
+		 * VDD MPU = 1.127v
+		 */
+		volt = 1127;
+		do_scale_vcore(SMPS_REG_ADDR_VCORE3, volt);
 	}
 
 	/*
@@ -647,25 +656,36 @@ static void scale_vcores(void)
 	 * 4460 : supplies vdd_core
 	 */
 	if (!use_tps62361()) {
-		volt = 1417;
-		do_scale_vcore(SMPS_REG_ADDR_VCORE1, volt);
-	} else {
+		/* For OMAP4460, according to DM, for OPP100,
+		 * VDD MPU = 1.200v
+		 */
 		volt = 1200;
-		do_scale_vcore(SMPS_REG_ADDR_VCORE1, volt);
+	} else {
+		/* For OMAP4460, according to DM, for OPP100,
+		 * VDD CORE = 1.127v
+		 */
+		volt = 1127;
 	}
+	do_scale_vcore(SMPS_REG_ADDR_VCORE1, volt);
 
 	/* VCORE 2 - supplies vdd_iva */
-	volt = 1200;
+	/* For OMAP4430 & OMAP4460, according to DM, for OPP100,
+	 * VDD IVA = 1.114v
+	 */
+	volt = 1114;
 	do_scale_vcore(SMPS_REG_ADDR_VCORE2, volt);
 
-	/*
-	 * VCORE 3
-	 * 4430 : supplies vdd_core
-	 * 4460 : not connected
+	/* TPS - supplies vdd_mpu on 4460.  MPU power domain
+	 * depends on the core voltage domain, so do this after
+	 * core voltage domain scaling is done.
 	 */
-	if (!use_tps62361()) {
-		volt = 1200;
-		do_scale_vcore(SMPS_REG_ADDR_VCORE3, volt);
+	if (use_tps62361()) {
+		/* For OMAP4460, according to DM, for OPP100,
+		 * VDD MPU = 1.203v, but round up for TPS to 1.21v
+		 */
+		volt = 1210;
+		printf("Setting TPS to %dmV\n", volt);
+		do_scale_tps62361(TPS62361_REG_ADDR_SET1, volt);
 	}
 }
 
