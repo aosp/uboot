@@ -44,7 +44,7 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-enum {
+enum steelhead_rev {
 	STEELHEAD_REV_ALPHA  = 0x0,
 	STEELHEAD_REV_EVT    = 0x1,
 	STEELHEAD_REV_EVT2   = 0x2,
@@ -81,7 +81,7 @@ int hwrev_gpios[] = {
  * values reused, so we use a mapping table to converet
  * the raw board-id values to the enum values.
  */
-static const board_id_to_steelhead_rev[8] = {
+static const enum steelhead_rev board_id_to_steelhead_rev[8] = {
 	STEELHEAD_REV_PVT,    /* board_id: 0x0 */
 	STEELHEAD_REV_PROD,   /* board_id: 0x1 */
 	STEELHEAD_REV_PROD1,  /* board_id: 0x2 */
@@ -92,7 +92,7 @@ static const board_id_to_steelhead_rev[8] = {
 	STEELHEAD_REV_DVT4    /* board_id: 0x7 */
 };
 
-int steelhead_hw_rev;
+enum steelhead_rev steelhead_hw_rev;
 int avr_detected;
 
 static unsigned long key_pressed_start_time;
