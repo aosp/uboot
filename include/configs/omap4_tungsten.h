@@ -166,6 +166,12 @@
  * PUBLIC_SAR_RAM1_FREE
  */
 #define FASTBOOT_REBOOT_PARAMETER_ADDR (0x4a326000 + 0xA0C)
+/* Address of the kernel's ramconsole so we can dump it.  This is
+ * used by the 'fastboot oem kmsg' command.  It needs to be done
+ * early in fastboot (before large amount of transfer buffer is used,
+ * since they overlap).
+ */
+#define CONFIG_FASTBOOT_RAMCONSOLE_START (OMAP44XX_DRAM_ADDR_SPACE_START + SZ_512M)
 
 /* device to use */
 #define FASTBOOT_BLKDEV                 "mmc0"
