@@ -206,6 +206,8 @@ void set_muxconf_regs_non_essential(void)
 int board_mmc_init(bd_t *bis)
 {
 	struct mmc *mmc;
+	uint8_t mmc_manufacturer;
+	uint8_t mmc_firmware_version;
 	int err;
 
 	omap_mmc_init(CONFIG_MMC_DEV);
@@ -223,25 +225,27 @@ int board_mmc_init(bd_t *bis)
 
 	printf("cid = %x%08x%08x%08x\n", mmc->cid[0], mmc->cid[1],
 	       mmc->cid[2], mmc->cid[3]);
-	if ((mmc->cid[0] == 0x1501004d) &&
-	    (mmc->cid[1] == 0x41473446) &&
-	    (mmc->cid[2] == 0x4112eb16) &&
-	    (mmc->cid[3] == 0xa1cbae11)) {
+	mmc_manufacturer = (mmc->cid[0] >> 24) & 0xff;
+	mmc_firmware_version = (mmc->cid[2] >> 16) & 0xff;
+	if ((mmc_manufacturer == 0x15) && (mmc_firmware_version == 0x12)) {
 		/* Unfortunately, we have units deployed with old
-		 * eMMC firmware (the cid we check for is specific
-		 * to the known bad eMMC firmware, there may be one
-		 * or more good versions).  Units with this eMMC firmware
-		 * eventually stop erasing.  Instead of letting users 
-		 * keep using them until they fail and then reporting 
-		 * an issue, force a stop if we detect this old firmware
-		 * and force them to update right away instead of getting
-		 * a constant trickle of these failed units coming in one
-		 * at a time.
+		 * eMMC firmware (Samsung version 1.2) though there
+		 * may be one or more good versions.  Units with 
+		 * this eMMC firmware eventually stop erasing.  Instead 
+		 * of letting users keep using them until they fail and
+		 * then reporting an issue, force a stop if we detect 
+		 * this old firmware and force them to update right away
+		 * instead of getting a constant trickle of these failed
+		 * units coming in one at a time.
 		 */
-		printf("\teMMC firmware version is bad, must update\n");
+		printf("\teMMC firmware version %x.%x is bad, must update\n",
+		       mmc_firmware_version >> 4,
+		       mmc_firmware_version & 0xf);
 		force_fastboot = 1;
 	} else {
-		printf("\teMMC firmware version okay\n");
+		printf("\teMMC firmware version %x.%x okay\n",
+		       mmc_firmware_version >> 4,
+		       mmc_firmware_version & 0xf);
 	}
 
 	return 0;
