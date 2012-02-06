@@ -128,6 +128,14 @@ int partition_erase_blks(block_dev_desc_t *dev, disk_partition_t *partition,
 				lbaint_t *blkcnt);
 int partition_erase_bytes(block_dev_desc_t *dev, disk_partition_t *partition,
 				loff_t *bytecnt);
+#ifdef CONFIG_MD5
+void partition_md5_helper(block_dev_desc_t *dev, lbaint_t blk_start,
+				lbaint_t *blkcnt, unsigned char md5[16]);
+int partition_md5_blks(block_dev_desc_t *dev, disk_partition_t *partition,
+				lbaint_t *blkcnt, unsigned char md5[16]);
+int partition_md5_bytes(block_dev_desc_t *dev, disk_partition_t *partition,
+				loff_t *bytecnt, unsigned char md5[16]);
+#endif /* CONFIG_MD5 */
 int partition_read_blks(block_dev_desc_t *dev, disk_partition_t *partition,
 				lbaint_t *blkcnt, void *buffer);
 int partition_read_bytes(block_dev_desc_t *dev, disk_partition_t *partition,
@@ -180,6 +188,17 @@ static inline int partition_erase_blks(block_dev_desc_t *dev,
 static inline int partition_erase_bytes(block_dev_desc_t *dev,
 				disk_partition_t *partition,
 				loff_t *bytecnt) { return -ENODEV; }
+#ifdef CONFIG_MD5
+static inline void partition_md5_helper(block_dev_desc_t *dev,
+				lbaint_t blk_start, lbaint_t *blkcnt,
+				unsigned char md5[16]) { *blkcnt = 0; }
+static inline int partition_md5_blks(block_dev_desc_t *dev,
+				disk_partition_t *partition, lbaint_t *blkcnt,
+				unsigned char md5[16]) { return -ENODEV; }
+static inline int partition_md5_bytes(block_dev_desc_t *dev,
+				disk_partition_t *partition, loff_t *bytecnt,
+				unsigned char md5[16]) { return -ENODEV; }
+#endif /* CONFIG_MD5 */
 static inline int partition_read_blks(block_dev_desc_t *dev,
 				disk_partition_t *partition, lbaint_t *blkcnt,
 				void *buffer) { return -ENODEV; }

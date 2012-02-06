@@ -1,6 +1,7 @@
 /*
  * (C) Copyright 2001
  * Wolfgang Denk, DENX Software Engineering, wd@denx.de.
+ * Copyright (C) 2011-2012 Google, Inc.
  *
  * See file CREDITS for list of people who contributed to this
  * project.
@@ -26,6 +27,10 @@
 #include <errno.h>
 #include <ide.h>
 #include <part.h>
+#ifdef CONFIG_MD5
+#include <malloc.h>
+#include <u-boot/md5.h>
+#endif
 
 #undef	PART_DEBUG
 
@@ -313,6 +318,99 @@ int partition_erase_bytes(block_dev_desc_t *dev, disk_partition_t *ptn,
 	return _partition_erase(dev, ptn, bytecnt, NULL);
 }
 
+#ifdef CONFIG_MD5
+void partition_md5_helper(block_dev_desc_t *dev, lbaint_t blk_start,
+				lbaint_t *blkcnt, unsigned char md5[16])
+{
+	struct MD5Context context;
+	lbaint_t buf_blks, blks_left, blks_read;
+	unsigned char *buf;
+#ifndef CONF_MD5_BUFLEN
+#define CONF_MD5_BUFLEN (16*1024)
+#endif
+
+	buf_blks = CONF_MD5_BUFLEN / dev->blksz;
+	if (!buf_blks) {
+		*blkcnt = 0;
+		return;
+	}
+	buf = malloc(buf_blks * dev->blksz);
+	if (!buf) {
+		*blkcnt = 0;
+		return;
+	}
+
+	MD5Init(&context);
+	blks_left = *blkcnt;
+	while (blks_left) {
+		if (blks_left < buf_blks)
+			buf_blks = blks_left;
+
+		blks_read = dev->block_read(dev->dev, blk_start, buf_blks,
+									buf);
+		MD5Update(&context, buf, blks_read * dev->blksz);
+		blk_start += blks_read;
+		blks_left -= blks_read;
+		if (blks_read != buf_blks)
+			break;
+	}
+	MD5Final(md5, &context);
+
+	free(buf);
+	*blkcnt -= blks_left;
+}
+static int _partition_md5(block_dev_desc_t *dev, disk_partition_t *ptn,
+				loff_t *bytecnt_p, lbaint_t *blkcnt_p,
+				unsigned char md5[16])
+{
+	/*
+	 * Fetch the number of bytes or blocks and then zero them right away
+	 * to make the error handling easier.
+	 */
+	loff_t bytes_to_do = get_and_zero_loff_t(bytecnt_p);
+	lbaint_t blks_to_do = get_and_zero_lbaint_t(blkcnt_p), blks_done;
+	int err = _partition_validate(dev, ptn, bytecnt_p, blkcnt_p,
+							(void *)-1/*fake*/);
+	if (err)
+		return err;
+
+	err = partition_read_pre(ptn);
+	if (err)
+		return err;
+
+	if (bytes_to_do) {
+		blks_to_do = DIV_ROUND_UP(bytes_to_do, dev->blksz);
+		if (blks_to_do > ptn->size)
+			return -EFBIG;
+	} else if (!blks_to_do)
+		blks_to_do = ptn->size;
+
+	blks_done = blks_to_do;
+	partition_md5_helper(dev, ptn->start, &blks_done, md5);
+
+	if (blkcnt_p)
+		*blkcnt_p = blks_done;
+	if (bytecnt_p)
+		*bytecnt_p = (loff_t)blks_done * dev->blksz;
+
+	err = partition_read_post(ptn);
+
+	if (blks_done != blks_to_do)
+		return -EIO;
+	return err;
+}
+int partition_md5_blks(block_dev_desc_t *dev, disk_partition_t *ptn,
+				lbaint_t *blkcnt, unsigned char md5[16])
+{
+	return _partition_md5(dev, ptn, NULL, blkcnt, md5);
+}
+int partition_md5_bytes(block_dev_desc_t *dev, disk_partition_t *ptn,
+				loff_t *bytecnt, unsigned char md5[16])
+{
+	return _partition_md5(dev, ptn, bytecnt, NULL, md5);
+}
+#endif /* CONFIG_MD5 */
+
 static int _partition_read(block_dev_desc_t *dev, disk_partition_t *ptn,
 				loff_t *bytecnt_p, lbaint_t *blkcnt_p,
 				void *buffer)
@@ -469,6 +567,18 @@ int partition_erase_bytes(block_dev_desc_t *dev, disk_partition_t *partition,
 {
 	return -ENODEV;
 }
+#ifdef CONFIG_MD5
+int partition_md5_blks(block_dev_desc_t *dev, disk_partition_t *ptn,
+							lbaint_t *blkcnt)
+{
+	return -ENODEV;
+}
+int partition_md5_bytes(block_dev_desc_t *dev, disk_partition_t *partition,
+							loff_t *bytecnt)
+{
+	return -ENODEV;
+}
+#endif /* CONFIG_MD5 */
 int partition_read_blks(block_dev_desc_t *dev, disk_partition_t *ptn,
 					lbaint_t *blkcnt, void *buffer)
 {
