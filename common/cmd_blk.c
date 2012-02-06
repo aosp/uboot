@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Google, Inc.
+ * Copyright (C) 2011-2012 Google, Inc.
  *
  * Derived from cmd_sata.c, which is:
  * Copyright (C) 2000-2005, DENX Software Engineering
@@ -50,7 +50,7 @@ int do_blk(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	disk_partition_t ptn;
 	ulong addr;
 	lbaint_t blk, cnt, blks_done;
-	int err, is_erase = 0, is_read = 0, is_write = 0;
+	int err, is_erase = 0, is_md5 = 0, is_read = 0, is_write = 0;
 	/*
 	 * All of our commands are of the form "blk <action>" followed by
 	 * parameters.  For convenience, convert argc and argv into
@@ -126,6 +126,10 @@ int do_blk(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	}
 	if (!strcmp(action, "erase"))
 		is_erase = 1;
+#ifdef CONFIG_MD5
+	else if (!strcmp(action, "md5"))
+		is_md5 = 1;
+#endif /* CONFIG_MD5 */
 	else if (!strcmp(action, "read"))
 		is_read = 1;
 	else if (!strcmp(action, "write"))
@@ -143,11 +147,11 @@ int do_blk(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		return 1;
 	}
 
-	if (is_erase) {
+	if (is_erase || is_md5) {
 		/* Need blk#/partition and optional count. */
 		if (num_parm < 1 || num_parm > 2) {
-			puts("usage: blk erase blk# cnt\n");
-			puts("   or: blk erase partition [cnt]\n");
+			printf("usage: blk %s blk# cnt\n", action);
+			printf("   or: blk %s partition [cnt]\n", action);
 			return 1;
 		}
 	} else {
@@ -176,10 +180,25 @@ int do_blk(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 		printf("Block %s: device %s block # 0x%lX, count 0x%lX ...\n",
 					action, blk_curr_name, blk, cnt);
-		if (is_erase)
+		if (is_erase) {
 			blks_done = blk_curr_dev->block_erase(blk_curr_dev->dev,
 							blk, cnt);
-		else if (is_read) {
+#ifdef CONFIG_MD5
+		} else if (is_md5) {
+			unsigned char md5[16];
+			blks_done = cnt;
+			partition_md5_helper(blk_curr_dev, blk, &blks_done,
+								md5);
+			if (blks_done == cnt)
+				printf("MD5SUM="
+					"%02x%02x%02x%02x%02x%02x%02x%02x"
+					"%02x%02x%02x%02x%02x%02x%02x%02x\n",
+					md5[0], md5[1], md5[2], md5[3],
+					md5[4], md5[5], md5[6], md5[7],
+					md5[8], md5[9], md5[10], md5[11],
+					md5[12], md5[13], md5[14], md5[15]);
+#endif /* CONFIG_MD5 */
+		} else if (is_read) {
 			blks_done = blk_curr_dev->block_read(blk_curr_dev->dev,
 							blk, cnt, (void *)addr);
 			/* flush cache after read */
@@ -209,9 +228,22 @@ int do_blk(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 	printf("Block %s: device %s block # 0x%lX, count 0x%lX ...\n",
 				action, blk_curr_name, ptn.start, cnt);
-	if (is_erase)
+	if (is_erase) {
 		err = partition_erase_blks(blk_curr_dev, &ptn, &cnt);
-	else if (is_read) {
+#ifdef CONFIG_MD5
+	} else if (is_md5) {
+		unsigned char md5[16];
+		err = partition_md5_blks(blk_curr_dev, &ptn, &cnt, md5);
+		if (!err)
+			printf("MD5SUM="
+				"%02x%02x%02x%02x%02x%02x%02x%02x"
+				"%02x%02x%02x%02x%02x%02x%02x%02x\n",
+				md5[0], md5[1], md5[2], md5[3],
+				md5[4], md5[5], md5[6], md5[7],
+				md5[8], md5[9], md5[10], md5[11],
+				md5[12], md5[13], md5[14], md5[15]);
+#endif /* CONFIG_MD5 */
+	} else if (is_read) {
 		err = partition_read_blks(blk_curr_dev, &ptn,
 						&cnt, (void *)addr);
 		/* flush cache after read */
@@ -235,6 +267,10 @@ U_BOOT_CMD(
 	"blk partition [dev] - print partition table\n"
 	"blk erase blk# cnt\n"
 	"blk erase partition [cnt]\n"
+#ifdef CONFIG_MD5
+	"blk md5 blk# cnt\n"
+	"blk md5 partition [cnt]\n"
+#endif /* CONFIG_MD5 */
 	"blk read addr blk# cnt\n"
 	"blk read addr partition [cnt]\n"
 	"blk write addr blk# cnt\n"
