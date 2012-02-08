@@ -942,7 +942,7 @@ static int _unsparse(unsigned char *source,
 				printf("sparse: bogus DONT CARE chunk\n");
 				return 1;
 			}
-			clen = chunk->chunk_sz * header->blk_sz;
+			clen = (u64)chunk->chunk_sz * header->blk_sz;
 			FBTDBG("sparse: DONT_CARE blk=%d bsz=%d:"
 			       " skip(sector=%lu,clen=%llu)\n",
 			       chunk->chunk_sz, header->blk_sz, sector, clen);
