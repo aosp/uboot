@@ -2305,7 +2305,12 @@ static int do_booti(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		if (ep == boot_source || *ep != '\0') {
 			printf("'%s' does not seem to be a partition nor "
 						"an address\n", boot_source);
-			return cmd_usage(cmdtp);
+			/* this is most likely due to having no
+			 * partition table in factory case, or could
+			 * be argument is wrong.  in either case, start
+			 * fastboot mode.
+			 */
+			goto fail;
 		}
 
 		hdr = malloc(sizeof(*hdr));
