@@ -963,7 +963,7 @@ static int _unsparse(unsigned char *source,
 		}
 	}
 
-	printf("\nsparse: out-length-0x%llu MB\n", outlen/(1024*1024));
+	printf("sparse: out-length %llu MB\n", outlen/(1024*1024));
 	return 0;
 }
 
