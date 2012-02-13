@@ -36,13 +36,18 @@
 #ifndef CONFIG_SYS_MMC_MAX_BLK_COUNT
 #define CONFIG_SYS_MMC_MAX_BLK_COUNT 65535
 #endif
+/*
+ * The maximum number of erase groups to be erased at one time.  The number of
+ * write blocks this corresponds to is calculated at run-time by multiplying
+ * it by the erase_grp_size that is determined in mmc_startup().  Requests to
+ * erase more erase groups than this will be split into multiple requests.
+ */
+#ifndef CONFIG_SYS_MMC_MAX_ERASE_GROUP_COUNT
+#define CONFIG_SYS_MMC_MAX_ERASE_GROUP_COUNT 8192
+#endif
 
 static struct list_head mmc_devices;
 static int cur_dev_num = -1;
-
-/* Prototype to avoid code shuffle. */
-static ulong mmc_write_blocks(struct mmc *mmc, ulong start, lbaint_t blkcnt,
-							const void *src);
 
 int __board_mmc_getcd(u8 *cd, struct mmc *mmc) {
 	return -1;
@@ -179,18 +184,17 @@ struct mmc *find_mmc_device(int dev_num)
 	return NULL;
 }
 
-static ulong mmc_erase_t(struct mmc *mmc, lbaint_t start, lbaint_t blkcnt)
+static lbaint_t
+mmc_erase_blocks(struct mmc *mmc, lbaint_t start, lbaint_t blkcnt)
 {
 	struct mmc_cmd cmd;
-	lbaint_t end;
 	int err, start_cmd, end_cmd;
 
-	if (mmc->high_capacity)
-		end = start + blkcnt - 1;
-	else {
-		end = (start + blkcnt - 1) * mmc->write_bl_len;
-		start *= mmc->write_bl_len;
-	}
+	lbaint_t max_blkcnt = (mmc->erase_grp_size *
+					CONFIG_SYS_MMC_MAX_ERASE_GROUP_COUNT);
+	if (blkcnt > max_blkcnt)
+		/* Align the intermediate erase boundary to max_blkcnt. */
+		blkcnt = ((start / max_blkcnt) + 1) * max_blkcnt - start;
 
 	if (IS_SD(mmc)) {
 		start_cmd = SD_CMD_ERASE_WR_BLK_START;
@@ -206,145 +210,66 @@ static ulong mmc_erase_t(struct mmc *mmc, lbaint_t start, lbaint_t blkcnt)
 	cmd.flags = 0;
 
 	err = mmc_send_cmd(mmc, &cmd, NULL);
-	if (err)
-		goto err_out;
+	if (err) {
+		printf("MMC erase start failed (%d)\n", err);
+		return 0;
+	}
 
 	cmd.cmdidx = end_cmd;
-	cmd.cmdarg = end;
+	cmd.cmdarg = start + blkcnt - 1;
 
 	err = mmc_send_cmd(mmc, &cmd, NULL);
-	if (err)
-		goto err_out;
+	if (err) {
+		printf("MMC erase end failed (%d)\n", err);
+		return 0;
+	}
 
 	cmd.cmdidx = MMC_CMD_ERASE;
-	cmd.cmdarg = SECURE_ERASE;
+	cmd.cmdarg = SECURE_TRIM1;
 	cmd.resp_type = MMC_RSP_R1b;
 
 	err = mmc_send_cmd(mmc, &cmd, NULL);
-	if (err)
-		goto err_out;
-
-	return 0;
-
-err_out:
-	puts("mmc erase failed\n");
-	return err;
-}
-
-static ulong mmc_writeFF(struct mmc *mmc, lbaint_t start, lbaint_t blkcnt)
-{
-#ifdef CONFIG_SPL_BUILD
-	/*
-	 * SPL doesn't have enough memory for the all_ones buffer, nor
-	 * does it need it.
-	 */
-	return UNUSABLE_ERR;
-#else
-	static void *all_ones;
-	static uint all_ones_len;
-	int err = 0;
-
-	/*
-	 * We need a buffer filled with all ones that needs to be able to
-	 * write block sized chunks repeatedly up to mmc->erase_grp_size
-	 * times.  It will be large, so use the heap instead of stack.  I keep
-	 * a pointer to what is allocated in a static pointer instead of doing
-	 * malloc/memset/free on every call to this function.  I assume there
-	 * is a (small) chance that different MMCs will have different block
-	 * sizes, so that case is handled.
-	 */
-	uint blk_len = mmc->write_bl_len;
-
-	if (all_ones_len < blk_len) {
-		if (all_ones_len)
-			free(all_ones);
-		all_ones = malloc(blk_len);
-		if (!all_ones) {
-			all_ones_len = 0;
-			err = -1;
-			puts("mmc write ones failed to get memory\n");
-			goto exit;
-		}
-		all_ones_len = blk_len;
-		memset(all_ones, 0xFF, all_ones_len);
+	if (err) {
+		printf("MMC erase trim 1 failed (%d)\n", err);
+		return 0;
 	}
 
-	if (mmc_set_blocklen(mmc, blk_len)) {
-		puts("mmc write ones failed to set write length\n");
-		goto exit;
-	}
-	while (blkcnt--) {
-		if (mmc_write_blocks(mmc, start++, 1, all_ones) != 1) {
-			err = UNUSABLE_ERR;
-			puts("mmc write ones failed to write\n");
-			goto exit;
-		}
+	cmd.cmdarg = SECURE_TRIM2;
+
+	err = mmc_send_cmd(mmc, &cmd, NULL);
+	if (err) {
+		printf("MMC erase trim 2 failed (%d)\n", err);
+		return 0;
 	}
 
-exit:
-#ifdef CONFIG_MMC_FREE_ALL_ONES
-	/* Option to the memory freed just in case someone wants it. */
-	free(all_ones);
-	all_ones_len = 0;
-#endif
-	return err;
-#endif /* ! CONFIG_SPL_BUILD */
+	return blkcnt;
 }
 
 static unsigned long
 mmc_berase(int dev_num, lbaint_t start, lbaint_t blkcnt)
 {
-	int err = 0;
-	struct mmc *mmc = find_mmc_device(dev_num);
-	lbaint_t next = start, blks_left = blkcnt, blk_r;
+	lbaint_t cur, blocks_todo = blkcnt;
 
+	struct mmc *mmc = find_mmc_device(dev_num);
 	if (!mmc)
 		return -1;
 
-	/*
-	 * Figure out how many blocks are before an erase_grp_size
-	 * boundary. We do that by figuring out where the next
-	 * erase_grp_size boundary is and then subtracting start.
-	 */
-	blk_r = roundup(start, mmc->erase_grp_size) - start;
-	if (blk_r > blkcnt)
-		blk_r = blkcnt;
-	if (blk_r) {
-		err = mmc_writeFF(mmc, next, blk_r);
-		printf("mmc_writeFF(), start %lu, blk_cnt %lu, returned %d\n",
-							next, blk_r, err);
-		if (err)
-			goto exit;
-		blks_left -= blk_r;
-		next += blk_r;
-	}
+	if (mmc_set_blocklen(mmc, mmc->write_bl_len))
+		return 0;
 
-	/* Erase contiguous blocks that are erase_grp_size aligned */
-	blk_r = (blks_left / mmc->erase_grp_size) * mmc->erase_grp_size;
-	if (blk_r) {
-		err = mmc_erase_t(mmc, next, blk_r);
-		printf("mmc_erase_t(), start %lu, blk_cnt %lu, returned %d\n",
-		       next, blk_r, err);
-		if (err)
-			goto exit;
-		blks_left -= blk_r;
-		next += blk_r;
-	}
+	do {
+		cur = mmc_erase_blocks(mmc, start, blocks_todo);
+		if (!cur)
+			return blkcnt - blocks_todo;
+		blocks_todo -= cur;
+#ifndef CONFIG_SYS_MMC_QUIET_ERASE
+		printf("Erased MMC blocks 0x%08lX to 0x%08lX, 0x%08lX left\n",
+					start, start + cur - 1, blocks_todo);
+#endif
+		start += cur;
+	} while (blocks_todo > 0);
 
-	/*
-	 * Take care of any blocks after the erase_grp_size boundary.
-	 */
-	if (blks_left) {
-		/* Area to erase does not end on an erase group boundary. */
-		err = mmc_writeFF(mmc, next, blks_left);
-		printf("mmc_writeFF(), start %lu, blk_cnt %lu, returned %d\n",
-							next, blks_left, err);
-		if (err)
-			goto exit;
-		blks_left = 0;
-	}
-exit:
-	return blkcnt - blks_left;	/* Return number of blocks erased. */
+	return blkcnt;
 }
 
 static ulong
