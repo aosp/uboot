@@ -376,23 +376,36 @@ static int mmc_send_cmd(struct mmc *mmc, struct mmc_cmd *cmd,
 		}
 	}
 
-	/* if this is an erase, wait for it to complete.
-	 * Add additional time to the timeout based on number
-	 * of blocks being erased.  Add 1 second per
-	 * 1000 blocks for now (1000 ms per 1 million blocks).
+	/* If this is an erase, wait for it to complete.  Add a fixed
+	 * additional time to the timeout to allow the device to manage its
+	 * blocks (10X normal retry) plus add an additional time based on
+	 * number of blocks being erased (1 ms per 1024 blocks).  In
+	 * addition, when that time expires, only a warning is printed and
+	 * an error will not be returned until double the time has passed.
+	 * Callers should try to avoid erasing very large numbers of blocks
+	 * at once to prevent timeouts so long that users can't tell if
+	 * progress is being made.
 	 */
 	if (cmd->cmdidx == MMC_CMD_ERASE) {
-		ulong timeout_ms = MAX_RETRY_MS * 5;
+		ulong timeout_ms = MAX_RETRY_MS * 10;
 		ulong erase_blk_cnt = last_end_value - last_start_value + 1;
-		timeout_ms += DIV_ROUND_UP(erase_blk_cnt, 1000);
-		printf("%s: erasing %lu blocks, timeout = %lu seconds\n",
-		       __func__, erase_blk_cnt, timeout_ms / 1000);
+		int warned = 0;
+		timeout_ms += DIV_ROUND_UP(erase_blk_cnt, 1024);
 		start = get_timer(0);
 		while ((readl(&mmc_base->pstate) & DATI_MASK) == DATI_CMDDIS) {
 			if (get_timer(0) - start > timeout_ms) {
-				printf("%s: timedout waiting for cmddis"
-				       " after command!\n", __func__);
-				return TIMEOUT;
+				printf("%s: %s erasing blocks %u to %u, "
+					"timeout = %lu seconds\n",
+					__func__,
+					warned ? "Timed out" : "Warning",
+					last_start_value, last_end_value,
+					timeout_ms / 1000);
+				if (warned) {
+					return TIMEOUT;
+				} else {
+					warned = 1;
+					timeout_ms *= 2;
+				}
 			}
 		}
 	}
