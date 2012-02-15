@@ -287,6 +287,14 @@ int board_fbt_key_pressed(void)
 		avr_detected = !detect_avr();
 	}
 	if (!avr_detected) {
+		/* always start fastboot if we're forcing it, even
+		 * if we can't show we're in fastboot mode with the LEDs
+		 */
+		if (force_fastboot) {
+			printf("Forcing fastboot even with no avr\n");
+			return 1;
+		}
+
 		/* This might happen if avr_updater got interrupted
 		 * while an avr firmware update was in progress.
 		 * It's better to allow regular booting instead of
