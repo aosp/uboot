@@ -1113,7 +1113,8 @@ int mmc_startup(struct mmc *mmc)
 		 * the group size from the csd value.
 		 */
 		if (ext_csd[175])
-			mmc->erase_grp_size = ext_csd[224] * 512 * 1024;
+			mmc->erase_grp_size = ext_csd[224] * 512 * 1024
+							/ mmc->write_bl_len;
 		else {
 			int erase_gsz, erase_gmul;
 			erase_gsz = (mmc->csd[2] & 0x00007c00) >> 10;
