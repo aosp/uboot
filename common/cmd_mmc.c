@@ -115,7 +115,7 @@ static void print_mmcinfo(struct mmc *mmc)
 	printf("Bus Width: %d-bit\n", mmc->bus_width);
 
 	printf("Erase group size: %d sectors (%d bytes)\n",
-	       mmc->erase_grp_size, mmc->erase_grp_size * mmc->read_bl_len);
+	       mmc->erase_grp_size, mmc->erase_grp_size * mmc->write_bl_len);
 }
 
 int do_mmcinfo (cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
