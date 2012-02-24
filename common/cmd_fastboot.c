@@ -814,7 +814,7 @@ static void fbt_handle_erase(char *cmdbuf)
 
 	ptn = fastboot_flash_find_ptn(partition_name);
 	if (ptn == 0) {
-		printf("Partition %s does not exist\n", ptn->name);
+		printf("Partition %s does not exist\n", partition_name);
 		sprintf(priv.response, "FAILpartition does not exist");
 		return;
 	}
