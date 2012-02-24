@@ -203,6 +203,94 @@ void set_muxconf_regs_non_essential(void)
 }
 
 #ifdef CONFIG_GENERIC_MMC
+static int samsung_mmc_cmd(struct mmc *mmc, uint mode)
+{
+	struct mmc_cmd cmd;
+	int ret;
+
+	cmd.cmdidx = 62;		/* Samsung OEM command */
+	cmd.cmdarg = 0xEFAC62EC;	/* Magic value */
+	cmd.resp_type = MMC_RSP_R1b;
+	cmd.flags = 0;
+	ret = mmc->send_cmd(mmc, &cmd, NULL);
+	if (ret) {
+		printf("%s: Error %d sending magic.\n", __func__, ret);
+		return 1;
+	}
+	cmd.cmdarg = mode;
+	ret = mmc->send_cmd(mmc, &cmd, NULL);
+	if (ret) {
+		printf("%s: Error %d sending mode 0x%08X.\n",
+						__func__, ret, mode);
+		return 1;
+	}
+	return 0;
+}
+static int samsung_mmc_mem(struct mmc *mmc, uint addr, uint val)
+{
+	struct mmc_cmd cmd;
+	int ret;
+
+	cmd.cmdidx = MMC_CMD_ERASE_GROUP_START;
+	cmd.cmdarg = addr;
+	cmd.resp_type = MMC_RSP_R1;
+	cmd.flags = 0;
+	ret = mmc->send_cmd(mmc, &cmd, NULL);
+	if (ret) {
+		printf("%s: Error %d sending addr 0x%08X.\n",
+						__func__, ret, addr);
+		return 1;
+	}
+	cmd.cmdidx = MMC_CMD_ERASE_GROUP_END;
+	cmd.cmdarg = val;
+	ret = mmc->send_cmd(mmc, &cmd, NULL);
+	if (ret) {
+		printf("%s: Error %d sending val 0x%08X.\n",
+						__func__, ret, val);
+		return 1;
+	}
+	cmd.cmdidx = MMC_CMD_ERASE;
+	cmd.cmdarg = 0;
+	ret = mmc->send_cmd(mmc, &cmd, NULL);
+	if (ret) {
+		printf("%s: Error %d latching 0x%08X:0x%08X.\n",
+						__func__, ret, addr, val);
+		return 1;
+	}
+	return 0;
+}
+static int samsung_mmc_read_word(struct mmc *mmc, uint *val)
+{
+	struct mmc_cmd cmd;
+	struct mmc_data data;
+	uint *dst;
+	int ret;
+
+	cmd.cmdidx = MMC_CMD_READ_SINGLE_BLOCK;
+	cmd.cmdarg = 0;
+	cmd.resp_type = MMC_RSP_R1;
+	cmd.flags = 0;
+
+	dst = malloc(mmc->read_bl_len);
+	if (!dst) {
+		printf("%s: Error allocating read buffer.\n", __func__);
+		return 1;
+	}
+	data.dest = (char *)dst;
+	data.blocks = 1;
+	data.blocksize = mmc->read_bl_len;
+	data.flags = MMC_DATA_READ;
+
+	ret = mmc->send_cmd(mmc, &cmd, &data);
+	if (ret)
+		printf("%s: Error %d reading.\n", __func__, ret);
+	else
+		*val = dst[0];
+
+	free(dst);
+	return ret;
+}
+
 int board_mmc_init(bd_t *bis)
 {
 	struct mmc *mmc;
@@ -238,14 +326,82 @@ int board_mmc_init(bd_t *bis)
 		 * instead of getting a constant trickle of these failed
 		 * units coming in one at a time.
 		 */
-		printf("\teMMC firmware version %x.%x is bad, must update\n",
+		printf("\tSamsung eMMC firmware %x.%x is bad, must update\n",
 		       mmc_firmware_version >> 4,
 		       mmc_firmware_version & 0xf);
 		force_fastboot = 1;
-	} else {
-		printf("\teMMC firmware version %x.%x okay\n",
+	} else if ((mmc_manufacturer == 0x15)
+					&& (mmc_firmware_version == 0x25)) {
+		uint val1 = 0, val2 = 0;
+		/* Samsung e-MMC firmware has a bug that can be worked around
+		 * by changing the Write Buffer Block (LDB) Wear Level Policy
+		 * from page to block unit.  Do that with a Vendor Command
+		 * sequence.
+		 */
+		printf("\tWorkaround check on Samsung eMMC firmware %x.%x\n",
 		       mmc_firmware_version >> 4,
 		       mmc_firmware_version & 0xf);
+
+		/* Fetch and verify the prior values. */
+		err = samsung_mmc_cmd(mmc, 0x10210002) ||
+				samsung_mmc_mem(mmc, 0x04DD9C, 4) ||
+				samsung_mmc_read_word(mmc, &val1) ||
+				samsung_mmc_mem(mmc, 0x0379A4, 4) ||
+				samsung_mmc_read_word(mmc, &val2);
+		err = samsung_mmc_cmd(mmc, 0xDECCEE) || err;
+		if (!err && val1 == 0x000000FF && val2 == 0xD20228FF) {
+			printf("\tWorkaround already applied\n");
+			return 0;
+		}
+
+		if (err) {
+			printf("Reading eMMC RAM failed (%d)\n", err);
+			force_fastboot = 1; /* Fatal */
+			return 0;
+		}
+
+		if (val1 != 0x00000000 || val2 != 0xD2022820) {
+			printf("Assuming workaround not needed for "
+				"values (0x%08X 0x%08X)\n", val1, val2);
+			/* We didn't see what we expected.  Don't write to
+			 * the RAM, and consider it success assuming that
+			 * the version number got reused but the firmware
+			 * does not need the workaround.
+			 */
+			return 0;
+		}
+
+		printf("\tApplying block LDB Wear Level Policy workaround\n");
+		/* Write the new values. */
+		err = samsung_mmc_cmd(mmc, 0x10210000) ||
+				samsung_mmc_mem(mmc, 0x04DD9C, 0x000000FF) ||
+				samsung_mmc_mem(mmc, 0x0379A4, 0xD20228FF);
+		err = samsung_mmc_cmd(mmc, 0xDECCEE) || err;
+		if (err) {
+			printf("Writing workaround failed (%d)\n", err);
+			force_fastboot = 1; /* Fatal */
+			return 0;
+		}
+
+		/* Verify the new values. */
+		err = samsung_mmc_cmd(mmc, 0x10210002) ||
+				samsung_mmc_mem(mmc, 0x04DD9C, 4) ||
+				samsung_mmc_read_word(mmc, &val1) ||
+				samsung_mmc_mem(mmc, 0x0379A4, 4) ||
+				samsung_mmc_read_word(mmc, &val2);
+		err = samsung_mmc_cmd(mmc, 0xDECCEE) || err;
+		if (err || val1 != 0x000000FF || val2 != 0xD20228FF) {
+			printf("Verifying workaround failed "
+					"(%d 0x%08X 0x%08X)\n",
+					err, val1, val2);
+			force_fastboot = 1; /* Fatal */
+			return 0;
+		}
+	} else {
+		printf("\teMMC manufacturer 0x%02X version %x.%x\n",
+				mmc_manufacturer,
+				mmc_firmware_version >> 4,
+				mmc_firmware_version & 0xf);
 	}
 
 	return 0;
