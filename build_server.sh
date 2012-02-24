@@ -37,6 +37,11 @@ make clean
 make MFG=1 $BUILD_CONFIG
 make MFG=1 -j $BUILD_JOBS
 cp -f u-boot.img $BUILD_OUTPUT/factory_u-boot.img
+
+make clean
+make FORCE_FBT=1 $BUILD_CONFIG
+make FORCE_FBT=1 -j $BUILD_JOBS
+cp -f u-boot.bin $BUILD_OUTPUT/3RD.unsigned
 fi
 
 

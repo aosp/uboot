@@ -276,6 +276,17 @@ endif
 
 #########################################################################
 
+# If make was invoked with "FORCE_FBT=1" as an argument, define
+# CONFIG_BOOTCOMMAND_FORCE_OVERRIDE for cpp.
+# This is used to build a variant for usbboot.
+ifdef FORCE_FBT
+CFLAGS += -DCONFIG_BOOTCOMMAND_FORCE_OVERRIDE=\"fastboot\"
+CPPFLAGS += -DCONFIG_BOOTCOMMAND_FORCE_OVERRIDE=\"fastboot\"
+endif
+
+
+#########################################################################
+
 export	HOSTCC HOSTCFLAGS HOSTLDFLAGS PEDCFLAGS HOSTSTRIP CROSS_COMPILE \
 	AS LD CC CPP AR NM STRIP OBJCOPY OBJDUMP MAKE
 export	CONFIG_SYS_TEXT_BASE PLATFORM_CPPFLAGS PLATFORM_RELFLAGS CPPFLAGS CFLAGS AFLAGS
