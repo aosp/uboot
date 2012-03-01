@@ -184,15 +184,24 @@ void twl6030_init_battery_charging(void)
 
 void twl6030_usb_device_settings()
 {
-	u8 data = 0;
+	i2c_set_bus_num(0);
 
 	/* Select APP Group and set state to ON */
-	twl6030_i2c_write_u8(TWL6030_CHIP_PM, 0x21, VUSB_CFG_STATE);
+	twl6030_i2c_write_u8(TWL6030_CHIP_PM,
+			     (VUSB_CFG_STATE_GRP_APP | VUSB_CFG_STATE0),
+			     VUSB_CFG_STATE);
 
-	twl6030_i2c_read_u8(TWL6030_CHIP_PM, &data, MISC2);
-	data |= 0x10;
+	/* Set to OTG_REV 1.3 and turn on the ID_WAKEUP_COMP */
+	twl6030_i2c_write_u8(TWL6030_CHIP_PM, BACKUP_REG_WKUP_COMP, BACKUP_REG);
 
-	/* Select the input supply for VBUS regulator */
-	twl6030_i2c_write_u8(TWL6030_CHIP_PM, data, MISC2);
+	/* Program CFG_LDO_PD2 register and set VUSB bit */
+	twl6030_i2c_write_u8(TWL6030_CHIP_PM, CFG_LDO_VUSB, CFG_LDO_PD2);
+
+	/* Program MISC2 register and set bit VUSB_IN_VBAT */
+	twl6030_i2c_write_u8(TWL6030_CHIP_PM, MISC2_VUSB_IN_VBAT, MISC2);
+
+	/* Program the USB_VBUS_CTRL_SET and set VBUS_ACT_COMP bit */
+	twl6030_i2c_write_u8(TWL6030_CHIP_USB, USB_VBUS_CTRL_IADP_SINK,
+			     USB_VBUS_CTRL_SET);
 }
 #endif
