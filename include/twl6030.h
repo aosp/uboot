@@ -34,6 +34,8 @@
 
 /* Slave Address 0x48 */
 #define VUSB_CFG_STATE		0xA2
+#define VUSB_CFG_STATE0		(1 << 0)
+#define VUSB_CFG_STATE_GRP_APP  (1 << 5)
 
 #define MISC1			0xE4
 #define VAC_MEAS		(1 << 2)
@@ -41,6 +43,16 @@
 #define BB_MEAS			(1 << 0)
 
 #define MISC2			0xE5
+#define MISC2_VUSB_IN_VBAT	(1 << 4)
+
+#define CFG_LDO_PD2		0xF5
+#define CFG_LDO_VUSB		(1 << 0)
+
+#define BACKUP_REG		0xFA
+#define BACKUP_REG_WKUP_COMP	(1 << 0)
+
+#define USB_VBUS_CTRL_SET	0x04
+#define USB_VBUS_CTRL_IADP_SINK	(1 << 3)
 
 /* Slave Address 0x49 */
 
