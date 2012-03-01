@@ -234,6 +234,8 @@
 #define CONFIG_MMC_SAMSUNG_SMART
 #define CONFIG_CMD_BLK
 #define CONFIG_SYS_LONGHELP 1
+#define CONFIG_OMAP_SECURE_HAL
+#define CONFIG_OMAP_CPFROM
 #else
 #undef CONFIG_SYS_LONGHELP	/* undef to save memory */
 #endif
