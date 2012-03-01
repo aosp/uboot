@@ -53,6 +53,9 @@ u32 omap4_ddr_clk(void);
 void cancel_out(u32 *num, u32 *den, u32 den_limit);
 void sdram_init(void);
 u32 omap4_sdram_size(void);
+void omap_vc_init(u16 speed_khz);
+int omap_vc_bypass_send_value(u8 sa, u8 reg_addr, u8 reg_data);
+
 int use_tps62361(void);
 
 void dieid_num_r(void);

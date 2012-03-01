@@ -30,6 +30,7 @@ SOBJS	:= reset.o
 COBJS	:= timer.o
 COBJS	+= utils.o
 COBJS	+= gpio.o
+COBJS	+= vc.o
 
 ifdef CONFIG_SPL_BUILD
 COBJS	+= spl.o
