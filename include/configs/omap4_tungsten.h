@@ -112,8 +112,8 @@
 #define CONFIG_DRIVER_OMAP34XX_I2C	1
 #define CONFIG_I2C_MULTI_BUS		1
 
-/* TWL6030 */
-#undef CONFIG_TWL6030_POWER		/* disable or else musb fails */
+/* TWL6030 - initialize musb detection */
+#define CONFIG_TWL6030_POWER
 
 /* MMC */
 #define CONFIG_GENERIC_MMC		1
