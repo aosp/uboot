@@ -525,7 +525,7 @@ static void setup_non_essential_dplls(void)
 
 static void do_scale_tps62361(u32 reg, u32 volt_mv)
 {
-	u32 temp, step;
+	u32 step;
 
 	step = volt_mv - TPS62361_BASE_VOLT_MV;
 	step /= 10;
@@ -537,17 +537,8 @@ static void do_scale_tps62361(u32 reg, u32 volt_mv)
 	 */
 	gpio_direction_output(TPS62361_VSEL0_GPIO, 0);
 
-	temp = TPS62361_I2C_SLAVE_ADDR |
-	    (reg << PRM_VC_VAL_BYPASS_REGADDR_SHIFT) |
-	    (step << PRM_VC_VAL_BYPASS_DATA_SHIFT) |
-	    PRM_VC_VAL_BYPASS_VALID_BIT;
-	debug("do_scale_tps62361: volt - %d step - 0x%x\n", volt_mv, step);
-
-	writel(temp, &prcm->prm_vc_val_bypass);
-	if (!wait_on_value(PRM_VC_VAL_BYPASS_VALID_BIT, 0,
-				&prcm->prm_vc_val_bypass, LDELAY)) {
+	if (omap_vc_bypass_send_value(TPS62361_I2C_SLAVE_ADDR, reg, step))
 		puts("Scaling voltage failed for vdd_mpu from TPS\n");
-	}
 
 	/*
 	 * SET1 register default is 1.4V which is higher than OPPNITROSB
@@ -559,7 +550,7 @@ static void do_scale_tps62361(u32 reg, u32 volt_mv)
 
 static void do_scale_vcore(u32 vcore_reg, u32 volt_mv)
 {
-	u32 temp, offset_code;
+	u32 offset_code;
 	u32 step = 12660; /* 12.66 mV represented in uV */
 	u32 offset = volt_mv;
 
@@ -578,15 +569,9 @@ static void do_scale_vcore(u32 vcore_reg, u32 volt_mv)
 	debug("do_scale_vcore: volt - %d offset_code - 0x%x\n", volt_mv,
 		offset_code);
 
-	temp = SMPS_I2C_SLAVE_ADDR |
-	    (vcore_reg << PRM_VC_VAL_BYPASS_REGADDR_SHIFT) |
-	    (offset_code << PRM_VC_VAL_BYPASS_DATA_SHIFT) |
-	    PRM_VC_VAL_BYPASS_VALID_BIT;
-	writel(temp, &prcm->prm_vc_val_bypass);
-	if (!wait_on_value(PRM_VC_VAL_BYPASS_VALID_BIT, 0,
-				&prcm->prm_vc_val_bypass, LDELAY)) {
+	if (omap_vc_bypass_send_value(SMPS_I2C_SLAVE_ADDR,
+				vcore_reg, offset_code))
 		printf("Scaling voltage failed for 0x%x\n", vcore_reg);
-	}
 }
 
 /* Since this code runs in spl, and spl currently doesn't link
@@ -609,83 +594,71 @@ int use_tps62361(void)
  */
 static void scale_vcores(void)
 {
-	u32 volt, sys_clk_khz, cycles_hi, cycles_low, temp, omap4_rev;
+	u32 volt;
 
-	sys_clk_khz = get_sys_clk_freq() / 1000;
+	omap_vc_init(PRM_VC_I2C_CHANNEL_FREQ_KHZ);
 
-	/*
-	 * Setup the dedicated I2C controller for Voltage Control
-	 * I2C clk - high period 40% low period 60%
+	/* Scale Voltage rails in order:
+	 * 1. VDD_CORE
+	 * 2. VDD_MPU
+	 * 3. VDD_IVA
+	 *
+	 * If tps62361 is not in use (generally OMAP4430):
+	 *   VDD_CORE = TWL6030 VCORE3
+	 *   VDD_MPU = TWL6030 VCORE1
+	 *   VDD_IVA = TWL6030 VCORE2
+	 *
+	 * If tps62361 is in use (OMAP4460, or a board designed
+	 * for OMAP4460 but with a OMAP4430 SOC):
+	 *   VDD_CORE = TWL6030 VCORE1
+	 *   VDD_MPU = TPS62361
+	 *   VDD_IVA = TWL6030 VCORE2
 	 */
-	cycles_hi = sys_clk_khz * 4 / PRM_VC_I2C_CHANNEL_FREQ_KHZ / 10;
-	cycles_low = sys_clk_khz * 6 / PRM_VC_I2C_CHANNEL_FREQ_KHZ / 10;
-	/* values to be set in register - less by 5 & 7 respectively */
-	cycles_hi -= 5;
-	cycles_low -= 7;
-	temp = (cycles_hi << PRM_VC_CFG_I2C_CLK_SCLH_SHIFT) |
-	       (cycles_low << PRM_VC_CFG_I2C_CLK_SCLL_SHIFT);
-	writel(temp, &prcm->prm_vc_cfg_i2c_clk);
 
-	/* Disable high speed mode and all advanced features */
-	writel(0x0, &prcm->prm_vc_cfg_i2c_mode);
-
-	omap4_rev = omap_revision();
-
-	/*
-	 * VCORE 3
-	 * 4430 : supplies vdd_core, must come up before vdd_mpu
-	 * 4460 : not connected
-	 */
 	if (!use_tps62361()) {
+		/* 1. VDD_CORE */
 		/* For OMAP4430, according to DM, for OPP100,
 		 * VDD MPU = 1.127v
 		 */
 		volt = 1127;
 		do_scale_vcore(SMPS_REG_ADDR_VCORE3, volt);
-	}
 
-	/*
-	 * VCORE 1
-	 *
-	 * 4430 : supplies vdd_mpu
-	 * Setting a high voltage for Nitro mode as smart reflex is not enabled.
-	 * We use the maximum possible value in the AVS range because the next
-	 * higher voltage in the discrete range (code >= 0b111010) is way too
-	 * high
-	 *
-	 * 4460 : supplies vdd_core
-	 */
-	if (!use_tps62361()) {
-		/* For OMAP4460, according to DM, for OPP100,
+		/* 2. VDD_MPU */
+		/* For OMAP4430, according to DM, for OPP100,
 		 * VDD MPU = 1.200v
 		 */
 		volt = 1200;
+		do_scale_vcore(SMPS_REG_ADDR_VCORE1, volt);
+
+		/* 3. VDD_IVA */
+		/* For OMAP4430, according to DM, for OPP100,
+		 * VDD IVA = 1.114v
+		 */
+		volt = 1114;
+		do_scale_vcore(SMPS_REG_ADDR_VCORE2, volt);
+
 	} else {
+		/* 1. VDD_CORE */
 		/* For OMAP4460, according to DM, for OPP100,
 		 * VDD CORE = 1.127v
 		 */
 		volt = 1127;
-	}
-	do_scale_vcore(SMPS_REG_ADDR_VCORE1, volt);
+		do_scale_vcore(SMPS_REG_ADDR_VCORE1, volt);
 
-	/* VCORE 2 - supplies vdd_iva */
-	/* For OMAP4430 & OMAP4460, according to DM, for OPP100,
-	 * VDD IVA = 1.114v
-	 */
-	volt = 1114;
-	do_scale_vcore(SMPS_REG_ADDR_VCORE2, volt);
-
-	/* TPS - supplies vdd_mpu on 4460.  MPU power domain
-	 * depends on the core voltage domain, so do this after
-	 * core voltage domain scaling is done.
-	 */
-	if (use_tps62361()) {
+		/* 2. VDD_MPU */
 		/* For OMAP4460, according to DM, for OPP100,
 		 * VDD MPU = 1.203v, but round up for TPS to 1.21v
 		 */
 		volt = 1210;
 		printf("Setting TPS to %dmV\n", volt);
 		do_scale_tps62361(TPS62361_REG_ADDR_SET1, volt);
+
+		/* 3. VDD_IVA */
+		/* For OMAP4460, according to DM, for OPP100,
+		 * VDD IVA = 1.114v
+		 */
+		volt = 1114;
+		do_scale_vcore(SMPS_REG_ADDR_VCORE2, volt);
 	}
 }
 
