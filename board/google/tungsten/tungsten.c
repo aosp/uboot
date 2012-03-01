@@ -53,9 +53,9 @@ enum steelhead_rev {
 	STEELHEAD_REV_DVT2   = 0x5,
 	STEELHEAD_REV_DVT3   = 0x6,
 	STEELHEAD_REV_DVT4   = 0x7,
-	STEELHEAD_REV_PVT    = 0x8,
-	STEELHEAD_REV_PROD   = 0x9,
-	STEELHEAD_REV_PROD1  = 0xA,
+	STEELHEAD_REV_DVT5   = 0x8,
+	STEELHEAD_REV_PVT    = 0x9,
+	STEELHEAD_REV_PROD   = 0xA,
 };
 
 static const char const *steelhead_hw_name[] = {
@@ -67,9 +67,9 @@ static const char const *steelhead_hw_name[] = {
 	[STEELHEAD_REV_DVT2]   = "Steelhead DVT2",
 	[STEELHEAD_REV_DVT3]   = "Steelhead DVT3",
 	[STEELHEAD_REV_DVT4]   = "Steelhead DVT4",
+	[STEELHEAD_REV_DVT5]   = "Steelhead DVT5",
 	[STEELHEAD_REV_PVT]    = "Steelhead PVT",
 	[STEELHEAD_REV_PROD]   = "Steelhead PROD",
-	[STEELHEAD_REV_PROD1]  = "Steelhead PROD1",
 };
 int hwrev_gpios[] = {
 	182, /* board_id_0 */
@@ -82,9 +82,9 @@ int hwrev_gpios[] = {
  * the raw board-id values to the enum values.
  */
 static const enum steelhead_rev board_id_to_steelhead_rev[8] = {
-	STEELHEAD_REV_PVT,    /* board_id: 0x0 */
-	STEELHEAD_REV_PROD,   /* board_id: 0x1 */
-	STEELHEAD_REV_PROD1,  /* board_id: 0x2 */
+	STEELHEAD_REV_DVT5,   /* board_id: 0x0 */
+	STEELHEAD_REV_PVT,    /* board_id: 0x1 */
+	STEELHEAD_REV_PROD,   /* board_id: 0x2 */
 	STEELHEAD_REV_DVT,    /* board_id: 0x3 */
 	STEELHEAD_REV_DVT1_5, /* board_id: 0x4 */
 	STEELHEAD_REV_DVT2,   /* board_id: 0x5 */
@@ -159,7 +159,7 @@ static void init_hw_rev(void)
 		       steelhead_hw_rev, steelhead_hw_rev_name(), board_id);
 	} else {
 		/* default to the highest rev we know of */
-		steelhead_hw_rev = STEELHEAD_REV_PROD1;
+		steelhead_hw_rev = STEELHEAD_REV_PROD;
 		printf("board_id 0x%x invalid, setting steelhead_hw_rev to "
 		       "0x%x = \"%s\"", board_id,
 		       steelhead_hw_rev, steelhead_hw_rev_name());
