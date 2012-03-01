@@ -75,7 +75,6 @@ static struct omap3_otg_regs *otg;
 
 #define OMAP3_OTG_FORCESTDBY_STANDBY			0x0001
 
-
 #ifdef DEBUG_MUSB_OMAP3
 static void musb_db_otg_regs(void)
 {
@@ -118,6 +117,15 @@ int musb_platform_init(void)
 
 		otg = (struct omap3_otg_regs *)OMAP3_OTG_BASE;
 
+		/* Reset Mentor USB block */
+		/* soft reset */
+		writel(OMAP3_OTG_SYSCONFIG_SOFTRESET | readl(&otg->sysconfig),
+		       &otg->sysconfig);
+
+		/* Wait for reset to finish */
+		while ((readl(&otg->sysstatus) &
+			OMAP3_OTG_SYSSTATUS_RESETDONE) == 0);
+
 		/* Set OTG to always be on */
 		writel(OMAP3_OTG_SYSCONFIG_NO_STANDBY_MODE |
 		       OMAP3_OTG_SYSCONFIG_NO_IDLE_MODE, &otg->sysconfig);
@@ -138,6 +146,7 @@ int musb_platform_init(void)
 		u32 *usbotghs_control = (u32 *)(CTRL_BASE + 0x33C);
 		*usbotghs_control = 0x15;
 #endif
+
 		platform_needs_initialization = 0;
 	}
 
