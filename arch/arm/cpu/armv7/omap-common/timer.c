@@ -70,8 +70,9 @@ ulong get_timer(ulong base)
 	return get_timer_masked() - base;
 }
 
-/* delay x useconds */
-void __udelay(unsigned long usec)
+/* delay x useconds.
+ */
+static void __udelay_internal(unsigned long usec)
 {
 	long tmo = usec * (TIMER_CLOCK / 1000) / 1000;
 	unsigned long now, last = readl(&timer_base->tcrr);
@@ -84,6 +85,23 @@ void __udelay(unsigned long usec)
 			tmo -= now - last;
 		last = now;
 	}
+}
+
+/* we're limited to 32-bit because SPL doesn't have 64-bit libraries
+ * so for large values, call again.  modeled after time.c udelay(). */
+
+#ifndef CONFIG_MAX_UDELAY
+#define CONFIG_MAX_UDELAY 100000
+#endif
+
+void __udelay(unsigned long usec)
+{
+	ulong kv;
+	do {
+		kv = usec > CONFIG_MAX_UDELAY ? CONFIG_MAX_UDELAY : usec;
+		__udelay_internal(kv);
+		usec -= kv;
+	} while(usec);
 }
 
 ulong get_timer_masked(void)
