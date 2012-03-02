@@ -30,7 +30,9 @@ SOBJS	:= reset.o
 COBJS	:= timer.o
 COBJS	+= utils.o
 COBJS	+= gpio.o
+ifneq ($(CONFIG_OMAP44XX),)
 COBJS	+= vc.o
+endif
 
 ifdef CONFIG_SPL_BUILD
 COBJS	+= spl.o
