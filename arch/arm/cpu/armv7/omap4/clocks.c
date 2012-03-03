@@ -96,16 +96,15 @@ static const struct dpll_params mpu_dpll_params_1840mhz[NUM_SYS_CLKS] = {
 	{575, 23, 1, -1, -1, -1, -1, -1}	/* 38.4 MHz */
 };
 
-/* dpll locked at 350 MHz MPU clk at 175 MHz(OPP50 4460) - DCC OFF */
-static const struct dpll_params mpu_dpll_params_350mhz[NUM_SYS_CLKS] = {
-	{175, 11, 1, -1, -1, -1, -1, -1},	/* 12 MHz   */
-	{175, 12, 1, -1, -1, -1, -1, -1},	/* 13 MHz   */
-	{124, 11, 1, -1, -1, -1, -1, -1},	/* 16.8 MHz */
-	{875, 95, 1, -1, -1, -1, -1, -1},	/* 19.2 MHz */
-	{175, 25, 1, -1, -1, -1, -1, -1},	/* 26 MHz   */
-	{175, 26, 1, -1, -1, -1, -1, -1},	/* 27 MHz   */
-	/* 349.6MHz is closest we can get with M and N */
-	{437, 95, 1, -1, -1, -1, -1, -1}	/* 38.4 MHz */
+/* dpll locked at 700 MHz MPU clk at 350 MHz(OPP50 4460) - DCC OFF */
+static const struct dpll_params mpu_dpll_params_700mhz[NUM_SYS_CLKS] = {
+	{350, 11, 1, -1, -1, -1, -1, -1},	/* 12 MHz   */
+	{350, 12, 1, -1, -1, -1, -1, -1},	/* 13 MHz   */
+	{250, 11, 1, -1, -1, -1, -1, -1},	/* 16.8 MHz */
+	{1750, 95, 1, -1, -1, -1, -1, -1},	/* 19.2 MHz */
+	{350, 25, 1, -1, -1, -1, -1, -1},	/* 26 MHz   */
+	{350, 26, 1, -1, -1, -1, -1, -1},	/* 27 MHz   */
+	{875, 95, 1, -1, -1, -1, -1, -1}	/* 38.4 MHz */
 };
 
 /* dpll locked at 1584 MHz - MPU clk at 792 MHz(OPP Turbo 4430) */
