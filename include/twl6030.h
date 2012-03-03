@@ -44,6 +44,7 @@
 
 #define MISC2			0xE5
 #define MISC2_VUSB_IN_VBAT	(1 << 4)
+#define MISC2_VUSB_IN_PMID	(1 << 3)
 
 #define CFG_LDO_PD2		0xF5
 #define CFG_LDO_VUSB		(1 << 0)

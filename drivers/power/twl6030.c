@@ -194,14 +194,8 @@ void twl6030_usb_device_settings()
 	/* Set to OTG_REV 1.3 and turn on the ID_WAKEUP_COMP */
 	twl6030_i2c_write_u8(TWL6030_CHIP_PM, BACKUP_REG_WKUP_COMP, BACKUP_REG);
 
-	/* Program CFG_LDO_PD2 register and set VUSB bit */
-	twl6030_i2c_write_u8(TWL6030_CHIP_PM, CFG_LDO_VUSB, CFG_LDO_PD2);
-
-	/* Program MISC2 register and set bit VUSB_IN_VBAT */
-	twl6030_i2c_write_u8(TWL6030_CHIP_PM, MISC2_VUSB_IN_VBAT, MISC2);
-
-	/* Program the USB_VBUS_CTRL_SET and set VBUS_ACT_COMP bit */
-	twl6030_i2c_write_u8(TWL6030_CHIP_USB, USB_VBUS_CTRL_IADP_SINK,
-			     USB_VBUS_CTRL_SET);
+	/* Program MISC2 register and set bit VUSB_IN_PMID */
+	twl6030_i2c_write_u8(TWL6030_CHIP_PM, MISC2_VUSB_IN_PMID, MISC2);
 }
+
 #endif
