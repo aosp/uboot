@@ -35,6 +35,9 @@ COBJS	+= sdram_elpida.o
 ifndef CONFIG_SPL_BUILD
 COBJS	+= mem.o
 COBJS	+= sys_info.o
+COBJS-$(CONFIG_OMAP_SECURE_HAL) += hal_services.o
+COBJS-$(CONFIG_OMAP_CPFROM) += bch.o
+COBJS   += $(COBJS-y)
 endif
 
 SRCS	:= $(SOBJS:.o=.S) $(COBJS:.o=.c)
