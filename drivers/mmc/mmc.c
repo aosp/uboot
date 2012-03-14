@@ -252,7 +252,7 @@ mmc_berase(int dev_num, lbaint_t start, lbaint_t blkcnt)
 
 	struct mmc *mmc = find_mmc_device(dev_num);
 	if (!mmc)
-		return -1;
+		return 0;
 
 	if (mmc_set_blocklen(mmc, mmc->write_bl_len))
 		return 0;
