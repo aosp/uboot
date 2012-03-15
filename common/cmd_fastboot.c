@@ -2122,6 +2122,19 @@ static int do_fastboot(cmd_tbl_t *cmdtp, int flag, int argc,
 		return -1;
 	}
 
+	/* currently we don't allow restarting fastboot if you've run
+	 * it before and exited to u-boot prompt.  it's possible to
+	 * support, but there's are edge cases that we're not
+	 * sure the answer to (e.g. do we reload the partition table
+	 * or not) and it's just not a common situation so we're
+	 * just saying no for now.
+	 */
+	if (priv.flag & FASTBOOT_FLAG_HAS_RUN) {
+		printf("fastboot can't be restarted\n");
+		return -1;
+	}
+	priv.flag |= FASTBOOT_FLAG_HAS_RUN;
+
 	printf("Starting fastboot protocol\n");
 
 	board_fbt_start();
