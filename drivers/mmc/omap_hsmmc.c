@@ -734,6 +734,10 @@ int omap_mmc_init(int dev_index)
 	 */
 	if ((get_cpu_family() == CPU_OMAP34XX) && (get_cpu_rev() <= CPU_3XX_ES21))
 		mmc->b_max = 1;
+
+	/* MMC1 and MMC2 support 8-bit, but MMC0 only supports 4-bit */
+	if (dev_index != 0)
+		mmc->host_caps |= MMC_MODE_8BIT;
 #endif
 
 	mmc_register(mmc);
