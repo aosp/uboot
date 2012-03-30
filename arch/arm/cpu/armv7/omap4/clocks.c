@@ -38,14 +38,11 @@
 #include <asm/omap_gpio.h>
 #include <asm/arch/emif.h>
 
-#ifndef CONFIG_OMAP4430_ES1_0_MPU_DPLL
-#define CONFIG_OMAP4430_ES1_0_MPU_DPLL mpu_dpll_params_1200mhz
-#endif
-#ifndef CONFIG_OMAP4430_non_ES1_0_MPU_DPLL
-#define CONFIG_OMAP4430_non_ES1_0_MPU_DPLL mpu_dpll_params_1584mhz
+#ifndef CONFIG_OMAP4430_MPU_DPLL
+#define CONFIG_OMAP4430_MPU_DPLL mpu_dpll_params_1200mhz
 #endif
 #ifndef CONFIG_OMAP4460_MPU_DPLL
-#define CONFIG_OMAP4460_MPU_DPLL mpu_dpll_params_1840mhz
+#define CONFIG_OMAP4460_MPU_DPLL mpu_dpll_params_1400mhz
 #endif
 
 #define str(s) #s
@@ -86,15 +83,15 @@ static const u32 sys_clk_array[8] = {
  * Please use this tool for creating the table for any new frequency.
  */
 
-/* dpll locked at 1840 MHz MPU clk at 920 MHz(OPP Turbo 4460) - DCC OFF */
-static const struct dpll_params mpu_dpll_params_1840mhz[NUM_SYS_CLKS] = {
-	{230, 2, 1, -1, -1, -1, -1, -1},	/* 12 MHz   */
-	{920, 12, 1, -1, -1, -1, -1, -1},	/* 13 MHz   */
-	{219, 3, 1, -1, -1, -1, -1, -1},	/* 16.8 MHz */
-	{575, 11, 1, -1, -1, -1, -1, -1},	/* 19.2 MHz */
-	{460, 12, 1, -1, -1, -1, -1, -1},	/* 26 MHz   */
-	{920, 26, 1, -1, -1, -1, -1, -1},	/* 27 MHz   */
-	{575, 23, 1, -1, -1, -1, -1, -1}	/* 38.4 MHz */
+/* dpll locked at 1400 MHz MPU clk at 700 MHz(OPP100) - DCC OFF */
+static const struct dpll_params mpu_dpll_params_1400mhz[NUM_SYS_CLKS] = {
+	{175, 2, 1, -1, -1, -1, -1, -1},	/* 12 MHz   */
+	{700, 12, 1, -1, -1, -1, -1, -1},	/* 13 MHz   */
+	{125, 2, 1, -1, -1, -1, -1, -1},	/* 16.8 MHz */
+	{401, 10, 1, -1, -1, -1, -1, -1},	/* 19.2 MHz */
+	{350, 12, 1, -1, -1, -1, -1, -1},	/* 26 MHz   */
+	{700, 26, 1, -1, -1, -1, -1, -1},	/* 27 MHz   */
+	{638, 34, 1, -1, -1, -1, -1, -1}	/* 38.4 MHz */
 };
 
 /* dpll locked at 700 MHz MPU clk at 350 MHz(OPP50 4460) - DCC OFF */
@@ -131,34 +128,34 @@ static const struct dpll_params mpu_dpll_params_1200mhz[NUM_SYS_CLKS] = {
 };
 
 static const struct dpll_params core_dpll_params_1600mhz[NUM_SYS_CLKS] = {
-	{200, 2, 1, 5, 8, 4, 6, 5},	/* 12 MHz   */
-	{800, 12, 1, 5, 8, 4, 6, 5},	/* 13 MHz   */
-	{619, 12, 1, 5, 8, 4, 6, 5},	/* 16.8 MHz */
-	{125, 2, 1, 5, 8, 4, 6, 5},	/* 19.2 MHz */
-	{400, 12, 1, 5, 8, 4, 6, 5},	/* 26 MHz   */
-	{800, 26, 1, 5, 8, 4, 6, 5},	/* 27 MHz   */
-	{125, 5, 1, 5, 8, 4, 6, 5}	/* 38.4 MHz */
+	{200, 2, 1, 5, 8, 4, 6, 6},     /* 12 MHz   */
+	{800, 12, 1, 5, 8, 4, 6, 6},    /* 13 MHz   */
+	{619, 12, 1, 5, 8, 4, 6, 6},    /* 16.8 MHz */
+	{125, 2, 1, 5, 8, 4, 6, 6},     /* 19.2 MHz */
+	{400, 12, 1, 5, 8, 4, 6, 6},    /* 26 MHz   */
+	{800, 26, 1, 5, 8, 4, 6, 6},    /* 27 MHz   */
+	{125, 5, 1, 5, 8, 4, 6, 6}      /* 38.4 MHz */
 };
 
 static const struct dpll_params core_dpll_params_es1_1524mhz[NUM_SYS_CLKS] = {
-	{127, 1, 1, 5, 8, 4, 6, 5},	/* 12 MHz   */
-	{762, 12, 1, 5, 8, 4, 6, 5},	/* 13 MHz   */
-	{635, 13, 1, 5, 8, 4, 6, 5},	/* 16.8 MHz */
-	{635, 15, 1, 5, 8, 4, 6, 5},	/* 19.2 MHz */
-	{381, 12, 1, 5, 8, 4, 6, 5},	/* 26 MHz   */
-	{254, 8, 1, 5, 8, 4, 6, 5},	/* 27 MHz   */
-	{496, 24, 1, 5, 8, 4, 6, 5}	/* 38.4 MHz */
+	{127, 1, 1, 5, 8, 4, 6, 6},     /* 12 MHz   */
+	{762, 12, 1, 5, 8, 4, 6, 6},    /* 13 MHz   */
+	{635, 13, 1, 5, 8, 4, 6, 6},    /* 16.8 MHz */
+	{635, 15, 1, 5, 8, 4, 6, 6},    /* 19.2 MHz */
+	{381, 12, 1, 5, 8, 4, 6, 6},    /* 26 MHz   */
+	{254, 8, 1, 5, 8, 4, 6, 6},     /* 27 MHz   */
+	{496, 24, 1, 5, 8, 4, 6, 6}     /* 38.4 MHz */
 };
 
 static const struct dpll_params
 		core_dpll_params_es2_1600mhz_ddr200mhz[NUM_SYS_CLKS] = {
-	{200, 2, 2, 5, 8, 4, 6, 5},	/* 12 MHz   */
-	{800, 12, 2, 5, 8, 4, 6, 5},	/* 13 MHz   */
-	{619, 12, 2, 5, 8, 4, 6, 5},	/* 16.8 MHz */
-	{125, 2, 2, 5, 8, 4, 6, 5},	/* 19.2 MHz */
-	{400, 12, 2, 5, 8, 4, 6, 5},	/* 26 MHz   */
-	{800, 26, 2, 5, 8, 4, 6, 5},	/* 27 MHz   */
-	{125, 5, 2, 5, 8, 4, 6, 5}	/* 38.4 MHz */
+	{200, 2, 2, 5, 8, 4, 6, 6},	/* 12 MHz   */
+	{800, 12, 2, 5, 8, 4, 6, 6},	/* 13 MHz   */
+	{619, 12, 2, 5, 8, 4, 6, 6},	/* 16.8 MHz */
+	{125, 2, 2, 5, 8, 4, 6, 6},	/* 19.2 MHz */
+	{400, 12, 2, 5, 8, 4, 6, 6},	/* 26 MHz   */
+	{800, 26, 2, 5, 8, 4, 6, 6},	/* 27 MHz   */
+	{125, 5, 2, 5, 8, 4, 6, 6}	/* 38.4 MHz */
 };
 
 static const struct dpll_params per_dpll_params_1536mhz[NUM_SYS_CLKS] = {
@@ -382,10 +379,10 @@ static void print_current_freq(u32 *const base)
 /*
  * Lock MPU dpll
  *
- * Resulting MPU frequencies:
+ * Resulting MPU frequencies (OPP_NUM):
  * 4430 ES1.0	: 600 MHz
- * 4430 ES2.x	: 792 MHz (OPP Turbo)
- * 4460		: 920 MHz (OPP Turbo) - DCC disabled
+ * 4430 ES2.x	: 600 MHz
+ * 4460		: 700 MHz
  */
 void configure_mpu_dpll(void)
 {
@@ -396,11 +393,8 @@ void configure_mpu_dpll(void)
 	omap4_rev = omap_revision();
 	sysclk_ind = get_sys_clk_index();
 
-	if (omap4_rev == OMAP4430_ES1_0)
-		SET_MPU_DPLL_PARAMS(params, CONFIG_OMAP4430_ES1_0_MPU_DPLL,
-				    sysclk_ind);
-	else if (omap4_rev < OMAP4460_ES1_0)
-		SET_MPU_DPLL_PARAMS(params, CONFIG_OMAP4430_non_ES1_0_MPU_DPLL,
+	if (omap4_rev < OMAP4460_ES1_0)
+		SET_MPU_DPLL_PARAMS(params, CONFIG_OMAP4430_MPU_DPLL,
 				    sysclk_ind);
 	else
 		SET_MPU_DPLL_PARAMS(params, CONFIG_OMAP4460_MPU_DPLL,
