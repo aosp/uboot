@@ -36,6 +36,7 @@
 #include <asm/arch/sys_proto.h>
 #include <asm/utils.h>
 #include <asm/omap_gpio.h>
+#include <asm/arch/emif.h>
 
 #ifndef CONFIG_OMAP4430_ES1_0_MPU_DPLL
 #define CONFIG_OMAP4430_ES1_0_MPU_DPLL mpu_dpll_params_1200mhz
@@ -425,6 +426,13 @@ void configure_mpu_dpll(void)
 	debug("MPU DPLL locked\n");
 }
 
+static void init_m2_core_dpll(u32 *const base, int m2)
+{
+	struct dpll_regs *const dpll_regs = (struct dpll_regs *)base;
+
+	writel(m2, &dpll_regs->cm_div_m2_dpll);
+}
+
 static void setup_dplls(void)
 {
 	u32 sysclk_ind, temp;
@@ -435,12 +443,17 @@ static void setup_dplls(void)
 
 	/* CORE dpll */
 	params = get_core_dpll_params();	/* default - safest */
+
 	/*
-	 * Do not lock the core DPLL now. Just set it up.
-	 * Core DPLL will be locked after setting up EMIF
-	 * using the FREQ_UPDATE method(freq_update_core())
+	 * Lock the core DPLL here to get the right sequence.
+	 * But set the M2 post divider to a maximum value so that
+	 * emif/ddr freqeuncy is at a low value for the beginning.
+	 * FREQ_UPDATE method(freq_update_core()) updates the correct
+	 * m2 later.
 	 */
-	do_setup_dpll(&prcm->cm_clkmode_dpll_core, params, DPLL_NO_LOCK);
+	do_setup_dpll(&prcm->cm_clkmode_dpll_core, params, DPLL_LOCK);
+	init_m2_core_dpll(&prcm->cm_clkmode_dpll_core, CORE_DPLL_M2_INIT);
+
 	/* Set the ratios for CORE_CLK, L3_CLK, L4_CLK */
 	temp = (CLKSEL_CORE_X2_DIV_1 << CLKSEL_CORE_SHIFT) |
 	    (CLKSEL_L3_CORE_DIV_2 << CLKSEL_L3_SHIFT) |
@@ -448,13 +461,14 @@ static void setup_dplls(void)
 	writel(temp, &prcm->cm_clksel_core);
 	debug("Core DPLL configured\n");
 
+	/* MPU dpll */
+	configure_mpu_dpll();
+
 	/* lock PER dpll */
 	do_setup_dpll(&prcm->cm_clkmode_dpll_per,
 			&per_dpll_params_1536mhz[sysclk_ind], DPLL_LOCK);
 	debug("PER DPLL locked\n");
 
-	/* MPU dpll */
-	configure_mpu_dpll();
 }
 
 static void setup_non_essential_dplls(void)

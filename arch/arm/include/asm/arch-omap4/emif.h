@@ -907,6 +907,12 @@ struct dmm_lisa_map_regs {
 #define MR8_IO_WIDTH_SHIFT	0x6
 #define MR8_IO_WIDTH_MASK	(0x3 << 0x6)
 
+/*
+ * CORE DPLL m2 divider init, set to maximum
+ * to have the lowest possible frequency.
+ */
+#define CORE_DPLL_M2_INIT 0x1F
+
 struct lpddr2_addressing {
 	u8	num_banks;
 	u8	t_REFI_us_x10;
