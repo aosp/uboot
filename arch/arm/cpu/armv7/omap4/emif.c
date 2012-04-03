@@ -1230,10 +1230,6 @@ void sdram_init(void)
 	in_sdram = running_from_sdram();
 	debug("in_sdram = %d\n", in_sdram);
 
-	if (!in_sdram) {
-		bypass_dpll(&prcm->cm_clkmode_dpll_core);
-	}
-
 	do_sdram_init(OMAP44XX_EMIF1);
 	do_sdram_init(OMAP44XX_EMIF2);
 

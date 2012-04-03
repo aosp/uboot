@@ -118,10 +118,22 @@ static void twl4030_phy_power(void)
 {
 	u8 pwr, clk;
 
-	/* Power the PHY */
+	/* First make sure PHY is powered down to
+	 * clear any state from a previous reboot and
+	 * force unenumeration.  Otherwise, sometimes
+	 * the device doesn't enumerate properly on
+	 * a warm reboot.
+	 */
+
+	/* Power down the PHY */
 	pwr = twl4030_usb_read(TWL4030_USB_PHY_PWR_CTRL);
+	pwr |= PHYPWD;
+	twl4030_usb_write(TWL4030_USB_PHY_PWR_CTRL, pwr);
+
+	/* Power the PHY */
 	pwr &= ~PHYPWD;
 	twl4030_usb_write(TWL4030_USB_PHY_PWR_CTRL, pwr);
+
 	/* Enable clocks */
 	clk = twl4030_usb_read(TWL4030_USB_PHY_CLK_CTRL);
 	clk |= CLOCKGATING_EN | CLK32K_EN;
@@ -138,6 +150,8 @@ int twl4030_usb_ulpi_init(void)
 {
 	long timeout = 1000 * 1000; /* 1 sec */;
 	u8 clk, sts, pwr;
+
+	i2c_set_bus_num(0);
 
 	/* twl4030 ldo init */
 	twl4030_usb_ldo_init();
