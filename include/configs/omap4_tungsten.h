@@ -142,8 +142,7 @@
 #define CONFIG_FORCE_TPS62361 /* always use TPS62361, don't do runtime
 				 check of omap4430 vs omap4460 */
 #define CONFIG_OMAP4460_MPU_DPLL mpu_dpll_params_700mhz
-#define CONFIG_OMAP4430_ES1_0_MPU_DPLL mpu_dpll_params_700mhz
-#define CONFIG_OMAP4430_non_ES1_0_MPU_DPLL mpu_dpll_params_700mhz
+#define CONFIG_OMAP4430_MPU_DPLL mpu_dpll_params_700mhz
 
 /* Make sure that the ABE is clocked off the sysclk and not the 32KHz clock.
  * Timers used for remote synchronization as well as the external fref fed to
