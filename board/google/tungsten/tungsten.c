@@ -54,8 +54,11 @@ enum steelhead_rev {
 	STEELHEAD_REV_DVT3   = 0x6,
 	STEELHEAD_REV_DVT4   = 0x7,
 	STEELHEAD_REV_DVT5   = 0x8,
-	STEELHEAD_REV_PVT    = 0x9,
+	STEELHEAD_REV_DVT6   = 0x9,
 	STEELHEAD_REV_PROD   = 0xA,
+	STEELHEAD_REV_PROD1  = 0xB,
+	STEELHEAD_REV_PROD2  = 0xC,
+	STEELHEAD_REV_PROD3  = 0xD,
 };
 
 static const char const *steelhead_hw_name[] = {
@@ -68,8 +71,11 @@ static const char const *steelhead_hw_name[] = {
 	[STEELHEAD_REV_DVT3]   = "Steelhead DVT3",
 	[STEELHEAD_REV_DVT4]   = "Steelhead DVT4",
 	[STEELHEAD_REV_DVT5]   = "Steelhead DVT5",
-	[STEELHEAD_REV_PVT]    = "Steelhead PVT",
+	[STEELHEAD_REV_DVT6]   = "Steelhead DVT6",
 	[STEELHEAD_REV_PROD]   = "Steelhead PROD",
+	[STEELHEAD_REV_PROD1]  = "Steelhead PROD1",
+	[STEELHEAD_REV_PROD2]  = "Steelhead PROD2",
+	[STEELHEAD_REV_PROD3]  = "Steelhead PROD3",
 };
 int hwrev_gpios[] = {
 	182, /* board_id_0 */
@@ -83,11 +89,11 @@ int hwrev_gpios[] = {
  */
 static const enum steelhead_rev board_id_to_steelhead_rev[8] = {
 	STEELHEAD_REV_DVT5,   /* board_id: 0x0 */
-	STEELHEAD_REV_PVT,    /* board_id: 0x1 */
+	STEELHEAD_REV_DVT6,   /* board_id: 0x1 */
 	STEELHEAD_REV_PROD,   /* board_id: 0x2 */
-	STEELHEAD_REV_DVT,    /* board_id: 0x3 */
-	STEELHEAD_REV_DVT1_5, /* board_id: 0x4 */
-	STEELHEAD_REV_DVT2,   /* board_id: 0x5 */
+	STEELHEAD_REV_PROD1,  /* board_id: 0x3 */
+	STEELHEAD_REV_PROD2,  /* board_id: 0x4 */
+	STEELHEAD_REV_PROD3,  /* board_id: 0x5 */
 	STEELHEAD_REV_DVT3,   /* board_id: 0x6 */
 	STEELHEAD_REV_DVT4    /* board_id: 0x7 */
 };
@@ -669,15 +675,7 @@ void board_fbt_finalize_bootargs(char* args, size_t buf_sz) {
 			 " board_steelhead.steelhead_hw_rev=%d",
 			 steelhead_hw_rev);
 
-	/* Add bandgap threshold temperature based on board_id.
-	 * Units before DVT2 didn't have a thermal rework so
-	 * we'll throttle at a lower temperature to try to
-	 * prevent damage to the OMAP.
-	 */
-	if (steelhead_hw_rev < STEELHEAD_REV_DVT2) {
-		bgap_threshold_t_hot  = 64000; /* 64 deg C */
-		bgap_threshold_t_cold = 61000; /* 61 deg C */
-	}
+	/* Add temperature thresholds for throttle control */
 	snprintf(args + used,
 		 buf_sz - used,
 		 " omap_temp_sensor.bgap_threshold_t_hot=%d"
