@@ -230,7 +230,6 @@ static int avr_read_event_fifo(u8 *next_event)
 int detect_avr(void)
 {
 	int rc;
-	struct avr_led_rgb_vals clear_led_req;
 
 	printf("%s\n", __func__);
 
@@ -260,18 +259,6 @@ int detect_avr(void)
 	rc = avr_get_led_count();
 	if (rc) {
 		printf("Failed to fetch AVR led count (rc = %d)\n", rc);
-		goto error;
-	}
-
-	/* Set the LED state to all off in order to match the internal state we
-	 * just established.
-	 */
-	clear_led_req.rgb[0] = 0x00;
-	clear_led_req.rgb[1] = 0x00;
-	clear_led_req.rgb[2] = 0x00;
-	rc = avr_led_set_all(&clear_led_req);
-	if (rc) {
-		printf("Failed to clear LEDs on AVR (rc = %d)\n", rc);
 		goto error;
 	}
 
