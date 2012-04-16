@@ -18,10 +18,7 @@ if [ -z $BUILD_JOBS ]; then
   BUILD_JOBS=10
 fi
 
-FILES_TO_ARCHIVE="u-boot.bin"
-if [ "$BUILD_CONFIG" = "omap4_tungsten_config" ]; then
-FILES_TO_ARCHIVE="u-boot.img MLO spl/u-boot-spl.bin"
-fi
+FILES_TO_ARCHIVE="u-boot.img spl/u-boot-spl.bin"
 
 export ARCH=arm
 export CROSS_COMPILE=arm-eabi-
